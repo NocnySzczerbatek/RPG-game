@@ -147,7 +147,7 @@ export const gameReducer = (state, action) => {
       const savedState = {
         ...state,
         player,
-        screen: 'city',
+        screen: 'world_map',
         currentCity: 'bastion',
         activeMainQuest: mainQuest,
         mainQuestStage: 0,
@@ -167,7 +167,7 @@ export const gameReducer = (state, action) => {
       return {
         ...createInitialGameState(),
         ...save,
-        screen: 'city',
+        screen: 'world_map',
         notifications: [{ id: Date.now(), message: 'Gra wczytana!', type: 'success' }],
         combat: null,
         currentNPC: null,
