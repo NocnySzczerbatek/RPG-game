@@ -91,8 +91,8 @@ const Game = () => {
         onDismiss={(id) => dispatch({ type: 'DISMISS_NOTIFICATION', id })}
       />
 
-      {/* HUD — shown whenever player exists and not on title/creation screens */}
-      {s.player && !['title', 'difficulty', 'character_creation'].includes(s.screen) && (
+      {/* HUD — shown whenever player exists and not on title/creation/map screens */}
+      {s.player && !['title', 'difficulty', 'character_creation', 'world_map'].includes(s.screen) && (
         <HUD
           player={s.player}
           currentCity={s.currentCity}
