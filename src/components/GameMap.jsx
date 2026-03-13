@@ -1,8 +1,7 @@
-﻿// ============================================================
+// ============================================================
 // COMPONENT: Diablo-style 2D ARPG World Map (Phaser 3)
-// Dark gothic atmosphere, knight sprite, fog of war, NPC
-// merchant, monster spawns, click-to-move, camera follow,
-// portal transitions. Phaser loaded via dynamic import().
+// Real DCSS tileset sprites, particle effects, atmospheric
+// lighting, gothic dark fantasy aesthetic.
 // ============================================================
 import React, { useEffect, useRef, useState } from 'react';
 
@@ -11,39 +10,41 @@ const WORLD_W = 4000;
 const WORLD_H = 3200;
 const PLAYER_SPEED = 200;
 const INTERACT_RADIUS = 55;
+const SPRITE_SCALE = 2.5;      // 32px tiles → 80px on screen
+const TILE_SCALED = 32 * SPRITE_SCALE;
 
 // ── Enemy spawns ──────────────────────────────────────────
 const ENEMY_SPAWNS = [
-  { x: 900,  y: 600,  enemyId: 'skeleton_guard',     label: 'Szkielet Strażnik',  isBoss: false },
-  { x: 1400, y: 450,  enemyId: 'corrupted_hound',    label: 'Skaźony Kundel',     isBoss: false },
-  { x: 650,  y: 1100, enemyId: 'ruin_crawler',        label: 'Pełzacz Ruin',       isBoss: false },
-  { x: 1800, y: 900,  enemyId: 'fallen_knight',      label: 'Upadły Rycerz',      isBoss: false },
-  { x: 2500, y: 600,  enemyId: 'wraith_archer',      label: 'Łucznik-Widmo',      isBoss: false },
-  { x: 2200, y: 1500, enemyId: 'void_acolyte',       label: 'Akolita Pustki',     isBoss: false },
-  { x: 3100, y: 1100, enemyId: 'stone_sentinel',     label: 'Kamienny Strażnik',  isBoss: false },
-  { x: 3300, y: 700,  enemyId: 'skeleton_guard',     label: 'Szkielet Strażnik',  isBoss: false },
-  { x: 1200, y: 1700, enemyId: 'corrupted_hound',    label: 'Skaźony Kundel',     isBoss: false },
-  { x: 2800, y: 1800, enemyId: 'fallen_knight',      label: 'Upadły Rycerz',      isBoss: false },
-  { x: 1900, y: 2400, enemyId: 'the_undying_warden', label: 'Nieśmiertelny Strażnik', isBoss: true },
+  { x: 900,  y: 600,  enemyId: 'skeleton_guard',     label: 'Szkielet Strażnik',  isBoss: false, sprite: 'spr_skeleton_guard' },
+  { x: 1400, y: 450,  enemyId: 'corrupted_hound',    label: 'Skaźony Kundel',     isBoss: false, sprite: 'spr_corrupted_hound' },
+  { x: 650,  y: 1100, enemyId: 'ruin_crawler',        label: 'Pełzacz Ruin',       isBoss: false, sprite: 'spr_ruin_crawler' },
+  { x: 1800, y: 900,  enemyId: 'fallen_knight',      label: 'Upadły Rycerz',      isBoss: false, sprite: 'spr_fallen_knight' },
+  { x: 2500, y: 600,  enemyId: 'wraith_archer',      label: 'Łucznik-Widmo',      isBoss: false, sprite: 'spr_wraith_archer' },
+  { x: 2200, y: 1500, enemyId: 'void_acolyte',       label: 'Akolita Pustki',     isBoss: false, sprite: 'spr_void_acolyte' },
+  { x: 3100, y: 1100, enemyId: 'stone_sentinel',     label: 'Kamienny Strażnik',  isBoss: false, sprite: 'spr_stone_sentinel' },
+  { x: 3300, y: 700,  enemyId: 'skeleton_guard',     label: 'Szkielet Strażnik',  isBoss: false, sprite: 'spr_skeleton_guard' },
+  { x: 1200, y: 1700, enemyId: 'corrupted_hound',    label: 'Skaźony Kundel',     isBoss: false, sprite: 'spr_corrupted_hound' },
+  { x: 2800, y: 1800, enemyId: 'fallen_knight',      label: 'Upadły Rycerz',      isBoss: false, sprite: 'spr_fallen_knight' },
+  { x: 1900, y: 2400, enemyId: 'the_undying_warden', label: 'Nieśmiertelny Strażnik', isBoss: true, sprite: 'spr_boss_warden' },
 ];
 
 // ── NPC positions ─────────────────────────────────────────
 const NPC_DATA = [
-  { x: 400, y: 400, id: 'merchant_goran', label: 'Goran — Kupiec', icon: '🏪' },
+  { x: 460, y: 340, id: 'merchant_goran', label: 'Goran — Kupiec', icon: '🏪' },
 ];
 
 // ── Buildings ─────────────────────────────────────────────
 const BUILDINGS = [
-  { x: 320, y: 320, w: 120, h: 100, label: 'Sklep Gorana',    color: 0x5a3a1a, roofColor: 0x8b1a1a },
-  { x: 600, y: 200, w: 100, h: 80,  label: 'Dom Strażników',  color: 0x4a3a2a, roofColor: 0x6b4423 },
-  { x: 180, y: 600, w: 140, h: 90,  label: 'Kaplica',         color: 0x3a3a4a, roofColor: 0x444466 },
-  { x: 550, y: 520, w: 90,  h: 70,  label: 'Zbrojownia',      color: 0x4a3020, roofColor: 0x7a2020 },
+  { x: 320, y: 320, w: 120, h: 100, label: 'Sklep Gorana',    color: 0x5a3a1a, roofColor: 0x8b1a1a, spriteKey: 'spr_shop' },
+  { x: 600, y: 200, w: 100, h: 80,  label: 'Dom Strażników',  color: 0x4a3a2a, roofColor: 0x6b4423, spriteKey: 'spr_door' },
+  { x: 180, y: 600, w: 140, h: 90,  label: 'Kaplica',         color: 0x3a3a4a, roofColor: 0x444466, spriteKey: 'spr_altar' },
+  { x: 550, y: 520, w: 90,  h: 70,  label: 'Zbrojownia',      color: 0x4a3020, roofColor: 0x7a2020, spriteKey: 'spr_shop_weapon' },
 ];
 
 // ── Portals ───────────────────────────────────────────────
 const PORTALS = [
-  { x: 3800, y: 2900, label: 'Portal do Iglicza', targetCity: 'iglieze',  color: 0x9933ff },
-  { x: 3800, y: 400,  label: 'Portal do Cytadeli', targetCity: 'cytadela', color: 0xcc3333 },
+  { x: 3800, y: 2900, label: 'Portal do Iglicza', targetCity: 'iglieze',  spriteKey: 'spr_portal_purple' },
+  { x: 3800, y: 400,  label: 'Portal do Cytadeli', targetCity: 'cytadela', spriteKey: 'spr_portal_red' },
 ];
 
 // ── Tree & rock placements ────────────────────────────────
@@ -64,115 +65,63 @@ const ROCKS = [
   [3350,1900],[3100,2200],[2900,2500],[1600,2800],[600,2600],[200,2200],
 ];
 
-// ── Helper: draw a procedural knight sprite texture ───────
-function _makeKnightTexture(scene) {
-  const g = scene.make.graphics({ add: false });
-  const s = 48;
-  // Boots
-  g.fillStyle(0x3a2a1a); g.fillRect(14, 40, 8, 8); g.fillRect(26, 40, 8, 8);
-  // Legs (chain mail)
-  g.fillStyle(0x666680); g.fillRect(15, 30, 7, 12); g.fillRect(26, 30, 7, 12);
-  // Torso (plate armor)
-  g.fillStyle(0x888899); g.fillRect(12, 14, 24, 18);
-  g.fillStyle(0x9999aa); g.fillRect(14, 16, 20, 14);
-  // Belt
-  g.fillStyle(0x6a4a2a); g.fillRect(12, 28, 24, 4);
-  g.fillStyle(0xccaa44); g.fillRect(22, 28, 4, 4);
-  // Shoulders (pauldrons)
-  g.fillStyle(0x777788); g.fillEllipse(12, 16, 10, 8); g.fillEllipse(36, 16, 10, 8);
-  // Arms
-  g.fillStyle(0x888899); g.fillRect(6, 16, 6, 14); g.fillRect(36, 16, 6, 14);
-  // Gauntlets
-  g.fillStyle(0x666677); g.fillRect(6, 28, 6, 5); g.fillRect(36, 28, 6, 5);
-  // Sword in right hand
-  g.fillStyle(0xaaaacc); g.fillRect(40, 10, 3, 24);
-  g.fillStyle(0xccccee); g.fillRect(40, 6, 3, 6);
-  g.fillStyle(0x8a6a2a); g.fillRect(38, 30, 7, 3);
-  // Shield in left hand
-  g.fillStyle(0x8b1a1a); g.fillEllipse(6, 22, 12, 16);
-  g.fillStyle(0xaa2222); g.fillEllipse(6, 22, 8, 12);
-  g.lineStyle(1, 0xccaa44); g.strokeEllipse(6, 22, 12, 16);
-  // Neck
-  g.fillStyle(0xddbb99); g.fillRect(20, 10, 8, 6);
-  // Head (helmet)
-  g.fillStyle(0x777788); g.fillEllipse(24, 6, 16, 14);
-  // Helmet visor
-  g.fillStyle(0x555566); g.fillRect(18, 4, 12, 5);
-  // Eyes (visor slits)
-  g.fillStyle(0xff4444); g.fillRect(19, 5, 4, 2); g.fillRect(25, 5, 4, 2);
-  // Helmet crest
-  g.fillStyle(0xaa2222); g.fillRect(22, -2, 4, 6);
-  g.generateTexture('knight', s, s);
-  g.destroy();
-}
+// ── Decorative placements ─────────────────────────────────
+const COLUMNS = [
+  [760,340],[1580,340],[2320,340],[3050,340],
+  [350,800],[350,1300],[350,1800],[350,2300],
+  [1800,700],[1800,1200],[2500,900],[2500,1400],
+];
 
-// ── Helper: draw a monster sprite texture ─────────────────
-function _makeMonsterTexture(scene) {
-  const g = scene.make.graphics({ add: false });
-  // Body
-  g.fillStyle(0x442244); g.fillEllipse(16, 18, 24, 28);
-  g.fillStyle(0x553355); g.fillEllipse(16, 16, 20, 22);
-  // Eyes
-  g.fillStyle(0xff0000); g.fillCircle(11, 12, 4); g.fillCircle(21, 12, 4);
-  g.fillStyle(0xff4444); g.fillCircle(11, 12, 2); g.fillCircle(21, 12, 2);
-  // Mouth
-  g.fillStyle(0x220022); g.fillRect(10, 22, 12, 4);
-  g.fillStyle(0xffffff); // Teeth
-  for (let i = 0; i < 5; i++) g.fillRect(11 + i * 2, 22, 1, 2);
-  // Claws
-  g.fillStyle(0x885588);
-  g.fillTriangle(2, 28, 6, 20, 0, 20);
-  g.fillTriangle(30, 28, 26, 20, 32, 20);
-  g.generateTexture('monster', 32, 32);
-  g.destroy();
-}
+const STATUES = [
+  [200,300],[540,170],[700,550],[1200,200],[2000,180],[2700,250],
+];
 
-// ── Helper: draw boss monster texture ─────────────────────
-function _makeBossTexture(scene) {
-  const g = scene.make.graphics({ add: false });
-  // Larger body
-  g.fillStyle(0x661111); g.fillEllipse(24, 24, 40, 42);
-  g.fillStyle(0x882222); g.fillEllipse(24, 22, 34, 36);
-  // Horns
-  g.fillStyle(0x331111);
-  g.fillTriangle(8, 6, 14, 14, 2, 14);
-  g.fillTriangle(40, 6, 34, 14, 46, 14);
-  // Eyes
-  g.fillStyle(0xffcc00); g.fillCircle(16, 18, 5); g.fillCircle(32, 18, 5);
-  g.fillStyle(0xff0000); g.fillCircle(16, 18, 3); g.fillCircle(32, 18, 3);
-  // Mouth
-  g.fillStyle(0x330000); g.fillRect(14, 30, 20, 6);
-  g.fillStyle(0xffffff);
-  for (let i = 0; i < 7; i++) g.fillRect(15 + i * 2.5, 30, 1, 3);
-  // Crown of fire
-  g.fillStyle(0xff4400, 0.6);
-  g.fillTriangle(14, 4, 18, 12, 10, 12);
-  g.fillTriangle(24, 0, 28, 10, 20, 10);
-  g.fillTriangle(34, 4, 38, 12, 30, 12);
-  g.generateTexture('boss_monster', 48, 48);
-  g.destroy();
-}
+const FOUNTAINS = [
+  [420,500],[1600,500],[2600,1600],[1000,1800],
+];
 
-// ── Helper: draw NPC texture ──────────────────────────────
-function _makeNpcTexture(scene) {
-  const g = scene.make.graphics({ add: false });
-  // Robe
-  g.fillStyle(0x8b6914); g.fillRect(8, 16, 16, 20);
-  g.fillStyle(0xa07820); g.fillRect(10, 18, 12, 16);
-  // Hood
-  g.fillStyle(0x6a5010); g.fillEllipse(16, 10, 18, 16);
-  // Face
-  g.fillStyle(0xddbb88); g.fillEllipse(16, 10, 12, 10);
-  // Eyes
-  g.fillStyle(0x333333); g.fillCircle(13, 9, 2); g.fillCircle(19, 9, 2);
-  // Bag
-  g.fillStyle(0x5a3a1a); g.fillEllipse(26, 26, 10, 12);
-  g.fillStyle(0x6a4a2a); g.fillEllipse(26, 24, 8, 8);
-  // Feet
-  g.fillStyle(0x4a3020); g.fillRect(10, 34, 5, 4); g.fillRect(18, 34, 5, 4);
-  g.generateTexture('npc_merchant', 32, 38);
-  g.destroy();
-}
+const CHESTS = [
+  [1000,300],[2100,400],[3000,500],[1500,1500],[2500,2000],[800,2200],
+];
+
+// ── Sprite asset map ──────────────────────────────────────
+const SPRITE_ASSETS = {
+  spr_knight:           'assets/sprites/knight.png',
+  spr_skeleton_guard:   'assets/sprites/skeleton_guard.png',
+  spr_corrupted_hound:  'assets/sprites/corrupted_hound.png',
+  spr_ruin_crawler:     'assets/sprites/ruin_crawler.png',
+  spr_fallen_knight:    'assets/sprites/fallen_knight.png',
+  spr_wraith_archer:    'assets/sprites/wraith_archer.png',
+  spr_void_acolyte:     'assets/sprites/void_acolyte.png',
+  spr_stone_sentinel:   'assets/sprites/stone_sentinel.png',
+  spr_boss_warden:      'assets/sprites/boss_warden.png',
+  spr_npc_merchant:     'assets/sprites/npc_merchant.png',
+  spr_tree_1:           'assets/sprites/tree_1.png',
+  spr_tree_2:           'assets/sprites/tree_2.png',
+  spr_tree_3:           'assets/sprites/tree_3.png',
+  spr_portal_purple:    'assets/sprites/portal_purple.png',
+  spr_portal_red:       'assets/sprites/portal_red.png',
+  spr_shop:             'assets/sprites/shop.png',
+  spr_shop_weapon:      'assets/sprites/shop_weapon.png',
+  spr_door:             'assets/sprites/door.png',
+  spr_altar:            'assets/sprites/altar.png',
+  spr_fountain:         'assets/sprites/fountain.png',
+  spr_chest:            'assets/sprites/chest.png',
+  spr_statue:           'assets/sprites/statue.png',
+  spr_column:           'assets/sprites/column.png',
+  spr_wall_0:           'assets/sprites/wall_0.png',
+  spr_wall_1:           'assets/sprites/wall_1.png',
+  spr_floor_0:          'assets/sprites/floor_0.png',
+  spr_floor_1:          'assets/sprites/floor_1.png',
+  spr_floor_2:          'assets/sprites/floor_2.png',
+  spr_floor_3:          'assets/sprites/floor_3.png',
+  spr_road:             'assets/sprites/road_tile.png',
+  spr_torch_0:          'assets/sprites/torch_0.png',
+  spr_torch_1:          'assets/sprites/torch_1.png',
+  spr_torch_2:          'assets/sprites/torch_2.png',
+  spr_torch_3:          'assets/sprites/torch_3.png',
+  spr_torch_4:          'assets/sprites/torch_4.png',
+};
 
 // ── Main Phaser launcher ──────────────────────────────────
 function launchPhaser(Phaser, container, playerName, dispatchRef, playerDataRef) {
@@ -189,229 +138,239 @@ function launchPhaser(Phaser, container, playerName, dispatchRef, playerDataRef)
       this.cursorGfx    = null;
       this.busy         = false;
       this.attackTarget = null;
-      this.fogSprite    = null;
     }
 
-    preload() {}
+    preload() {
+      for (const [key, path] of Object.entries(SPRITE_ASSETS)) {
+        this.load.image(key, path);
+      }
+    }
 
     create() {
-      // ── Dark ground tile ────────────────────────────────
-      const groundGfx = this.make.graphics({ add: false });
-      groundGfx.fillStyle(0x1a1a12);
-      groundGfx.fillRect(0, 0, 64, 64);
-      // Grass detail
-      groundGfx.fillStyle(0x222218, 0.8);
-      [[3,5,3,16],[17,1,2,12],[31,9,3,14],[45,3,2,10],[55,17,3,12],
-       [9,39,2,14],[27,33,3,10],[49,43,2,8]].forEach(([x,y,w,h]) =>
-        groundGfx.fillRect(x, y, w, h));
-      groundGfx.fillStyle(0x2a2a1e, 0.4);
-      groundGfx.fillCircle(22, 46, 6);
-      groundGfx.fillCircle(46, 16, 5);
-      groundGfx.generateTexture('dark_ground', 64, 64);
-      groundGfx.destroy();
-
-      this.add.tileSprite(WORLD_W / 2, WORLD_H / 2, WORLD_W, WORLD_H, 'dark_ground').setDepth(0);
-
-      // ── Dark ambient overlay on the ground ──────────────
-      const ambientOverlay = this.add.graphics().setDepth(0.5);
-      ambientOverlay.fillStyle(0x000000, 0.25);
-      ambientOverlay.fillRect(0, 0, WORLD_W, WORLD_H);
-
-      // ── Dirt paths ──────────────────────────────────────
-      const road = this.add.graphics().setDepth(1);
-      road.fillStyle(0x4a3828, 0.7);
-      // Main horizontal road
-      road.fillRect(200, 350, 3500, 50);
-      // Main vertical road
-      road.fillRect(350, 200, 50, 2800);
-      // Branch to boss area
-      road.fillRect(1800, 350, 50, 2200);
-      // Branch east
-      road.fillRect(2500, 350, 50, 800);
-      // Road borders
-      road.lineStyle(2, 0x3a2818, 0.5);
-      road.strokeRect(200, 350, 3500, 50);
-      road.strokeRect(350, 200, 50, 2800);
-
-      // ── Stone cobbles on roads ──────────────────────────
-      const cobble = this.add.graphics().setDepth(1.1);
-      cobble.fillStyle(0x5a4838, 0.3);
-      for (let x = 220; x < 3680; x += 30) {
-        cobble.fillRect(x, 360, 12, 8);
-        cobble.fillRect(x + 15, 375, 12, 8);
+      // ── Tiled ground using real floor sprites ───────────
+      const floorKeys = ['spr_floor_0','spr_floor_1','spr_floor_2','spr_floor_3'];
+      for (let x = 0; x < WORLD_W; x += TILE_SCALED) {
+        for (let y = 0; y < WORLD_H; y += TILE_SCALED) {
+          const key = floorKeys[Math.floor(Math.random() * floorKeys.length)];
+          this.add.image(x + TILE_SCALED / 2, y + TILE_SCALED / 2, key)
+            .setScale(SPRITE_SCALE).setDepth(0);
+        }
       }
 
-      // ── Buildings ───────────────────────────────────────
+      // ── Dark ambient overlay ────────────────────────────
+      const ambientOverlay = this.add.graphics().setDepth(0.5);
+      ambientOverlay.fillStyle(0x000000, 0.3);
+      ambientOverlay.fillRect(0, 0, WORLD_W, WORLD_H);
+
+      // ── Dirt roads using road tiles ─────────────────────
+      for (let x = 200; x < 3700; x += TILE_SCALED) {
+        this.add.image(x, 370, 'spr_road').setScale(SPRITE_SCALE).setDepth(1);
+      }
+      for (let y = 200; y < 3000; y += TILE_SCALED) {
+        this.add.image(370, y, 'spr_road').setScale(SPRITE_SCALE).setDepth(1);
+      }
+      for (let y = 350; y < 2550; y += TILE_SCALED) {
+        this.add.image(1820, y, 'spr_road').setScale(SPRITE_SCALE).setDepth(1);
+      }
+      for (let y = 350; y < 1150; y += TILE_SCALED) {
+        this.add.image(2520, y, 'spr_road').setScale(SPRITE_SCALE).setDepth(1);
+      }
+
+      // ── Buildings with sprite overlays ──────────────────
       BUILDINGS.forEach(b => {
         const bg = this.add.graphics().setDepth(2);
-        // Foundation
         bg.fillStyle(0x222222, 0.5);
         bg.fillRect(b.x - 2, b.y + b.h - 4, b.w + 4, 8);
-        // Walls
         bg.fillStyle(b.color);
         bg.fillRect(b.x, b.y, b.w, b.h);
-        // Wall detail
         bg.fillStyle(0x000000, 0.2);
         bg.fillRect(b.x + 2, b.y + 2, b.w - 4, b.h - 4);
-        // Door
-        bg.fillStyle(0x3a2a1a);
-        bg.fillRect(b.x + b.w / 2 - 8, b.y + b.h - 24, 16, 24);
-        bg.fillStyle(0xccaa44);
-        bg.fillCircle(b.x + b.w / 2 + 4, b.y + b.h - 12, 2);
-        // Windows
         bg.fillStyle(0xffcc66, 0.4);
         bg.fillRect(b.x + 10, b.y + 12, 12, 10);
         bg.fillRect(b.x + b.w - 22, b.y + 12, 12, 10);
-        // Window frame
         bg.lineStyle(1, 0x333333);
         bg.strokeRect(b.x + 10, b.y + 12, 12, 10);
         bg.strokeRect(b.x + b.w - 22, b.y + 12, 12, 10);
-        // Roof
         bg.fillStyle(b.roofColor);
         bg.fillTriangle(b.x - 10, b.y, b.x + b.w / 2, b.y - 35, b.x + b.w + 10, b.y);
-        // Roof shading
         bg.fillStyle(0x000000, 0.15);
         bg.fillTriangle(b.x - 10, b.y, b.x + b.w / 2, b.y - 35, b.x + b.w / 2, b.y);
-        // Chimney
         bg.fillStyle(0x555555);
         bg.fillRect(b.x + b.w - 25, b.y - 28, 10, 18);
         bg.fillStyle(0x666666);
         bg.fillRect(b.x + b.w - 27, b.y - 30, 14, 4);
 
-        // Building label
-        this.add.text(b.x + b.w / 2, b.y - 42, b.label, {
-          fontSize: '10px', fontFamily: 'Cinzel, serif',
+        // Door sprite on building
+        this.add.image(b.x + b.w / 2, b.y + b.h - 12, 'spr_door')
+          .setScale(SPRITE_SCALE * 0.7).setDepth(2.5);
+
+        // Building icon sprite
+        const iconSpr = this.add.image(b.x + b.w / 2, b.y - 48, b.spriteKey)
+          .setScale(SPRITE_SCALE * 0.8).setDepth(8);
+        this.tweens.add({ targets: iconSpr, y: b.y - 52, duration: 1200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+
+        this.add.text(b.x + b.w / 2, b.y - 72, b.label, {
+          fontSize: '11px', fontFamily: 'Cinzel, serif',
           color: '#aa8844', stroke: '#000000', strokeThickness: 3,
         }).setOrigin(0.5, 0.5).setDepth(8);
       });
 
-      // ── Dead trees (dark, gothic) ──────────────────────
+      // ── Trees with real sprites ─────────────────────────
+      const treeKeys = ['spr_tree_1', 'spr_tree_2', 'spr_tree_3'];
       TREES.forEach(([tx, ty]) => {
-        const tg = this.add.graphics().setDepth(2);
-        // Trunk
-        tg.fillStyle(0x2a1a0a); tg.fillRect(tx - 4, ty, 8, 26);
-        // Branches (bare, twisted)
-        tg.lineStyle(3, 0x3a2a1a);
-        tg.lineBetween(tx, ty + 4, tx - 18, ty - 16);
-        tg.lineBetween(tx, ty + 8, tx + 20, ty - 12);
-        tg.lineBetween(tx - 18, ty - 16, tx - 28, ty - 22);
-        tg.lineBetween(tx + 20, ty - 12, tx + 30, ty - 20);
-        tg.lineStyle(2, 0x332210);
-        tg.lineBetween(tx, ty, tx - 10, ty - 24);
-        tg.lineBetween(tx, ty + 2, tx + 12, ty - 20);
-        // Sparse dark foliage
-        tg.fillStyle(0x1a3a0a, 0.6); tg.fillCircle(tx - 14, ty - 14, 12);
-        tg.fillStyle(0x0e2a06, 0.5); tg.fillCircle(tx + 16, ty - 10, 10);
-        tg.fillStyle(0x1a3a0a, 0.4); tg.fillCircle(tx, ty - 20, 14);
-        // Roots
-        tg.lineStyle(2, 0x2a1a0a, 0.5);
-        tg.lineBetween(tx - 4, ty + 26, tx - 12, ty + 30);
-        tg.lineBetween(tx + 4, ty + 26, tx + 10, ty + 30);
+        const key = treeKeys[Math.floor(Math.random() * treeKeys.length)];
+        const spr = this.add.image(tx, ty, key).setScale(SPRITE_SCALE).setDepth(2);
+        spr.setTint(Phaser.Display.Color.GetColor(
+          180 + Math.floor(Math.random() * 50),
+          200 + Math.floor(Math.random() * 55),
+          180 + Math.floor(Math.random() * 50)
+        ));
       });
 
-      // ── Rocks ───────────────────────────────────────────
+      // ── Rocks with wall sprites ─────────────────────────
       ROCKS.forEach(([rx, ry]) => {
-        const rg = this.add.graphics().setDepth(2);
-        rg.fillStyle(0x444444); rg.fillEllipse(rx, ry, 30, 20);
-        rg.fillStyle(0x555555); rg.fillEllipse(rx - 4, ry - 4, 20, 14);
-        rg.fillStyle(0x333333); rg.fillEllipse(rx + 7, ry + 3, 14, 10);
-        // Moss
-        rg.fillStyle(0x2a3a1a, 0.4); rg.fillEllipse(rx - 6, ry - 2, 8, 6);
+        const key = Math.random() > 0.5 ? 'spr_wall_0' : 'spr_wall_1';
+        this.add.image(rx, ry, key).setScale(SPRITE_SCALE * 0.8).setDepth(2)
+          .setTint(0x888888);
+      });
+
+      // ── Columns ─────────────────────────────────────────
+      COLUMNS.forEach(([cx, cy]) => {
+        this.add.image(cx, cy, 'spr_column').setScale(SPRITE_SCALE).setDepth(2);
+      });
+
+      // ── Statues ─────────────────────────────────────────
+      STATUES.forEach(([sx, sy]) => {
+        this.add.image(sx, sy, 'spr_statue').setScale(SPRITE_SCALE).setDepth(2);
+      });
+
+      // ── Fountains ───────────────────────────────────────
+      FOUNTAINS.forEach(([fx, fy]) => {
+        const spr = this.add.image(fx, fy, 'spr_fountain').setScale(SPRITE_SCALE).setDepth(2);
+        this.tweens.add({
+          targets: spr, alpha: 0.7, duration: 800,
+          yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
+        });
+        const glow = this.add.graphics().setDepth(2.1);
+        glow.fillStyle(0x4488ff, 0.12);
+        glow.fillCircle(fx, fy, 30);
+        this.tweens.add({ targets: glow, alpha: 0.3, duration: 1000, yoyo: true, repeat: -1 });
+      });
+
+      // ── Chests ──────────────────────────────────────────
+      CHESTS.forEach(([cx, cy]) => {
+        this.add.image(cx, cy, 'spr_chest').setScale(SPRITE_SCALE).setDepth(2);
+        const glow = this.add.graphics().setDepth(1.9);
+        glow.fillStyle(0xffaa33, 0.06);
+        glow.fillCircle(cx, cy, 20);
+        this.tweens.add({ targets: glow, alpha: 0.15, duration: 1500, yoyo: true, repeat: -1 });
       });
 
       // ── Skull & bone decorations ────────────────────────
       [[750,350],[1600,380],[2300,330],[3000,370],[1100,900],[2600,1300]].forEach(([sx,sy]) => {
         const sg = this.add.graphics().setDepth(1.5);
         sg.fillStyle(0xaaaaaa, 0.3);
-        sg.fillCircle(sx, sy, 6); // skull
-        sg.fillRect(sx - 8, sy + 4, 16, 2); // bones
+        sg.fillCircle(sx, sy, 6);
+        sg.fillRect(sx - 8, sy + 4, 16, 2);
         sg.fillRect(sx - 2, sy + 2, 4, 8);
       });
 
       // ── Torches along roads ─────────────────────────────
-      [500, 900, 1300, 1700, 2100, 2500, 2900, 3300].forEach(tx => {
+      const torchFrameKeys = ['spr_torch_0','spr_torch_1','spr_torch_2','spr_torch_3','spr_torch_4'];
+      const torchPositions = [500, 900, 1300, 1700, 2100, 2500, 2900, 3300];
+      torchPositions.forEach(tx => {
         const tg = this.add.graphics().setDepth(3);
-        // Post
-        tg.fillStyle(0x4a3010); tg.fillRect(tx - 2, 320, 4, 30);
-        // Flame glow
-        const flame = this.add.graphics().setDepth(3.1);
-        flame.fillStyle(0xff6600, 0.3); flame.fillCircle(tx, 316, 12);
-        flame.fillStyle(0xff9933, 0.5); flame.fillCircle(tx, 316, 7);
-        flame.fillStyle(0xffcc00, 0.8); flame.fillCircle(tx, 316, 3);
-        // Flickering
+        tg.fillStyle(0x4a3010); tg.fillRect(tx - 3, 320, 6, 35);
+
+        const torchSpr = this.add.image(tx, 308, torchFrameKeys[0]).setScale(SPRITE_SCALE).setDepth(3.1);
+        let frameIdx = 0;
+        this.time.addEvent({
+          delay: 150,
+          loop: true,
+          callback: () => {
+            frameIdx = (frameIdx + 1) % torchFrameKeys.length;
+            torchSpr.setTexture(torchFrameKeys[frameIdx]);
+          },
+        });
+
+        const flame = this.add.graphics().setDepth(3.2);
+        flame.fillStyle(0xff6600, 0.2); flame.fillCircle(tx, 316, 18);
+        flame.fillStyle(0xff9933, 0.35); flame.fillCircle(tx, 316, 10);
+        flame.fillStyle(0xffcc00, 0.6); flame.fillCircle(tx, 316, 4);
         this.tweens.add({
-          targets: flame, alpha: 0.4,
-          duration: 300 + Math.random() * 200,
+          targets: flame, alpha: 0.3,
+          duration: 250 + Math.random() * 200,
           yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
         });
-        // Ground light pool
+
         const lightPool = this.add.graphics().setDepth(0.8);
-        lightPool.fillStyle(0xffaa33, 0.06);
-        lightPool.fillCircle(tx, 350, 40);
+        lightPool.fillStyle(0xffaa33, 0.08);
+        lightPool.fillCircle(tx, 360, 50);
+        this.tweens.add({
+          targets: lightPool, alpha: 0.04,
+          duration: 400, yoyo: true, repeat: -1,
+        });
       });
 
-      // ── Portals ─────────────────────────────────────────
+      // ── Portals with real sprites ───────────────────────
       PORTALS.forEach(p => {
-        const pg = this.add.graphics().setDepth(5);
-        // Outer ring
-        pg.lineStyle(4, p.color, 0.8); pg.strokeCircle(p.x, p.y, 30);
-        pg.lineStyle(2, p.color, 0.4); pg.strokeCircle(p.x, p.y, 36);
-        // Inner swirl
-        pg.fillStyle(p.color, 0.15); pg.fillCircle(p.x, p.y, 28);
-        pg.fillStyle(p.color, 0.3); pg.fillCircle(p.x, p.y, 16);
-        pg.fillStyle(0xffffff, 0.2); pg.fillCircle(p.x, p.y, 6);
-        // Pulsate
+        const portalSpr = this.add.image(p.x, p.y, p.spriteKey)
+          .setScale(SPRITE_SCALE * 1.5).setDepth(5);
         this.tweens.add({
-          targets: pg, alpha: 0.4, scaleX: 0.95, scaleY: 0.95,
-          duration: 800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
+          targets: portalSpr,
+          scaleX: SPRITE_SCALE * 1.7, scaleY: SPRITE_SCALE * 1.7,
+          alpha: 0.6,
+          duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
         });
-        // Label
-        this.add.text(p.x, p.y + 44, p.label, {
-          fontSize: '11px', fontFamily: 'Cinzel, serif',
+
+        const pg = this.add.graphics().setDepth(4.9);
+        const color = p.spriteKey === 'spr_portal_purple' ? 0x9933ff : 0xcc3333;
+        pg.lineStyle(3, color, 0.5); pg.strokeCircle(p.x, p.y, 48);
+        pg.fillStyle(color, 0.06); pg.fillCircle(p.x, p.y, 48);
+        this.tweens.add({
+          targets: pg, alpha: 0.2,
+          duration: 700, yoyo: true, repeat: -1,
+        });
+
+        this.add.text(p.x, p.y + 55, p.label, {
+          fontSize: '12px', fontFamily: 'Cinzel, serif',
           color: '#ddaaff', stroke: '#000000', strokeThickness: 4,
         }).setOrigin(0.5, 0).setDepth(8);
 
-        this.portals.push({ x: p.x, y: p.y, targetCity: p.targetCity, radius: 40 });
+        this.portals.push({ x: p.x, y: p.y, targetCity: p.targetCity, radius: 50 });
       });
 
-      // ── Generate textures ───────────────────────────────
-      _makeKnightTexture(this);
-      _makeMonsterTexture(this);
-      _makeBossTexture(this);
-      _makeNpcTexture(this);
-
-      // ── Spawn monsters ──────────────────────────────────
+      // ── Spawn monsters with real sprites ────────────────
       ENEMY_SPAWNS.forEach(m => {
-        const tex = m.isBoss ? 'boss_monster' : 'monster';
-        const sprite = this.physics.add.sprite(m.x, m.y, tex).setDepth(6).setInteractive({ cursor: 'pointer' });
-        if (m.isBoss) sprite.setScale(1.3);
+        const scale = m.isBoss ? SPRITE_SCALE * 1.8 : SPRITE_SCALE * 1.2;
+        const sprite = this.physics.add.sprite(m.x, m.y, m.sprite)
+          .setScale(scale).setDepth(6)
+          .setInteractive({ cursor: 'pointer' });
 
-        // Health bar background
+        if (m.isBoss) sprite.setTint(0xff6666);
+
         const hpBg = this.add.graphics().setDepth(7);
-        hpBg.fillStyle(0x000000, 0.7); hpBg.fillRect(-16, -8, 32, 5);
-        hpBg.setPosition(m.x, m.y - (m.isBoss ? 40 : 26));
+        hpBg.fillStyle(0x000000, 0.7); hpBg.fillRect(-20, -8, 40, 6);
+        hpBg.setPosition(m.x, m.y - (m.isBoss ? 55 : 35));
 
-        // Health bar fill
         const hpFill = this.add.graphics().setDepth(7.1);
-        hpFill.fillStyle(m.isBoss ? 0xff2200 : 0xcc3333); hpFill.fillRect(-15, -7, 30, 3);
-        hpFill.setPosition(m.x, m.y - (m.isBoss ? 40 : 26));
+        hpFill.fillStyle(m.isBoss ? 0xff2200 : 0xcc3333); hpFill.fillRect(-19, -7, 38, 4);
+        hpFill.setPosition(m.x, m.y - (m.isBoss ? 55 : 35));
 
-        // Name label
         const color = m.isBoss ? '#ff4444' : '#ff8866';
-        const label = this.add.text(m.x, m.y - (m.isBoss ? 50 : 34), m.label, {
+        const label = this.add.text(m.x, m.y - (m.isBoss ? 65 : 43), m.label, {
           fontSize: m.isBoss ? '12px' : '10px', fontFamily: 'Cinzel, serif',
           color, stroke: '#000000', strokeThickness: 3,
         }).setOrigin(0.5, 0.5).setDepth(8);
 
         if (m.isBoss) {
-          const bossTag = this.add.text(m.x, m.y - 62, '⚠ BOSS ⚠', {
+          const bossTag = this.add.text(m.x, m.y - 78, '⚠ BOSS ⚠', {
             fontSize: '11px', fontFamily: 'Cinzel, serif',
             color: '#ff2222', stroke: '#000000', strokeThickness: 3,
           }).setOrigin(0.5, 0.5).setDepth(8);
           this.tweens.add({ targets: bossTag, alpha: 0.2, duration: 400, yoyo: true, repeat: -1 });
         }
 
-        // Idle wander
         this.tweens.add({
           targets: sprite,
           x: m.x + (Math.random() - 0.5) * 60,
@@ -420,10 +379,11 @@ function launchPhaser(Phaser, container, playerName, dispatchRef, playerDataRef)
           yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
         });
 
-        // Click on monster → move towards it
         sprite.on('pointerdown', () => {
           if (this.busy) return;
+          this._spriteClicked = true;
           this.attackTarget = { sprite, enemyId: m.enemyId, isBoss: m.isBoss, label };
+          this._npcTarget = null;
           this.moveTarget = { x: sprite.x, y: sprite.y };
           this.isMoving = true;
           this._showClickRipple(sprite.x, sprite.y, 0xff4444);
@@ -432,24 +392,26 @@ function launchPhaser(Phaser, container, playerName, dispatchRef, playerDataRef)
         this.monsters.push({ sprite, enemyId: m.enemyId, isBoss: m.isBoss, x: m.x, y: m.y, label, hpBg, hpFill, active: true });
       });
 
-      // ── NPCs ────────────────────────────────────────────
+      // ── NPCs with real sprites ──────────────────────────
       NPC_DATA.forEach(n => {
-        const sprite = this.physics.add.sprite(n.x, n.y, 'npc_merchant').setDepth(6).setInteractive({ cursor: 'pointer' });
+        const sprite = this.physics.add.sprite(n.x, n.y, 'spr_npc_merchant')
+          .setScale(SPRITE_SCALE * 1.1).setDepth(6)
+          .setInteractive({ cursor: 'pointer' });
 
-        // Name
-        const label = this.add.text(n.x, n.y - 30, n.label, {
+        const label = this.add.text(n.x, n.y - 40, n.label, {
           fontSize: '11px', fontFamily: 'Cinzel, serif',
           color: '#ffdd88', stroke: '#000000', strokeThickness: 3,
         }).setOrigin(0.5, 0.5).setDepth(8);
 
-        // Exclamation mark (quest available feel)
-        const exMark = this.add.text(n.x, n.y - 44, '❗', {
+        const exMark = this.add.text(n.x, n.y - 54, '❗', {
           fontSize: '14px', stroke: '#000000', strokeThickness: 2,
         }).setOrigin(0.5, 0.5).setDepth(9);
-        this.tweens.add({ targets: exMark, y: n.y - 50, duration: 600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+        this.tweens.add({ targets: exMark, y: n.y - 60, duration: 600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
 
         sprite.on('pointerdown', () => {
           if (this.busy) return;
+          this._spriteClicked = true;
+          this.attackTarget = null;
           this.moveTarget = { x: n.x, y: n.y };
           this.isMoving = true;
           this._npcTarget = { sprite, npcId: n.id };
@@ -459,20 +421,21 @@ function launchPhaser(Phaser, container, playerName, dispatchRef, playerDataRef)
         this.npcs.push({ sprite, label, npcId: n.id });
       });
 
-      // ── Knight (player) ─────────────────────────────────
-      this.knight = this.physics.add.sprite(380, 400, 'knight').setDepth(10).setCollideWorldBounds(true);
-      this.knight.setScale(1.1);
+      // ── Knight (player) with real sprite ────────────────
+      this.knight = this.physics.add.sprite(380, 400, 'spr_knight')
+        .setScale(SPRITE_SCALE * 1.2).setDepth(10).setCollideWorldBounds(true);
 
-      // Shadow
-      this._shadowObj = this.add.ellipse(0, 0, 30, 10, 0x000000, 0.4).setDepth(9);
+      this._shadowObj = this.add.ellipse(0, 0, 36, 12, 0x000000, 0.4).setDepth(9);
 
-      // Player name label
-      this.knightLabel = this.add.text(380, 370, playerName, {
+      this.knightLabel = this.add.text(380, 360, playerName, {
         fontSize: '12px', fontFamily: 'Cinzel, serif',
         color: '#ffffff', stroke: '#000000', strokeThickness: 4,
       }).setOrigin(0.5, 1).setDepth(11);
 
       this.cursorGfx = this.add.graphics().setDepth(5);
+
+      // ── Atmospheric particles ───────────────────────────
+      this._createAtmosphericParticles(Phaser);
 
       // ── Physics & camera ────────────────────────────────
       this.physics.world.setBounds(0, 0, WORLD_W, WORLD_H);
@@ -482,10 +445,11 @@ function launchPhaser(Phaser, container, playerName, dispatchRef, playerDataRef)
       this.cameras.main.setBackgroundColor('#0a0a08');
 
       // ── Click-to-move ───────────────────────────────────
+      this._spriteClicked = false;
       this.input.on('pointerdown', (ptr) => {
         if (this.busy) return;
-        // Don't override if we clicked on a monster/NPC (handled by their own handler)
         if (ptr.downElement && ptr.downElement.tagName !== 'CANVAS') return;
+        if (this._spriteClicked) { this._spriteClicked = false; return; }
         this.attackTarget = null;
         this._npcTarget = null;
         this.moveTarget = { x: ptr.worldX, y: ptr.worldY };
@@ -494,10 +458,77 @@ function launchPhaser(Phaser, container, playerName, dispatchRef, playerDataRef)
       });
     }
 
+    // ── Atmospheric particle systems ──────────────────────
+    _createAtmosphericParticles(Phaser) {
+      // Ember texture
+      const emberGfx = this.make.graphics({ add: false });
+      emberGfx.fillStyle(0xff8833, 0.8);
+      emberGfx.fillCircle(2, 2, 2);
+      emberGfx.generateTexture('ember_particle', 4, 4);
+      emberGfx.destroy();
+
+      // Dust texture
+      const dustGfx = this.make.graphics({ add: false });
+      dustGfx.fillStyle(0xaa9977, 0.4);
+      dustGfx.fillCircle(1, 1, 1);
+      dustGfx.generateTexture('dust_particle', 3, 3);
+      dustGfx.destroy();
+
+      // Dark mist texture
+      const mistGfx = this.make.graphics({ add: false });
+      mistGfx.fillStyle(0x334455, 0.3);
+      mistGfx.fillCircle(4, 4, 4);
+      mistGfx.generateTexture('mist_particle', 8, 8);
+      mistGfx.destroy();
+
+      // Ember particles near torches
+      [500, 900, 1300, 1700, 2100, 2500, 2900, 3300].forEach(tx => {
+        this.add.particles(tx, 310, 'ember_particle', {
+          speed: { min: 10, max: 30 },
+          angle: { min: 240, max: 300 },
+          lifespan: { min: 1000, max: 2500 },
+          alpha: { start: 0.8, end: 0 },
+          scale: { start: 1, end: 0.3 },
+          quantity: 1,
+          frequency: 300,
+          blendMode: 'ADD',
+        }).setDepth(3.5);
+      });
+
+      // Global floating dust
+      this.add.particles(WORLD_W / 2, WORLD_H / 2, 'dust_particle', {
+        emitZone: {
+          type: 'random',
+          source: new Phaser.Geom.Rectangle(-WORLD_W / 2, -WORLD_H / 2, WORLD_W, WORLD_H),
+        },
+        speed: { min: 5, max: 20 },
+        angle: { min: 0, max: 360 },
+        lifespan: { min: 3000, max: 6000 },
+        alpha: { start: 0.3, end: 0 },
+        scale: { start: 1.5, end: 0.5 },
+        quantity: 1,
+        frequency: 200,
+      }).setDepth(3);
+
+      // Boss area dark mist
+      this.add.particles(1900, 2400, 'mist_particle', {
+        emitZone: {
+          type: 'random',
+          source: new Phaser.Geom.Circle(0, 0, 200),
+        },
+        speed: { min: 3, max: 12 },
+        angle: { min: 0, max: 360 },
+        lifespan: { min: 3000, max: 5000 },
+        alpha: { start: 0.4, end: 0 },
+        scale: { start: 2, end: 4 },
+        quantity: 1,
+        frequency: 400,
+      }).setDepth(3);
+    }
+
     update() {
       if (!this.knight || this.busy) return;
 
-      // ── Movement ────────────────────────────────────────
       if (this.moveTarget && this.isMoving) {
         const tx = this.attackTarget ? this.attackTarget.sprite.x : this.moveTarget.x;
         const ty = this.attackTarget ? this.attackTarget.sprite.y : this.moveTarget.y;
@@ -505,10 +536,8 @@ function launchPhaser(Phaser, container, playerName, dispatchRef, playerDataRef)
         const dy = ty - this.knight.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
 
-        // Flip knight based on movement direction
         if (Math.abs(dx) > 2) this.knight.setFlipX(dx < 0);
 
-        // If attacking and close enough → trigger combat
         if (this.attackTarget && dist < INTERACT_RADIUS) {
           this.knight.setVelocity(0, 0);
           this.isMoving = false;
@@ -517,7 +546,6 @@ function launchPhaser(Phaser, container, playerName, dispatchRef, playerDataRef)
           return;
         }
 
-        // If near NPC → open trade
         if (this._npcTarget && dist < INTERACT_RADIUS) {
           this.knight.setVelocity(0, 0);
           this.isMoving = false;
@@ -535,13 +563,11 @@ function launchPhaser(Phaser, container, playerName, dispatchRef, playerDataRef)
         }
       }
 
-      // ── Update position-tracking objects ─────────────────
       const px = this.knight.x;
       const py = this.knight.y;
-      if (this.knightLabel) this.knightLabel.setPosition(px, py - 28);
-      if (this._shadowObj) this._shadowObj.setPosition(px, py + 16);
+      if (this.knightLabel) this.knightLabel.setPosition(px, py - 35);
+      if (this._shadowObj) this._shadowObj.setPosition(px, py + 20);
 
-      // ── Portal check ────────────────────────────────────
       for (const p of this.portals) {
         const dx = px - p.x;
         const dy = py - p.y;
@@ -556,9 +582,9 @@ function launchPhaser(Phaser, container, playerName, dispatchRef, playerDataRef)
       this.cursorGfx.clear();
       this.cursorGfx.setAlpha(1).setScale(1);
       this.cursorGfx.lineStyle(2, color, 0.9);
-      this.cursorGfx.strokeCircle(wx, wy, 12);
-      this.cursorGfx.fillStyle(color, 0.15);
-      this.cursorGfx.fillCircle(wx, wy, 12);
+      this.cursorGfx.strokeCircle(wx, wy, 14);
+      this.cursorGfx.fillStyle(color, 0.12);
+      this.cursorGfx.fillCircle(wx, wy, 14);
       this.tweens.add({
         targets: this.cursorGfx,
         alpha: 0, scaleX: 2, scaleY: 2,
@@ -574,11 +600,8 @@ function launchPhaser(Phaser, container, playerName, dispatchRef, playerDataRef)
       this.knight.setVelocity(0, 0);
       this.isMoving = false;
       this.moveTarget = null;
-
-      // Flash effect
       this.cameras.main.flash(400, 180, 40, 40);
       this.cameras.main.shake(200, 0.01);
-
       this.time.delayedCall(400, () => {
         dispatchRef.current({ type: 'START_COMBAT', enemyId: target.enemyId, isBoss: target.isBoss });
       });
@@ -589,8 +612,6 @@ function launchPhaser(Phaser, container, playerName, dispatchRef, playerDataRef)
       this.knight.setVelocity(0, 0);
       this.isMoving = false;
       this.moveTarget = null;
-
-      // Open shop
       this.time.delayedCall(100, () => {
         dispatchRef.current({ type: 'OPEN_SHOP' });
       });
@@ -601,7 +622,6 @@ function launchPhaser(Phaser, container, playerName, dispatchRef, playerDataRef)
       this.knight.setVelocity(0, 0);
       this.isMoving = false;
       this.moveTarget = null;
-
       this.cameras.main.fadeOut(600, 0, 0, 0);
       this.time.delayedCall(650, () => {
         dispatchRef.current({ type: 'TRAVEL_TO_CITY', cityId: portal.targetCity });
@@ -625,6 +645,11 @@ function launchPhaser(Phaser, container, playerName, dispatchRef, playerDataRef)
     },
     backgroundColor: '#0a0a08',
     pixelArt: true,
+    render: {
+      antialias: false,
+      pixelArt: true,
+      roundPixels: true,
+    },
   });
 }
 
@@ -645,8 +670,9 @@ const GameMap = ({ dispatch, player }) => {
 
     import('phaser').then((mod) => {
       if (destroyed || !containerRef.current) return;
+      const Phaser = mod.default || mod;
       gameRef.current = launchPhaser(
-        mod.default,
+        Phaser,
         containerRef.current,
         player?.name ?? 'Bohater',
         dispatchRef,
@@ -681,7 +707,7 @@ const GameMap = ({ dispatch, player }) => {
 
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
 
-      {/* CSS fog of war vignette — lightweight dark edges */}
+      {/* CSS fog of war vignette */}
       {!loading && (
         <div style={{
           position: 'absolute', inset: 0, zIndex: 10,
@@ -709,7 +735,7 @@ const GameMap = ({ dispatch, player }) => {
         ← Wróć do Miasta
       </button>
 
-      {/* Mini quest log (top-right) */}
+      {/* Mini quest log */}
       <div style={{
         position: 'absolute', top: 14, right: 14, zIndex: 100,
         background: 'rgba(10, 10, 8, 0.9)',
@@ -738,17 +764,16 @@ const GameMap = ({ dispatch, player }) => {
           display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between',
           padding: '0 20px 10px 20px',
         }}>
-          {/* Health Orb (left) */}
+          {/* Health Orb */}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 80 }}>
             <div style={{
               width: 60, height: 60, borderRadius: '50%',
-              background: `radial-gradient(circle at 40% 40%, #cc2222, #660000 70%, #330000)`,
+              background: 'radial-gradient(circle at 40% 40%, #cc2222, #660000 70%, #330000)',
               border: '3px solid #8b1a1a',
               boxShadow: '0 0 12px rgba(200,30,30,0.5), inset 0 0 10px rgba(0,0,0,0.5)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               position: 'relative', overflow: 'hidden',
             }}>
-              {/* Fill level based on HP */}
               <div style={{
                 position: 'absolute', bottom: 0, left: 0, right: 0,
                 height: `${Math.max(0, Math.min(100, (player.hp / Math.max(1, player.maxHp)) * 100))}%`,
@@ -763,7 +788,7 @@ const GameMap = ({ dispatch, player }) => {
             <span style={{ color: '#ff6666', fontSize: '10px', fontFamily: '"Cinzel", serif', marginTop: 2 }}>HP</span>
           </div>
 
-          {/* Center — Action bar */}
+          {/* Action bar */}
           <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end', paddingBottom: 4 }}>
             {['Q ⚔️', 'W ✨', 'E 🛡️', 'R 🔥'].map((skill, i) => (
               <div key={i} style={{
@@ -794,11 +819,11 @@ const GameMap = ({ dispatch, player }) => {
             ))}
           </div>
 
-          {/* Mana Orb (right) */}
+          {/* Mana Orb */}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 80 }}>
             <div style={{
               width: 60, height: 60, borderRadius: '50%',
-              background: `radial-gradient(circle at 40% 40%, #2244cc, #001166 70%, #000833)`,
+              background: 'radial-gradient(circle at 40% 40%, #2244cc, #001166 70%, #000833)',
               border: '3px solid #1a1a8b',
               boxShadow: '0 0 12px rgba(30,30,200,0.5), inset 0 0 10px rgba(0,0,0,0.5)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -820,7 +845,7 @@ const GameMap = ({ dispatch, player }) => {
         </div>
       )}
 
-      {/* Player info bar (above bottom HUD) */}
+      {/* Player info bar */}
       {!loading && player && (
         <div style={{
           position: 'absolute', bottom: 82, left: '50%', transform: 'translateX(-50%)',

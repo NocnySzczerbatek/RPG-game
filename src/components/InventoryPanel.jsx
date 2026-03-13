@@ -60,12 +60,12 @@ const InventoryPanel = ({ player, dispatch, onClose }) => {
   const equippedIds = Object.values(equipment).filter(Boolean);
 
   function handleSelect(item) {
-    setSelected((prev) => (prev?.id === item.id ? null : item));
+    setSelected((prev) => (prev?.instanceId === item.instanceId ? null : item));
   }
 
   function handleEquip() {
-    if (!selected) return;
-    dispatch({ type: 'EQUIP_ITEM', itemId: selected.id });
+    if (!selected || !selected.instanceId) return;
+    dispatch({ type: 'EQUIP_ITEM', instanceId: selected.instanceId });
     setSelected(null);
   }
 
@@ -74,8 +74,8 @@ const InventoryPanel = ({ player, dispatch, onClose }) => {
   }
 
   function handleUse() {
-    if (!selected) return;
-    dispatch({ type: 'USE_ITEM_OUTSIDE_COMBAT', itemId: selected.id });
+    if (!selected || !selected.instanceId) return;
+    dispatch({ type: 'USE_ITEM_OUTSIDE_COMBAT', instanceId: selected.instanceId });
     setSelected(null);
   }
 
@@ -124,10 +124,10 @@ const InventoryPanel = ({ player, dispatch, onClose }) => {
                     const merged = { ...itemDef, ...item };
                     return (
                       <ItemCard
-                        key={item.id + (item._iid ?? '')}
+                        key={item.instanceId}
                         item={merged}
                         onClick={handleSelect}
-                        selected={selected?.id === item.id}
+                        selected={selected?.instanceId === item.instanceId}
                         equipped={equippedIds.includes(item.id)}
                       />
                     );

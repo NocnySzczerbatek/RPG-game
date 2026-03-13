@@ -17,7 +17,7 @@ const ShopView = ({ cityId, player, merchantGold, dispatch, onClose }) => {
     .filter((it) => it.type !== 'key' && it.value > 0);
 
   const displayList = tab === 'buy' ? shopItems : playerSellable;
-  const sellPrice = (item) => Math.floor((item.value ?? 0) * 0.5);
+  const sellPrice = (item) => Math.floor((item.value ?? 0) * 0.4);
 
   function handleBuy() {
     if (!selected || tab !== 'buy') return;
@@ -27,7 +27,7 @@ const ShopView = ({ cityId, player, merchantGold, dispatch, onClose }) => {
 
   function handleSell() {
     if (!selected || tab !== 'sell') return;
-    dispatch({ type: 'SELL_ITEM', itemId: selected.id });
+    dispatch({ type: 'SELL_ITEM', instanceId: selected.instanceId });
     setSelected(null);
   }
 
@@ -82,10 +82,10 @@ const ShopView = ({ cityId, player, merchantGold, dispatch, onClose }) => {
                 const canAfford = tab === 'buy' ? player.gold >= item.value : true;
                 return (
                   <button
-                    key={item.id}
-                    onClick={() => setSelected((prev) => (prev?.id === item.id ? null : item))}
+                    key={item.instanceId ?? item.id}
+                    onClick={() => setSelected((prev) => (prev?.instanceId === item.instanceId ? null : item))}
                     className={`text-left p-3 rounded border transition-all ${
-                      selected?.id === item.id
+                      selected?.instanceId === item.instanceId
                         ? `${rarity.border} bg-slate-800`
                         : `border-slate-700 bg-slate-900 hover:border-slate-600`
                     } ${!canAfford && tab === 'buy' ? 'opacity-50' : ''}`}

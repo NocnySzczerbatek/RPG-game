@@ -693,7 +693,7 @@ const handleCombatFinished = (state, combatResult) => {
     }
     return {
       ...state,
-      screen: 'city',
+      screen: 'combat',
       combat: combatResult,
       player: {
         ...state.player,

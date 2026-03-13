@@ -23,7 +23,7 @@ const ForgeView = ({ player, dispatch, onClose }) => {
 
   function handleCraft() {
     if (!selected) return;
-    dispatch({ type: 'CRAFT_ITEM', recipeId: selected.id });
+    dispatch({ type: 'CRAFT_ITEM', recipe: selected });
     setSelected(null);
   }
 
