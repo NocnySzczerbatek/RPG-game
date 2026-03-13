@@ -474,23 +474,6 @@ function launchPhaser(Phaser, container, playerName, dispatchRef, playerDataRef)
 
       this.cursorGfx = this.add.graphics().setDepth(5);
 
-      // ── Fog of war — dark vignette following camera ─────
-      const fogTex = this.make.graphics({ add: false });
-      const fogSize = 1200;
-      const half = fogSize / 2;
-      // Concentric circles from transparent center to dark edge
-      for (let r = half; r > 0; r -= 2) {
-        const a = Math.pow(1 - r / half, 2.5);
-        fogTex.fillStyle(0x000000, a);
-        fogTex.fillCircle(half, half, r);
-      }
-      fogTex.generateTexture('fog_vignette', fogSize, fogSize);
-      fogTex.destroy();
-
-      // Full-screen dark layer, then punch light hole
-      this.fogDark = this.add.graphics().setDepth(50);
-      this.fogLight = this.add.image(380, 400, 'fog_vignette').setDepth(49).setBlendMode(Phaser.BlendModes.MULTIPLY).setScale(1.6);
-
       // ── Physics & camera ────────────────────────────────
       this.physics.world.setBounds(0, 0, WORLD_W, WORLD_H);
       this.cameras.main.setBounds(0, 0, WORLD_W, WORLD_H);
@@ -557,9 +540,6 @@ function launchPhaser(Phaser, container, playerName, dispatchRef, playerDataRef)
       const py = this.knight.y;
       if (this.knightLabel) this.knightLabel.setPosition(px, py - 28);
       if (this._shadowObj) this._shadowObj.setPosition(px, py + 16);
-
-      // ── Fog of war follows player ──────────────────────
-      if (this.fogLight) this.fogLight.setPosition(px, py);
 
       // ── Portal check ────────────────────────────────────
       for (const p of this.portals) {
@@ -700,6 +680,15 @@ const GameMap = ({ dispatch, player }) => {
       )}
 
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+
+      {/* CSS fog of war vignette — lightweight dark edges */}
+      {!loading && (
+        <div style={{
+          position: 'absolute', inset: 0, zIndex: 10,
+          pointerEvents: 'none',
+          background: 'radial-gradient(ellipse 50% 50% at 50% 50%, transparent 0%, transparent 30%, rgba(0,0,0,0.4) 55%, rgba(0,0,0,0.75) 75%, rgba(0,0,0,0.95) 100%)',
+        }} />
+      )}
 
       {/* Back to city button */}
       <button
