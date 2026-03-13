@@ -8,6 +8,7 @@ import { hasSave } from '../engine/saveSystem.js';
 import HUD from './HUD.jsx';
 import Notifications from './Notifications.jsx';
 import TitleScreen from './TitleScreen.jsx';
+import GameMap from './GameMap.jsx';
 import DifficultySelect from './DifficultySelect.jsx';
 import CharacterCreation from './CharacterCreation.jsx';
 import CityView from './CityView.jsx';
@@ -147,13 +148,9 @@ const Game = () => {
       )}
 
       {s.screen === 'world_map' && s.player && (
-        <WorldMap
-          currentCity={s.currentCity}
-          unlockedCities={s.unlockedCities ?? [s.currentCity]}
-          mainQuestStage={s.mainQuestStage ?? 0}
-          collectedShards={Array.isArray(s.collectedShards) ? s.collectedShards.length : (s.collectedShards ?? 0)}
-          onTravel={(cityId) => dispatch({ type: 'TRAVEL_TO_CITY', cityId })}
-          onBack={() => dispatch({ type: 'GOTO_SCREEN', screen: 'city' })}
+        <GameMap
+          dispatch={dispatch}
+          player={s.player}
         />
       )}
 
