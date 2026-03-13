@@ -2,8 +2,9 @@
 // COMPONENT: Visual 2D World Map (Phaser.js)
 // Point-and-click Diablo-style exploration with enemy encounters
 // ============================================================
-import React, { useEffect, useRef } from 'react';
-import Phaser from 'phaser';
+import React, { useEffect, useRef, useState } from 'react';
+// Phaser is loaded dynamically inside useEffect so it never blocks
+// the initial React render (fixes white-screen on startup with Vite).
 
 // ── World dimensions ──────────────────────────────────────
 const WORLD_W = 3200;
@@ -44,17 +45,19 @@ const ROCK_SPOTS = [
 const GameMap = ({ dispatch, player }) => {
   const containerRef = useRef(null);
   const gameRef      = useRef(null);
-  // Keep dispatchRef always current so Phaser callbacks never stale-close over dispatch
   const dispatchRef  = useRef(dispatch);
+  const [loading, setLoading] = useState(true);
   useEffect(() => { dispatchRef.current = dispatch; }, [dispatch]);
 
   useEffect(() => {
     if (!containerRef.current || gameRef.current) return;
 
-    // ─────────────────────────────────────────────────────────
-    // Phaser Scene
-    // ─────────────────────────────────────────────────────────
-    class GameScene extends Phaser.Scene {
+    let cancelled = false;
+
+    import('phaser').then((PhaserModule) => {
+      if (cancelled || !containerRef.current) return;
+      const Phaser = PhaserModule.default;
+      setLoading(false);
       constructor() {
         super({ key: 'GameScene' });
         this.playerSprite  = null;
