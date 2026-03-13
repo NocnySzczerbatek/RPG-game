@@ -190,7 +190,13 @@ const CombatView = ({ combatState, player, dispatch }) => {
           <div ref={logRef} className="flex-1 bg-slate-900 border border-slate-800 rounded p-3 overflow-y-auto max-h-44 font-crimson text-sm space-y-1" style={{ minHeight: '7rem' }}>
             {(cs.log ?? []).map((entry, i) => {
               const isRecent = i >= (cs.log.length - 2);
-              return <p key={i} className={isRecent ? 'text-slate-200' : 'text-slate-500'}>{entry}</p>;
+              const text = typeof entry === 'string' ? entry : entry?.text ?? '';
+              const icon = typeof entry === 'object' ? entry?.icon : null;
+              return (
+                <p key={i} className={isRecent ? 'text-slate-200' : 'text-slate-500'}>
+                  {icon && <span className="mr-1">{icon}</span>}{text}
+                </p>
+              );
             })}
           </div>
 
