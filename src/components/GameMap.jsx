@@ -90,24 +90,89 @@ function getPortraitPath(cls) {
 
 const CLASS_WEAPONS = { warrior: '⚔️ Longsword', mage: '🪄 Staff', ninja: '🗡️ Daggers', paladin: '🔨 Warhammer' };
 
-// ── Biome Definitions ─────────────────────────────────────
+// ══════════════════════════════════════════════════════════
+// PERLIN NOISE — organic biome boundaries (no external deps)
+// ══════════════════════════════════════════════════════════
+const _perm = new Uint8Array(512);
+const _grad = [];
+(function _initNoise() {
+  let s = 42;
+  const r = () => { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; };
+  for (let i = 0; i < 256; i++) { const a = r() * Math.PI * 2; _grad[i] = [Math.cos(a), Math.sin(a)]; }
+  const p = Array.from({ length: 256 }, (_, i) => i);
+  for (let i = 255; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [p[i], p[j]] = [p[j], p[i]]; }
+  for (let i = 0; i < 512; i++) _perm[i] = p[i & 255];
+})();
+function _fade(t) { return t * t * t * (t * (t * 6 - 15) + 10); }
+function _lerp(a, b, t) { return a + t * (b - a); }
+function noise2D(x, y) {
+  const X = Math.floor(x) & 255, Y = Math.floor(y) & 255;
+  const xf = x - Math.floor(x), yf = y - Math.floor(y);
+  const u = _fade(xf), v = _fade(yf);
+  const g00 = _grad[_perm[_perm[X] + Y]], g10 = _grad[_perm[_perm[X + 1] + Y]];
+  const g01 = _grad[_perm[_perm[X] + Y + 1]], g11 = _grad[_perm[_perm[X + 1] + Y + 1]];
+  return _lerp(
+    _lerp(g00[0] * xf + g00[1] * yf, g10[0] * (xf - 1) + g10[1] * yf, u),
+    _lerp(g01[0] * xf + g01[1] * (yf - 1), g11[0] * (xf - 1) + g11[1] * (yf - 1), u), v
+  );
+}
+function fbm(x, y, oct = 4) {
+  let v = 0, a = 1, f = 1, m = 0;
+  for (let i = 0; i < oct; i++) { v += noise2D(x * f, y * f) * a; m += a; a *= 0.5; f *= 2; }
+  return v / m;
+}
+
+// ── Biome Definitions — noise-based organic shapes ────────
 const BIOMES = [
-  { id: 'forest',   name: 'Verdant Forest',   color: 0x2d5a1e, x: 0,    y: 0,    w: 2500, h: 2500, groundTint: 0x3a7a2a, treePalette: ['Tree1','Tree2','Tree3','Flower_tree1','Moss_tree1'] },
-  { id: 'desert',   name: 'Scorched Desert',  color: 0x8a7540, x: 2500, y: 0,    w: 2500, h: 2500, groundTint: 0xc4a84a, treePalette: ['Palm_tree1_1','Palm_tree2_1','Burned_tree1'] },
-  { id: 'ice',      name: 'Frozen Wastes',    color: 0x4a6a8a, x: 0,    y: 2500, w: 2500, h: 1250, groundTint: 0x8ab8d8, treePalette: ['Snow_tree1','Snow_tree2','Snow_christmass_tree1','Christmas_tree1'] },
-  { id: 'volcanic', name: 'Volcanic Caldera',  color: 0x5a1a0a, x: 2500, y: 2500, w: 2500, h: 1250, groundTint: 0x8a2a0a, treePalette: ['Burned_tree1','Burned_tree2','Burned_tree3','Broken_tree1'] },
-  { id: 'swamp',    name: 'Blighted Swamp',   color: 0x2a3a1a, x: 0,    y: 3750, w: 2500, h: 1250, groundTint: 0x3a4a2a, treePalette: ['Moss_tree1','Moss_tree2','Moss_tree3','Broken_tree4','Broken_tree5'] },
-  { id: 'mountain', name: 'Ashen Peaks',      color: 0x4a4a4a, x: 2500, y: 3750, w: 2500, h: 1250, groundTint: 0x6a6a6a, treePalette: ['Broken_tree6','Broken_tree7','Autumn_tree1','Autumn_tree2'] },
+  { id: 'forest',   name: 'Verdant Forest',  color: 0x2d5a1e, groundTint: 0x3a7a2a, cx: 2500, cy: 1800, radius: 1800, nox: 0,  noy: 0,  treePalette: ['Tree1','Tree2','Tree3','Flower_tree1','Moss_tree1'] },
+  { id: 'desert',   name: 'Scorched Desert', color: 0x8a7540, groundTint: 0xc4a84a, cx: 4200, cy: 1000, radius: 1500, nox: 7,  noy: 3,  treePalette: ['Palm_tree1_1','Palm_tree2_1','Burned_tree1'] },
+  { id: 'ice',      name: 'Frozen Wastes',   color: 0x4a6a8a, groundTint: 0x8ab8d8, cx: 800,  cy: 1000, radius: 1500, nox: 13, noy: 5,  treePalette: ['Snow_tree1','Snow_tree2','Snow_christmass_tree1','Christmas_tree1'] },
+  { id: 'volcanic', name: 'Volcanic Caldera', color: 0x5a1a0a, groundTint: 0x8a2a0a, cx: 4200, cy: 4000, radius: 1400, nox: 19, noy: 11, treePalette: ['Burned_tree1','Burned_tree2','Burned_tree3','Broken_tree1'] },
+  { id: 'swamp',    name: 'Blighted Swamp',  color: 0x2a3a1a, groundTint: 0x3a4a2a, cx: 800,  cy: 4000, radius: 1400, nox: 23, noy: 17, treePalette: ['Moss_tree1','Moss_tree2','Moss_tree3','Broken_tree4','Broken_tree5'] },
+  { id: 'mountain', name: 'Ashen Peaks',     color: 0x4a4a4a, groundTint: 0x6a6a6a, cx: 2500, cy: 4600, radius: 1300, nox: 29, noy: 23, treePalette: ['Broken_tree6','Broken_tree7','Autumn_tree1','Autumn_tree2'] },
 ];
 
-// ── City data — one per biome ─────────────────────────────
+// ── Noise-based biome lookup ──────────────────────────────
+function getBiomeAt(x, y) {
+  const nx = x / 1000, ny = y / 1000;
+  let bestScore = -Infinity, secondScore = -Infinity;
+  let primary = BIOMES[0], secondary = BIOMES[1];
+  for (const b of BIOMES) {
+    const dist = Math.hypot(x - b.cx, y - b.cy);
+    const n = fbm(nx * 2.5 + b.nox, ny * 2.5 + b.noy, 4);
+    const score = -(dist / b.radius) + n * 0.7;
+    if (score > bestScore) { secondScore = bestScore; secondary = primary; bestScore = score; primary = b; }
+    else if (score > secondScore) { secondScore = score; secondary = b; }
+  }
+  const diff = bestScore - secondScore;
+  const blend = diff < 0.25 ? 1 - diff / 0.25 : 0;
+  return { primary, secondary, blend };
+}
+
+function getBiomeBounds(b) {
+  const r = b.radius * 1.2;
+  const x0 = Math.max(50, b.cx - r), y0 = Math.max(50, b.cy - r);
+  return { x: x0, y: y0, w: Math.min(WORLD_W - 50, b.cx + r) - x0, h: Math.min(WORLD_H - 50, b.cy + r) - y0 };
+}
+
+function randomBiomePoint(biome, rngFn, margin = 100) {
+  const bd = getBiomeBounds(biome);
+  for (let t = 0; t < 30; t++) {
+    const x = bd.x + margin + rngFn() * (bd.w - margin * 2);
+    const y = bd.y + margin + rngFn() * (bd.h - margin * 2);
+    if (getBiomeAt(x, y).primary.id === biome.id) return { x, y };
+  }
+  return { x: biome.cx + (rngFn() - 0.5) * 200, y: biome.cy + (rngFn() - 0.5) * 200 };
+}
+
+// ── City data — one per biome, Eldergrove at center ───────
 const CITIES = [
-  { id: 'eldergrove', biome: 'forest',   x: 1250, y: 1200, name: 'Eldergrove',  subtitle: 'Heart of the Forest' },
-  { id: 'sunhold',    biome: 'desert',   x: 3750, y: 1200, name: 'Sunhold',     subtitle: 'Jewel of the Sands' },
-  { id: 'frostholm',  biome: 'ice',      x: 1250, y: 3100, name: 'Frostholm',   subtitle: 'Citadel of Eternal Ice' },
-  { id: 'emberpeak',  biome: 'volcanic', x: 3750, y: 3100, name: 'Emberpeak',   subtitle: 'Forge of the World' },
-  { id: 'mirewood',   biome: 'swamp',    x: 1250, y: 4300, name: 'Mirewood',    subtitle: 'The Sunken Village' },
-  { id: 'ironspire',  biome: 'mountain', x: 3750, y: 4300, name: 'Ironspire',   subtitle: 'Summit Stronghold' },
+  { id: 'eldergrove', biome: 'forest',   x: 2500, y: 2500, name: 'Eldergrove',  subtitle: 'Heart of the Forest' },
+  { id: 'sunhold',    biome: 'desert',   x: 4100, y: 1100, name: 'Sunhold',     subtitle: 'Jewel of the Sands' },
+  { id: 'frostholm',  biome: 'ice',      x: 900,  y: 1100, name: 'Frostholm',   subtitle: 'Citadel of Eternal Ice' },
+  { id: 'emberpeak',  biome: 'volcanic', x: 4100, y: 3900, name: 'Emberpeak',   subtitle: 'Forge of the World' },
+  { id: 'mirewood',   biome: 'swamp',    x: 900,  y: 3900, name: 'Mirewood',    subtitle: 'The Sunken Village' },
+  { id: 'ironspire',  biome: 'mountain', x: 2500, y: 4400, name: 'Ironspire',   subtitle: 'Summit Stronghold' },
 ];
 
 function isInSafeZone(x, y) {
@@ -404,13 +469,12 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
     }
 
     // ══════════════════════════════════════════════════
-    // GROUND — biome color base + scattered detail tiles (perf-safe)
+    // GROUND — noise-based organic biomes with blending
     // ══════════════════════════════════════════════════
     renderGround(rng) {
       const hasGroundSheet = this.textures.exists('ground_tiles');
       const hasFloorSheet = this.textures.exists('floor_tiles');
       const groundTotal = hasGroundSheet ? this.textures.get('ground_tiles').frameTotal - 1 : 0;
-      const floorTotal = hasFloorSheet ? this.textures.get('floor_tiles').frameTotal - 1 : 0;
 
       const BIOME_GROUND_FRAMES = {
         forest:   [0, 1, 2, 21, 22],
@@ -420,53 +484,88 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
         swamp:    [168, 169, 189, 190],
         mountain: [252, 253, 273, 274],
       };
+      const BIOME_LEAF_FRAMES = {
+        forest: [3, 4, 5, 24, 25], swamp: [3, 4, 5, 24, 25],
+        desert: [44, 65], ice: [86, 107], volcanic: [128, 149], mountain: [254, 275],
+      };
 
-      // 1) Solid biome rectangles (the real ground base — never black)
+      // 1) Noise-sampled biome ground — organic & blended
+      const step = TILE_SCALED * 2; // 96px
+      const cols = Math.ceil(WORLD_W / step), rows = Math.ceil(WORLD_H / step);
       const g = this.add.graphics().setDepth(-1);
-      for (const b of BIOMES) {
-        const r = (b.groundTint >> 16) & 0xff, gr2 = (b.groundTint >> 8) & 0xff, bl = b.groundTint & 0xff;
-        g.fillStyle(((Math.floor(r * 0.7)) << 16) | ((Math.floor(gr2 * 0.7)) << 8) | Math.floor(bl * 0.7), 1);
-        g.fillRect(b.x, b.y, b.w, b.h);
-      }
 
-      // 2) Scattered ground detail tiles — ~80 per biome (~480 total, NOT 10K)
-      for (const b of BIOMES) {
-        const gFrames = BIOME_GROUND_FRAMES[b.id] || [0, 1];
-        const detailCount = Math.floor((b.w * b.h) / (300 * 300)); // ~1 tile per 300×300 area
-        for (let i = 0; i < detailCount; i++) {
-          const tx = b.x + rng() * b.w, ty = b.y + rng() * b.h;
-          if (hasGroundSheet && groundTotal > 0) {
-            const frame = Math.min(gFrames[Math.floor(rng() * gFrames.length)], groundTotal - 1);
-            this.add.image(tx, ty, 'ground_tiles', frame)
-              .setScale(TILE_SCALE * (2 + rng() * 2)).setDepth(0).setTint(b.groundTint).setAlpha(0.35 + rng() * 0.3);
-          } else if (hasFloorSheet && floorTotal > 0) {
-            const frame = Math.min(Math.floor(rng() * 4), floorTotal - 1);
-            this.add.image(tx, ty, 'floor_tiles', frame)
-              .setScale(TILE_SCALE * 2).setDepth(0).setTint(b.groundTint).setAlpha(0.4);
-          } else {
-            const fk = `floor_${Math.floor(rng() * 8)}`;
-            if (this.textures.exists(fk))
-              this.add.image(tx, ty, fk).setScale(TILE_SCALE).setDepth(0).setTint(b.groundTint).setAlpha(0.4);
+      for (let col = 0; col < cols; col++) {
+        for (let row = 0; row < rows; row++) {
+          const wx = col * step + step / 2, wy = row * step + step / 2;
+          const { primary, secondary, blend } = getBiomeAt(wx, wy);
+
+          // Darken the ground tint slightly for the base
+          const gt = primary.groundTint;
+          const cr = ((gt >> 16) & 0xff), cg = ((gt >> 8) & 0xff), cb = (gt & 0xff);
+          g.fillStyle(((Math.floor(cr * 0.7)) << 16) | ((Math.floor(cg * 0.7)) << 8) | Math.floor(cb * 0.7), 1);
+          g.fillRect(col * step, row * step, step, step);
+
+          // Blend zone: overlay secondary biome color
+          if (blend > 0.05) {
+            const st = secondary.groundTint;
+            const sr = ((st >> 16) & 0xff), sg = ((st >> 8) & 0xff), sb = (st & 0xff);
+            g.fillStyle(((Math.floor(sr * 0.7)) << 16) | ((Math.floor(sg * 0.7)) << 8) | Math.floor(sb * 0.7), blend * 0.6);
+            g.fillRect(col * step, row * step, step, step);
           }
-        }
 
-        // Extra leaf/grass detail for forest & swamp
-        if ((b.id === 'forest' || b.id === 'swamp') && hasGroundSheet && groundTotal > 5) {
-          const leafFrames = [3, 4, 5, 24, 25];
-          for (let i = 0; i < 30; i++) {
-            const gx = b.x + 200 + rng() * (b.w - 400), gy = b.y + 200 + rng() * (b.h - 400);
-            if (isInSafeZone(gx, gy)) continue;
-            const frame = Math.min(leafFrames[Math.floor(rng() * leafFrames.length)], groundTotal - 1);
-            this.add.image(gx, gy, 'ground_tiles', frame)
-              .setScale(TILE_SCALE * (1.5 + rng())).setDepth(0.05).setAlpha(0.3 + rng() * 0.25).setTint(b.groundTint);
+          // Noise-based shade variation for texture
+          const shade = fbm(wx / 400, wy / 400, 2);
+          if (shade > 0.1) {
+            g.fillStyle(0xffffff, shade * 0.05);
+            g.fillRect(col * step, row * step, step, step);
+          } else if (shade < -0.1) {
+            g.fillStyle(0x000000, Math.abs(shade) * 0.07);
+            g.fillRect(col * step, row * step, step, step);
           }
         }
       }
 
-      // 3) Biome borders
-      const border = this.add.graphics().setDepth(0.1);
-      border.lineStyle(2, 0x000000, 0.3);
-      for (const b of BIOMES) { border.strokeRect(b.x, b.y, b.w, b.h); }
+      // 2) Scattered ground detail tiles (~500 total)
+      if (hasGroundSheet && groundTotal > 0) {
+        const detailStep = TILE_SCALED * 3;
+        for (let tx = 0; tx < WORLD_W; tx += detailStep) {
+          for (let ty = 0; ty < WORLD_H; ty += detailStep) {
+            const seed = tx * 7 + ty * 13;
+            if (seededRandom(seed)() > 0.3) continue;
+            const { primary: biome } = getBiomeAt(tx, ty);
+            const frames = BIOME_GROUND_FRAMES[biome.id] || BIOME_GROUND_FRAMES.forest;
+            const fr = frames[Math.floor(seededRandom(tx * 17 + ty * 31)() * frames.length)];
+            if (fr < groundTotal) {
+              this.add.image(tx + TILE_SCALED, ty + TILE_SCALED, 'ground_tiles', fr)
+                .setScale(TILE_SCALE * (2 + seededRandom(tx * 3 + ty)() * 1.5))
+                .setDepth(0).setTint(biome.groundTint).setAlpha(0.3 + seededRandom(tx + ty * 3)() * 0.3);
+            }
+          }
+        }
+      }
+
+      // 3) Terrain details: grass tufts, bushes, fallen logs
+      if (hasGroundSheet && groundTotal > 5) {
+        for (let i = 0; i < 500; i++) {
+          const x = rng() * WORLD_W, y = rng() * WORLD_H;
+          if (isInSafeZone(x, y)) continue;
+          const { primary: biome } = getBiomeAt(x, y);
+          const leafFrames = BIOME_LEAF_FRAMES[biome.id] || BIOME_LEAF_FRAMES.forest;
+          const fr = leafFrames[Math.floor(rng() * leafFrames.length)];
+          if (fr < groundTotal) {
+            this.add.image(x, y, 'ground_tiles', fr)
+              .setScale(TILE_SCALE * (1.2 + rng() * 1.0)).setDepth(0.05)
+              .setAlpha(0.25 + rng() * 0.3).setTint(biome.groundTint).setAngle(rng() * 360);
+          }
+        }
+      }
+
+      // 4) Safe zone indicator rings
+      for (const c of CITIES) {
+        const ring = this.add.graphics().setDepth(0.3);
+        ring.lineStyle(3, 0x44ff44, 0.15); ring.strokeCircle(c.x, c.y, SAFE_ZONE_RADIUS);
+        ring.lineStyle(1, 0x44ff44, 0.08); ring.strokeCircle(c.x, c.y, SAFE_ZONE_RADIUS - 20);
+      }
 
       this.renderRoads();
     }
@@ -500,7 +599,8 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
       for (const b of BIOMES) {
         // Trees from craftpix-385863
         for (let i = 0, n = 40 + Math.floor(rng() * 20); i < n; i++) {
-          const tx = b.x + 80 + rng() * (b.w - 160), ty = b.y + 80 + rng() * (b.h - 160);
+          const pt = randomBiomePoint(b, rng, 80);
+          const tx = pt.x, ty = pt.y;
           if (isInSafeZone(tx, ty)) continue;
           const tn = b.treePalette[Math.floor(rng() * b.treePalette.length)];
           if (this.textures.exists(`tree_${tn}`))
@@ -508,7 +608,8 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
         }
         // Rocks from craftpix-974061
         for (let i = 0, n = 15 + Math.floor(rng() * 10); i < n; i++) {
-          const rx = b.x + 60 + rng() * (b.w - 120), ry = b.y + 60 + rng() * (b.h - 120);
+          const pt = randomBiomePoint(b, rng, 60);
+          const rx = pt.x, ry = pt.y;
           if (isInSafeZone(rx, ry)) continue;
           const rk = `rock_${1 + Math.floor(rng() * 8)}`;
           if (this.textures.exists(rk))
@@ -661,14 +762,14 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
         const templates = BIOME_ENEMIES[b.id] || [];
         for (let i = 0, n = 15 + Math.floor(rng() * 6); i < n; i++) {
           const t = templates[Math.floor(rng() * templates.length)]; if (!t) continue;
-          const ex = b.x + 100 + rng() * (b.w - 200), ey = b.y + 100 + rng() * (b.h - 200);
-          if (isInSafeZone(ex, ey)) continue;
-          this.spawnEnemy(ex, ey, t, b.id);
+          const pt = randomBiomePoint(b, rng, 100);
+          if (isInSafeZone(pt.x, pt.y)) continue;
+          this.spawnEnemy(pt.x, pt.y, t, b.id);
         }
         const boss = BIOME_BOSSES[b.id];
         if (boss) {
-          const bx = b.x + b.w / 2 + (rng() - 0.5) * 400, by = b.y + b.h / 2 + (rng() - 0.5) * 200;
-          if (!isInSafeZone(bx, by)) this.spawnEnemy(bx, by, boss, b.id);
+          const bpt = randomBiomePoint(b, rng, 200);
+          if (!isInSafeZone(bpt.x, bpt.y)) this.spawnEnemy(bpt.x, bpt.y, boss, b.id);
         }
       }
     }
@@ -732,11 +833,11 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
         const quests = QUEST_TEMPLATES[b.id]?.filter(q => q.type === 'fetch') || [];
         for (const q of quests) {
           for (let i = 0; i < q.count + 2; i++) {
-            const fx = b.x + 100 + rng() * (b.w - 200), fy = b.y + 100 + rng() * (b.h - 200);
-            if (isInSafeZone(fx, fy)) continue;
+            const pt = randomBiomePoint(b, rng, 100);
+            if (isInSafeZone(pt.x, pt.y)) continue;
             const color = FETCH_ITEM_COLORS[q.item] || 0xffffff;
-            const item = this.add.circle(fx, fy, 7, color, 0.8).setDepth(fy - 1).setInteractive();
-            const glow = this.add.circle(fx, fy, 12, color, 0.2).setDepth(fy - 2);
+            const item = this.add.circle(pt.x, pt.y, 7, color, 0.8).setDepth(pt.y - 1).setInteractive();
+            const glow = this.add.circle(pt.x, pt.y, 12, color, 0.2).setDepth(pt.y - 2);
             this.tweens.add({ targets: glow, scaleX: 1.5, scaleY: 1.5, alpha: 0, yoyo: true, repeat: -1, duration: 1000 });
             item.fetchData = { itemType: q.item, biome: b.id }; item.glowObj = glow;
             this.fetchItems.push(item);
@@ -749,12 +850,12 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
     spawnChests(rng) {
       for (const b of BIOMES) {
         for (let i = 0, n = 3 + Math.floor(rng() * 3); i < n; i++) {
-          const cx = b.x + 120 + rng() * (b.w - 240), cy = b.y + 120 + rng() * (b.h - 240);
-          if (isInSafeZone(cx, cy)) continue;
-          this.createChest(cx, cy, 'common');
+          const pt = randomBiomePoint(b, rng, 120);
+          if (isInSafeZone(pt.x, pt.y)) continue;
+          this.createChest(pt.x, pt.y, 'common');
         }
-        const bcx = b.x + b.w / 2 + 60, bcy = b.y + b.h / 2 + 60;
-        if (!isInSafeZone(bcx, bcy)) this.createChest(bcx, bcy, 'golden');
+        const bpt = randomBiomePoint(b, rng, 60);
+        if (!isInSafeZone(bpt.x, bpt.y)) this.createChest(bpt.x, bpt.y, 'golden');
       }
     }
 
@@ -1089,12 +1190,10 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
           const biome = BIOMES.find(b => b.id === ed.biome); if (!biome) return;
           const templates = BIOME_ENEMIES[biome.id]; if (!templates?.length) return;
           const tmpl = templates[Math.floor(Math.random() * templates.length)];
-          let rx, ry, safe = false;
-          for (let tries = 0; tries < 20; tries++) {
-            rx = biome.x + 100 + Math.random() * (biome.w - 200); ry = biome.y + 100 + Math.random() * (biome.h - 200);
-            if (!isInSafeZone(rx, ry) && CITIES.every(c => Math.hypot(c.x - rx, c.y - ry) >= 1000)) { safe = true; break; }
+          const pt = randomBiomePoint(biome, Math.random, 100);
+          if (!isInSafeZone(pt.x, pt.y) && CITIES.every(c => Math.hypot(c.x - pt.x, c.y - pt.y) >= 1000)) {
+            this.spawnEnemy(pt.x, pt.y, tmpl, biome.id);
           }
-          if (safe) this.spawnEnemy(rx, ry, tmpl, biome.id);
         });
       }
       this.syncPlayerState();
@@ -1284,7 +1383,7 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
 // ═══════════════════════════════════════════════════════════
 // REACT WRAPPER
 // ═══════════════════════════════════════════════════════════
-export { BIOMES, CITIES, CITY_NPCS, BIOME_BOSSES, WORLD_W, WORLD_H, CLASS_SPRITE_MAP, CLASS_WEAPONS, getPortraitPath };
+export { BIOMES, CITIES, CITY_NPCS, BIOME_BOSSES, WORLD_W, WORLD_H, CLASS_SPRITE_MAP, CLASS_WEAPONS, getPortraitPath, getBiomeAt, getBiomeBounds };
 
 export default function GameMap({ dispatch, player }) {
   const containerRef = useRef(null);
