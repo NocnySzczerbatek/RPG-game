@@ -140,13 +140,13 @@ function getBiomeAt(x, y) {
   let primary = BIOMES[0], secondary = BIOMES[1];
   for (const b of BIOMES) {
     const dist = Math.hypot(x - b.cx, y - b.cy);
-    const n = fbm(nx * 2.5 + b.nox, ny * 2.5 + b.noy, 4);
-    const score = -(dist / b.radius) + n * 0.7;
+    const n = fbm(nx * 1.5 + b.nox, ny * 1.5 + b.noy, 6);
+    const score = -(dist / b.radius) + n * 0.5;
     if (score > bestScore) { secondScore = bestScore; secondary = primary; bestScore = score; primary = b; }
     else if (score > secondScore) { secondScore = score; secondary = b; }
   }
   const diff = bestScore - secondScore;
-  const blend = diff < 0.25 ? 1 - diff / 0.25 : 0;
+  const blend = diff < 0.4 ? 1 - diff / 0.4 : 0;
   return { primary, secondary, blend };
 }
 
@@ -294,25 +294,35 @@ const QUEST_TEMPLATES = {
 };
 const FETCH_ITEM_COLORS = { herb: 0x44ff44, ore: 0xccaa44, crystal: 0x88ddff, magma: 0xff4400, moss: 0x668844, stone: 0x888888 };
 
-// ── House Templates — tile frame layouts from TMX (17-col Tiled exterior.png 272×912) ──
+// ── House Templates — CONTIGUOUS rectangular blocks from Tiled exterior.png (17 cols × 57 rows) ──
+// Each template is a single unbroken rectangle in the spritesheet, guaranteeing coherent visuals.
+// Frame = row * 17 + col (0-based, for 272×912 image with 16px tiles).
 const HOUSE_TEMPLATES = [
-  { name: 'house_a', w: 5, h: 4, tiles: [
-    [-1, -1, -1, 540, 541], [753, 754, 755, 484, 485],
-    [770, 771, 772, 501, 502], [787, 788, 789, -1, -1],
+  // 3×3 cottage (rows 44-46, cols 5-7)
+  { name: 'house_a', w: 3, h: 3, tiles: [
+    [753, 754, 755], [770, 771, 772], [787, 788, 789],
   ]},
-  { name: 'house_b', w: 6, h: 3, tiles: [
-    [811, 812, 760, 761, 762, 763], [828, 829, 777, 778, 779, 780],
-    [-1, -1, 794, 795, 796, 797],
+  // 4×3 medium house (rows 44-46, cols 12-15)
+  { name: 'house_b', w: 4, h: 3, tiles: [
+    [760, 761, 762, 763], [777, 778, 779, 780], [794, 795, 796, 797],
   ]},
-  { name: 'house_c', w: 4, h: 4, tiles: [
-    [250, 251, 252, 253], [267, 268, 269, 270],
-    [284, 285, 286, 287], [301, 302, 303, 304],
-  ]},
-  { name: 'house_d', w: 4, h: 3, tiles: [
+  // 4×3 house variant (rows 44-46, cols 0-3)
+  { name: 'house_c', w: 4, h: 3, tiles: [
     [748, 749, 750, 751], [765, 766, 767, 768], [782, 783, 784, 785],
   ]},
-  { name: 'house_e', w: 4, h: 3, tiles: [
-    [756, 757, 758, 759], [773, 774, 775, 776], [790, 791, 792, 793],
+  // 3×3 house variant (rows 47-49, cols 12-14)
+  { name: 'house_d', w: 3, h: 3, tiles: [
+    [811, 812, 813], [828, 829, 830], [845, 846, 847],
+  ]},
+  // 4×4 large house (rows 44-47, cols 5-8)
+  { name: 'house_e', w: 4, h: 4, tiles: [
+    [753, 754, 755, 756], [770, 771, 772, 773],
+    [787, 788, 789, 790], [804, 805, 806, 807],
+  ]},
+  // 5×3 wide building (rows 47-49, cols 0-4)
+  { name: 'house_f', w: 5, h: 3, tiles: [
+    [799, 800, 801, 802, 803], [816, 817, 818, 819, 820],
+    [833, 834, 835, 836, 837],
   ]},
 ];
 
@@ -622,19 +632,31 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
 
     renderRoads() {
       const gfx = this.add.graphics().setDepth(0.5);
-      gfx.lineStyle(TILE_SCALED * 0.6, 0x8a7755, 0.5);
       for (let i = 0; i < CITIES.length; i++) {
         for (let j = i + 1; j < CITIES.length; j++) {
           const dx = CITIES[j].x - CITIES[i].x, dy = CITIES[j].y - CITIES[i].y;
-          if (Math.sqrt(dx * dx + dy * dy) < 2800) {
-            gfx.lineBetween(CITIES[i].x, CITIES[i].y, CITIES[j].x, CITIES[j].y);
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < 2800) {
+            // Wide road with noise-based irregular edges (4-tile effective width)
+            const roadSteps = Math.floor(dist / 20);
+            for (let s = 0; s <= roadSteps; s++) {
+              const t = s / Math.max(roadSteps, 1);
+              const px = CITIES[i].x + dx * t;
+              const py = CITIES[i].y + dy * t;
+              const w = TILE_SCALED * 1.5 + fbm(px / 200, py / 200, 2) * TILE_SCALED * 0.6;
+              gfx.fillStyle(0x8a7755, 0.3 + fbm(px / 300 + 10, py / 300 + 10, 2) * 0.08);
+              gfx.fillCircle(px, py, w);
+            }
+            // Overlay road tile sprites
             if (this.textures.exists('road')) {
-              const roadStep = TILE_SCALED * 2;
-              const steps = Math.floor(Math.sqrt(dx * dx + dy * dy) / roadStep);
-              for (let s = 0; s <= steps; s++) {
-                const t = s / Math.max(steps, 1);
-                this.add.image(CITIES[i].x + dx * t, CITIES[i].y + dy * t, 'road')
-                  .setScale(TILE_SCALE).setDepth(0.6).setAlpha(0.35);
+              const tileStep = TILE_SCALED * 1.2;
+              const tileSteps = Math.floor(dist / tileStep);
+              for (let s = 0; s <= tileSteps; s++) {
+                const t = s / Math.max(tileSteps, 1);
+                const rx = CITIES[i].x + dx * t + fbm((s + i * 100) * 0.3, j * 7.7, 2) * 12;
+                const ry = CITIES[i].y + dy * t + fbm(i * 5.5, (s + j * 100) * 0.3, 2) * 12;
+                this.add.image(rx, ry, 'road')
+                  .setScale(TILE_SCALE * 1.4).setDepth(0.6).setAlpha(0.25);
               }
             }
           }
@@ -878,10 +900,10 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
     }
 
     spawnEnemy(x, y, template, biomeId) {
-      // Safe zone double-check
+      // Safe zone double-check (SAFE_ZONE_RADIUS = 1200px from any city)
       if (isInSafeZone(x, y)) return;
       const dist = CITIES.reduce((min, c) => Math.min(min, Math.hypot(c.x - x, c.y - y)), Infinity);
-      if (dist < 1000) return;
+      if (dist < SAFE_ZONE_RADIUS) return;
 
       const sk = template.sprite;
       const isTopDown = sk.startsWith('orc') || sk.startsWith('slime');
@@ -1105,7 +1127,7 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
           const tmpl = templates[Math.floor(Math.random() * templates.length)];
           const pt = randomBiomePoint(b, Math.random, 100);
           if (isInSafeZone(pt.x, pt.y)) continue;
-          if (CITIES.some(c => Math.hypot(c.x - pt.x, c.y - pt.y) < 1000)) continue;
+          if (CITIES.some(c => Math.hypot(c.x - pt.x, c.y - pt.y) < SAFE_ZONE_RADIUS)) continue;
           this.spawnEnemy(pt.x, pt.y, tmpl, b.id);
         }
       }
@@ -1318,7 +1340,7 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
           const templates = BIOME_ENEMIES[biome.id]; if (!templates?.length) return;
           const tmpl = templates[Math.floor(Math.random() * templates.length)];
           const pt = randomBiomePoint(biome, Math.random, 100);
-          if (!isInSafeZone(pt.x, pt.y) && CITIES.every(c => Math.hypot(c.x - pt.x, c.y - pt.y) >= 1000)) {
+          if (!isInSafeZone(pt.x, pt.y) && CITIES.every(c => Math.hypot(c.x - pt.x, c.y - pt.y) >= SAFE_ZONE_RADIUS)) {
             this.spawnEnemy(pt.x, pt.y, tmpl, biome.id);
           }
         });
