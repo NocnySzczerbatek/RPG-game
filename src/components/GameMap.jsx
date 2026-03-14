@@ -27,6 +27,7 @@ const SLIME_DIR  = `${SP}craftpix-net-788364-free-slime-mobs-pixel-art-top-down-
 const MONSTER_DIR= `${SP}craftpix-561178-free-rpg-monster-sprites-pixel-art/PNG/`;
 const CHAR_DIR   = `${SP}craftpix-net-555940-free-base-4-direction-male-character-pixel-art/PNG/`;
 const HOME_DIR   = `${SP}craftpix-net-654184-main-characters-home-free-top-down-pixel-art-asset/PNG/`;
+const TILED_HOME_DIR = `${SP}craftpix-net-654184-main-characters-home-free-top-down-pixel-art-asset/Tiled_files/`;
 const HERO_DIR   = `${SP}craftpix-891165-assassin-mage-viking-free-pixel-art-game-heroes/PNG/`;
 const VAMP_DIR   = `${SP}craftpix-net-208004-free-vampire-4-direction-pixel-character-sprite-pack/PNG/`;
 const UI_DIR     = `${SP}craftpix-net-255216-free-basic-pixel-art-ui-for-rpg/PNG/`;
@@ -293,6 +294,28 @@ const QUEST_TEMPLATES = {
 };
 const FETCH_ITEM_COLORS = { herb: 0x44ff44, ore: 0xccaa44, crystal: 0x88ddff, magma: 0xff4400, moss: 0x668844, stone: 0x888888 };
 
+// ── House Templates — tile frame layouts from TMX (17-col Tiled exterior.png 272×912) ──
+const HOUSE_TEMPLATES = [
+  { name: 'house_a', w: 5, h: 4, tiles: [
+    [-1, -1, -1, 540, 541], [753, 754, 755, 484, 485],
+    [770, 771, 772, 501, 502], [787, 788, 789, -1, -1],
+  ]},
+  { name: 'house_b', w: 6, h: 3, tiles: [
+    [811, 812, 760, 761, 762, 763], [828, 829, 777, 778, 779, 780],
+    [-1, -1, 794, 795, 796, 797],
+  ]},
+  { name: 'house_c', w: 4, h: 4, tiles: [
+    [250, 251, 252, 253], [267, 268, 269, 270],
+    [284, 285, 286, 287], [301, 302, 303, 304],
+  ]},
+  { name: 'house_d', w: 4, h: 3, tiles: [
+    [748, 749, 750, 751], [765, 766, 767, 768], [782, 783, 784, 785],
+  ]},
+  { name: 'house_e', w: 4, h: 3, tiles: [
+    [756, 757, 758, 759], [773, 774, 775, 776], [790, 791, 792, 793],
+  ]},
+];
+
 function seededRandom(seed) { let s = seed; return () => { s = (s * 16807 + 0) % 2147483647; return (s - 1) / 2147483646; }; }
 
 // ═══════════════════════════════════════════════════════════
@@ -324,7 +347,7 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
       this.isDashing = false; this.mouseWorldPos = { x: 0, y: 0 };
       this.dialogueActive = false; this.moveTarget = null; this.moveMarker = null;
       this.activeQuests = []; this.completedQuestIds = []; this.saveTimer = 0;
-      this.staticObjects = null; this.respawnTimer = 0;
+      this.staticObjects = null; this.respawnTimer = 0; this.buildings = [];
       this._loadQuestState();
     }
 
@@ -352,8 +375,8 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
       this.load.spritesheet('ground_tiles', `${HOME_DIR}ground_grass_details.png`, { frameWidth: 16, frameHeight: 16 });
       // walls_floor.png  144×176  → 16px tiles = 9 cols × 11 rows
       this.load.spritesheet('floor_tiles', `${HOME_DIR}walls_floor.png`, { frameWidth: 16, frameHeight: 16 });
-      // exterior.png  240×800  → 16px tiles = 15 cols × 50 rows
-      this.load.spritesheet('exterior_tiles', `${HOME_DIR}exterior.png`, { frameWidth: 16, frameHeight: 16 });
+      // exterior.png from Tiled_files (272×912 = 17 cols × 57 rows) — matches TMX building layouts
+      this.load.spritesheet('exterior_tiles', `${TILED_HOME_DIR}exterior.png`, { frameWidth: 16, frameHeight: 16 });
       // house_details.png  160×272  → 16px tiles = 10 cols × 17 rows
       this.load.spritesheet('house_tiles', `${HOME_DIR}house_details.png`, { frameWidth: 16, frameHeight: 16 });
       // Interior.png  192×400  → 16px tiles = 12 cols × 25 rows
@@ -449,6 +472,7 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
 
       this.renderGround(rng);
       this.staticObjects = this.physics.add.staticGroup();
+      this.bakeHouseTextures();
       this.renderBiomeDecorations(rng);
       this.renderCities(rng);
       this.spawnAllEnemies(rng);
@@ -469,6 +493,29 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
       this.minimapCam.setBackgroundColor(0x111111);
       this.input.on('pointermove', (p) => { this.mouseWorldPos = this.cameras.main.getWorldPoint(p.x, p.y); });
       this.moveMarker = this.add.graphics().setDepth(99998);
+    }
+
+    // ══════════════════════════════════════════════════
+    // BAKE HOUSE TEXTURES from tile templates
+    // ══════════════════════════════════════════════════
+    bakeHouseTextures() {
+      if (!this.textures.exists('exterior_tiles')) return;
+      const totalFrames = this.textures.get('exterior_tiles').frameTotal - 1;
+      HOUSE_TEMPLATES.forEach(tmpl => {
+        if (this.textures.exists(tmpl.name)) return;
+        const pw = tmpl.w * 16, ph = tmpl.h * 16;
+        const rt = this.make.renderTexture({ width: pw, height: ph, add: false });
+        for (let r = 0; r < tmpl.h; r++) {
+          for (let c = 0; c < tmpl.w; c++) {
+            const f = tmpl.tiles[r][c];
+            if (f >= 0 && f < totalFrames) {
+              rt.drawFrame('exterior_tiles', f, c * 16, r * 16);
+            }
+          }
+        }
+        rt.saveTexture(tmpl.name);
+        rt.destroy();
+      });
     }
 
     // ══════════════════════════════════════════════════
@@ -632,168 +679,179 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
     }
 
     // ══════════════════════════════════════════════════
-    // CITIES — buildings from exterior_tiles & house_tiles spritesheets (pack #8)
+    // CITIES — whole-building sprites, 3× larger towns, Y-sort, bottom-only collision
     // ══════════════════════════════════════════════════
     renderCities(rng) {
+      const TOWN_W = 1800;
+      const TOWN_H = 1500;
+
       CITIES.forEach(city => {
         const biome = BIOMES.find(b => b.id === city.biome);
-        // Extended ground platform (larger for expanded towns)
-        const cg = this.add.graphics().setDepth(0.8);
-        cg.fillStyle(0x554433, 0.6); cg.fillRoundedRect(city.x - 320, city.y - 280, 640, 560, 28);
-        cg.fillStyle(0x665544, 0.35); cg.fillRoundedRect(city.x - 300, city.y - 260, 600, 520, 22);
 
-        // Lay stone path tiles on city ground (larger area)
+        // ── Ground platform (3× larger) ──
+        const cg = this.add.graphics().setDepth(0.8);
+        cg.fillStyle(0x554433, 0.6);
+        cg.fillRoundedRect(city.x - TOWN_W / 2, city.y - TOWN_H / 2, TOWN_W, TOWN_H, 40);
+        cg.fillStyle(0x665544, 0.35);
+        cg.fillRoundedRect(city.x - TOWN_W / 2 + 30, city.y - TOWN_H / 2 + 30, TOWN_W - 60, TOWN_H - 60, 30);
+
+        // ── Stone floor tiles ──
         if (this.textures.exists('floor_tiles')) {
           const totalFrames = this.textures.get('floor_tiles').frameTotal - 1;
           const cityStep = TILE_SCALED * 2;
-          for (let fx = city.x - 300; fx < city.x + 300; fx += cityStep) {
-            for (let fy = city.y - 260; fy < city.y + 260; fy += cityStep) {
+          for (let fx = city.x - TOWN_W / 2 + 20; fx < city.x + TOWN_W / 2 - 20; fx += cityStep) {
+            for (let fy = city.y - TOWN_H / 2 + 20; fy < city.y + TOWN_H / 2 - 20; fy += cityStep) {
               const fr = Math.min(Math.floor(rng() * 4), totalFrames - 1);
-              this.add.image(fx + cityStep/2, fy + cityStep/2, 'floor_tiles', fr)
-                .setScale(TILE_SCALE * 2).setDepth(0.85).setAlpha(0.55);
+              this.add.image(fx + cityStep / 2, fy + cityStep / 2, 'floor_tiles', fr)
+                .setScale(TILE_SCALE * 2).setDepth(0.85).setAlpha(0.45);
             }
           }
         }
 
-        // Fence perimeter
+        // ── Winding stone paths (bezier curves from buildings to center) ──
+        const pathGfx = this.add.graphics().setDepth(0.9);
+        const drawPath = (x1, y1, x2, y2) => {
+          const cx = (x1 + x2) / 2 + (rng() - 0.5) * 120;
+          const cy = (y1 + y2) / 2 + (rng() - 0.5) * 120;
+          for (let s = 0; s <= 24; s++) {
+            const t = s / 24;
+            const ax = (1 - t) * (1 - t) * x1 + 2 * (1 - t) * t * cx + t * t * x2;
+            const ay = (1 - t) * (1 - t) * y1 + 2 * (1 - t) * t * cy + t * t * y2;
+            pathGfx.fillCircle(ax, ay, 20 + rng() * 10);
+          }
+        };
+
+        // ── Fence perimeter with collision ──
         if (this.textures.exists('exterior_tiles')) {
-          const extTotal = this.textures.get('exterior_tiles').frameTotal - 1;
-          const fenceFrame = Math.min(60, extTotal - 1); // fence-like frame
+          const fenceH = 46;       // horizontal fence segment (TMX-verified)
+          const fenceV = 62;       // vertical fence post (TMX-verified)
           const fenceStep = TILE_SCALED;
-          // Top and bottom fences
-          for (let fx = city.x - 300; fx <= city.x + 300; fx += fenceStep) {
-            this.add.image(fx, city.y - 270, 'exterior_tiles', fenceFrame).setScale(TILE_SCALE).setDepth(city.y - 270 + 100);
-            this.add.image(fx, city.y + 270, 'exterior_tiles', fenceFrame).setScale(TILE_SCALE).setDepth(city.y + 270 + 100);
-            // Collision for fences
-            const colT = this.staticObjects.create(fx, city.y - 270, null).setVisible(false);
-            colT.body.setSize(TILE_SCALED, 12).setOffset(-TILE_SCALED/2, -6); colT.body.immovable = true;
-            const colB = this.staticObjects.create(fx, city.y + 270, null).setVisible(false);
-            colB.body.setSize(TILE_SCALED, 12).setOffset(-TILE_SCALED/2, -6); colB.body.immovable = true;
+          const hw = TOWN_W / 2, hh = TOWN_H / 2;
+
+          for (let fx = city.x - hw; fx <= city.x + hw; fx += fenceStep) {
+            this.add.image(fx, city.y - hh, 'exterior_tiles', fenceH).setScale(TILE_SCALE).setDepth(city.y - hh);
+            this.add.image(fx, city.y + hh, 'exterior_tiles', fenceH).setScale(TILE_SCALE).setDepth(city.y + hh);
+            const colT = this.staticObjects.create(fx, city.y - hh, null).setVisible(false);
+            colT.body.setSize(TILE_SCALED, 12).setOffset(-TILE_SCALED / 2, -6); colT.body.immovable = true;
+            const colB = this.staticObjects.create(fx, city.y + hh, null).setVisible(false);
+            colB.body.setSize(TILE_SCALED, 12).setOffset(-TILE_SCALED / 2, -6); colB.body.immovable = true;
           }
-          // Left and right fences
-          for (let fy = city.y - 270; fy <= city.y + 270; fy += fenceStep) {
-            this.add.image(city.x - 310, fy, 'exterior_tiles', fenceFrame).setScale(TILE_SCALE).setDepth(fy + 100);
-            this.add.image(city.x + 310, fy, 'exterior_tiles', fenceFrame).setScale(TILE_SCALE).setDepth(fy + 100);
-            const colL = this.staticObjects.create(city.x - 310, fy, null).setVisible(false);
-            colL.body.setSize(12, TILE_SCALED).setOffset(-6, -TILE_SCALED/2); colL.body.immovable = true;
-            const colR = this.staticObjects.create(city.x + 310, fy, null).setVisible(false);
-            colR.body.setSize(12, TILE_SCALED).setOffset(-6, -TILE_SCALED/2); colR.body.immovable = true;
+          for (let fy = city.y - hh; fy <= city.y + hh; fy += fenceStep) {
+            this.add.image(city.x - hw - 10, fy, 'exterior_tiles', fenceV).setScale(TILE_SCALE).setDepth(fy);
+            this.add.image(city.x + hw + 10, fy, 'exterior_tiles', fenceV).setScale(TILE_SCALE).setDepth(fy);
+            const colL = this.staticObjects.create(city.x - hw - 10, fy, null).setVisible(false);
+            colL.body.setSize(12, TILE_SCALED).setOffset(-6, -TILE_SCALED / 2); colL.body.immovable = true;
+            const colR = this.staticObjects.create(city.x + hw + 10, fy, null).setVisible(false);
+            colR.body.setSize(12, TILE_SCALED).setOffset(-6, -TILE_SCALED / 2); colR.body.immovable = true;
           }
         }
 
-        // ── Compose buildings from exterior_tiles spritesheet ──
-        const hasExterior = this.textures.exists('exterior_tiles');
-        const hasHouse = this.textures.exists('house_tiles');
-        const hasInterior = this.textures.exists('interior_tiles');
-        const extTotal = hasExterior ? this.textures.get('exterior_tiles').frameTotal - 1 : 0;
-        const houseTotal = hasHouse ? this.textures.get('house_tiles').frameTotal - 1 : 0;
+        // ── Generate organic building positions (5×4 grid with jitter) ──
+        const buildingSlots = [];
+        const gridW = 5, gridH = 4;
+        const cellW = (TOWN_W - 300) / gridW;
+        const cellH = (TOWN_H - 300) / gridH;
+        for (let gx = 0; gx < gridW; gx++) {
+          for (let gy = 0; gy < gridH; gy++) {
+            if (gx === 2 && gy >= 1 && gy <= 2) continue; // keep center clear for NPCs
+            const bx = city.x - TOWN_W / 2 + 150 + cellW * (gx + 0.5) + (rng() - 0.5) * cellW * 0.35;
+            const by = city.y - TOWN_H / 2 + 150 + cellH * (gy + 0.5) + (rng() - 0.5) * cellH * 0.35;
+            buildingSlots.push({ x: bx, y: by });
+          }
+        }
 
-        // Expanded building positions (12 positions for larger towns)
-        const buildingPositions = [
-          { x: city.x - 200, y: city.y - 160 },
-          { x: city.x - 60,  y: city.y - 170 },
-          { x: city.x + 100, y: city.y - 150 },
-          { x: city.x + 220, y: city.y - 120 },
-          { x: city.x - 220, y: city.y - 30 },
-          { x: city.x - 100, y: city.y + 10 },
-          { x: city.x + 140, y: city.y - 20 },
-          { x: city.x + 240, y: city.y + 40 },
-          { x: city.x - 200, y: city.y + 120 },
-          { x: city.x - 50,  y: city.y + 140 },
-          { x: city.x + 100, y: city.y + 130 },
-          { x: city.x + 230, y: city.y + 160 },
-        ];
-        const count = 8 + Math.floor(rng() * 5);
-        for (let i = 0; i < Math.min(count, buildingPositions.length); i++) {
-          const bp = buildingPositions[i];
-          if (hasExterior && extTotal > 10) {
-            const wallBase = Math.floor(rng() * 4) * 15;
-            for (let tx = 0; tx < 3; tx++) {
-              for (let ty = 0; ty < 4; ty++) {
-                const frameIdx = Math.min(wallBase + ty * 15 + tx, extTotal - 1);
-                this.add.image(
-                  bp.x + (tx - 1) * TILE_SCALED,
-                  bp.y + (ty - 2) * TILE_SCALED,
-                  'exterior_tiles', frameIdx
-                ).setScale(TILE_SCALE).setDepth(bp.y + 100);
-              }
-            }
-          } else if (hasHouse && houseTotal > 5) {
-            for (let tx = 0; tx < 2; tx++) {
-              for (let ty = 0; ty < 3; ty++) {
-                const frameIdx = Math.min(ty * 10 + tx + Math.floor(rng() * 3), houseTotal - 1);
-                this.add.image(
-                  bp.x + (tx - 0.5) * TILE_SCALED,
-                  bp.y + (ty - 1) * TILE_SCALED,
-                  'house_tiles', frameIdx
-                ).setScale(TILE_SCALE).setDepth(bp.y + 100);
-              }
-            }
+        // ── Place buildings as whole sprites ──
+        const buildCount = Math.min(14 + Math.floor(rng() * 5), buildingSlots.length);
+        for (let i = 0; i < buildCount; i++) {
+          const bp = buildingSlots[i];
+          const tmplIdx = Math.floor(rng() * HOUSE_TEMPLATES.length);
+          const tmpl = HOUSE_TEMPLATES[tmplIdx];
+
+          if (this.textures.exists(tmpl.name)) {
+            const bldg = this.add.image(bp.x, bp.y, tmpl.name)
+              .setScale(TILE_SCALE).setOrigin(0.5, 1); // anchor bottom-center for Y-sort
+            if (rng() > 0.5) bldg.setFlipX(true);
+            this.buildings.push(bldg);
+
+            // Collision at BOTTOM ONLY of house
+            const bw = tmpl.w * TILE_SCALED;
+            const colH = TILE_SCALED * 0.6;
+            const col = this.staticObjects.create(bp.x, bp.y - colH / 2, null).setVisible(false);
+            col.body.setSize(bw * 0.7, colH).setOffset(-bw * 0.35, -colH / 2);
+            col.body.immovable = true;
           } else {
-            const fg = this.add.graphics().setDepth(bp.y + 100);
-            const bw = 60 + rng() * 40, bh = 50 + rng() * 30;
-            fg.fillStyle(0x000000, 0.3); fg.fillRect(bp.x-bw/2+4, bp.y-bh/2+4, bw, bh);
+            // Fallback: graphics building (fixed depth, not Y-sorted)
+            const fg = this.add.graphics().setDepth(bp.y);
+            const bw = 80 + rng() * 50, bh = 70 + rng() * 40;
+            fg.fillStyle(0x000000, 0.3); fg.fillRect(bp.x - bw / 2 + 4, bp.y - bh + 4, bw, bh);
             const wc = biome.id === 'ice' ? 0x8899aa : biome.id === 'volcanic' ? 0x553322 : biome.id === 'desert' ? 0xaa9966 : 0x665544;
-            fg.fillStyle(wc); fg.fillRect(bp.x-bw/2, bp.y-bh/2, bw, bh);
+            fg.fillStyle(wc); fg.fillRect(bp.x - bw / 2, bp.y - bh, bw, bh);
             const rc = biome.id === 'volcanic' ? 0x881100 : biome.id === 'ice' ? 0x4466aa : 0x884422;
-            fg.fillStyle(rc); fg.fillTriangle(bp.x-bw/2-8, bp.y-bh/2, bp.x, bp.y-bh/2-28, bp.x+bw/2+8, bp.y-bh/2);
+            fg.fillStyle(rc); fg.fillTriangle(bp.x - bw / 2 - 8, bp.y - bh, bp.x, bp.y - bh - 28, bp.x + bw / 2 + 8, bp.y - bh);
+            const col = this.staticObjects.create(bp.x, bp.y - TILE_SCALED * 0.3, null).setVisible(false);
+            col.body.setSize(bw * 0.7, TILE_SCALED * 0.6).setOffset(-bw * 0.35, -TILE_SCALED * 0.3);
+            col.body.immovable = true;
           }
-          // Collision body at building base
-          const col = this.staticObjects.create(bp.x, bp.y + TILE_SCALED, null).setVisible(false);
-          col.body.setSize(TILE_SCALED * 2.5, TILE_SCALED * 1.2).setOffset(-TILE_SCALED * 1.25, -TILE_SCALED * 0.6);
-          col.body.immovable = true;
+
+          // Winding stone path from building to center
+          pathGfx.fillStyle(0x887766, 0.3);
+          drawPath(bp.x, bp.y, city.x, city.y);
         }
 
-        // Shop building (uses shop.png from loose sprites)
+        // ── Shop building ──
         if (this.textures.exists('shop_sprite'))
-          this.add.image(city.x + 60, city.y - 30, 'shop_sprite').setScale(SPRITE_SCALE * 0.8).setDepth(city.y);
+          this.add.image(city.x + 120, city.y - 60, 'shop_sprite').setScale(SPRITE_SCALE * 0.8).setDepth(city.y - 60);
 
-        // Interior props using interior_tiles (pack #8)
-        if (hasInterior) {
+        // ── Interior props (pack #8) ──
+        if (this.textures.exists('interior_tiles')) {
           const intTotal = this.textures.get('interior_tiles').frameTotal - 1;
           [0, 12, 24, 48, 96].forEach((fr, idx) => {
             const safeFr = Math.min(fr, intTotal - 1);
             const angle = (idx / 5) * Math.PI * 2;
             this.add.image(
-              city.x + Math.cos(angle) * 50,
-              city.y + Math.sin(angle) * 40 - 20,
+              city.x + Math.cos(angle) * 100,
+              city.y + Math.sin(angle) * 80 - 20,
               'interior_tiles', safeFr
-            ).setScale(TILE_SCALE * 0.8).setDepth(city.y + 50);
+            ).setScale(TILE_SCALE * 0.8).setDepth(city.y + Math.sin(angle) * 80);
           });
         }
 
-        // City label
-        this.add.text(city.x, city.y - 200, city.name, {
-          fontFamily: 'Cinzel, serif', fontSize: '18px', color: '#ffd700',
+        // ── City label ──
+        this.add.text(city.x, city.y - TOWN_H / 2 - 30, city.name, {
+          fontFamily: 'Cinzel, serif', fontSize: '22px', color: '#ffd700',
           stroke: '#000000', strokeThickness: 4, align: 'center'
         }).setOrigin(0.5).setDepth(9999);
-        this.add.text(city.x, city.y - 182, city.subtitle, {
-          fontFamily: 'Crimson Text, serif', fontSize: '11px', color: '#aaa',
+        this.add.text(city.x, city.y - TOWN_H / 2 - 8, city.subtitle, {
+          fontFamily: 'Crimson Text, serif', fontSize: '12px', color: '#aaa',
           stroke: '#000', strokeThickness: 2
         }).setOrigin(0.5).setDepth(9999);
 
-        // Torches (loose sprites)
-        for (let t = 0; t < 4; t++) {
-          const ta = (t / 4) * Math.PI * 2;
+        // ── Torches (8 around perimeter) ──
+        for (let t = 0; t < 8; t++) {
+          const ta = (t / 8) * Math.PI * 2;
           const tk = `torch_${Math.floor(rng() * 5)}`;
           if (this.textures.exists(tk))
-            this.add.image(city.x + Math.cos(ta) * 160, city.y + Math.sin(ta) * 140, tk)
-              .setScale(SPRITE_SCALE).setDepth(city.y + Math.sin(ta) * 140 + 20);
+            this.add.image(city.x + Math.cos(ta) * 350, city.y + Math.sin(ta) * 300, tk)
+              .setScale(SPRITE_SCALE).setDepth(city.y + Math.sin(ta) * 300);
         }
 
-        // Fountain
+        // ── Fountain ──
         if (this.textures.exists('fountain_sprite'))
           this.add.image(city.x, city.y - 30, 'fountain_sprite').setScale(SPRITE_SCALE).setDepth(city.y - 10);
 
-        // Animated smoke from chimney (pack #8)
+        // ── Animated smoke on first few buildings (pack #8) ──
         if (this.textures.exists('smoke_anim')) {
           try {
             if (!this.anims.exists('smoke_puff')) {
               const fc = this.textures.get('smoke_anim').frameTotal - 1;
               if (fc > 1) this.anims.create({ key: 'smoke_puff', frames: this.anims.generateFrameNumbers('smoke_anim', { start: 0, end: fc - 1 }), frameRate: 6, repeat: -1 });
             }
-            const sm = this.add.sprite(city.x - 100, city.y - 120, 'smoke_anim').setScale(1.5).setDepth(9998).setAlpha(0.5);
-            if (this.anims.exists('smoke_puff')) sm.play('smoke_puff');
+            for (let si = 0; si < Math.min(3, buildCount); si++) {
+              const bp = buildingSlots[si];
+              const sm = this.add.sprite(bp.x + 10, bp.y - TILE_SCALED * 3, 'smoke_anim')
+                .setScale(1.5).setDepth(9998).setAlpha(0.5);
+              if (this.anims.exists('smoke_puff')) sm.play('smoke_puff');
+            }
           } catch (_) {}
         }
       });
@@ -1392,6 +1450,7 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
       if (this.knight) this.knight.setDepth(this.knight.y);
       for (const e of this.enemies) if (!e.enemyData.isDead) e.setDepth(e.y);
       for (const n of this.npcs) n.setDepth(n.y);
+      for (const b of this.buildings) b.setDepth(b.y);
     }
 
     updateHPBars() {
