@@ -322,6 +322,8 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
 
       this.cameras.main.startFollow(this.knight, true, 0.08, 0.08);
       this.cameras.main.setZoom(1);
+      // Purge any enemies that ended up too close to spawn town
+      this.purgeSpawnZone();
       this.setupInput();
       this.createAtmosphere();
 
@@ -341,15 +343,36 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
 
     /* ── GROUND ──────────────────────────────────────── */
     renderGround(rng) {
-      const floorKeys = ['floor_0','floor_1','floor_2','floor_3'];
+      // STEP 1: Draw solid colored rectangles as base so no black ever shows
+      const groundBase = this.add.graphics().setDepth(-1);
       for (const biome of BIOMES) {
-        for (let x = biome.x; x < biome.x + biome.w; x += TILE_SCALED) {
-          for (let y = biome.y; y < biome.y + biome.h; y += TILE_SCALED) {
-            const key = floorKeys[Math.floor(rng() * floorKeys.length)];
-            this.add.image(x + TILE_SCALED / 2, y + TILE_SCALED / 2, key)
-              .setScale(TILE_SCALE).setDepth(0).setTint(biome.groundTint);
+        const r = (biome.groundTint >> 16) & 0xff;
+        const g = (biome.groundTint >> 8) & 0xff;
+        const b = biome.groundTint & 0xff;
+        const darkerTint = ((Math.floor(r*0.6)) << 16) | ((Math.floor(g*0.6)) << 8) | Math.floor(b*0.6);
+        groundBase.fillStyle(darkerTint, 1);
+        groundBase.fillRect(biome.x, biome.y, biome.w, biome.h);
+      }
+
+      // STEP 2: Overlay floor tiles on top for texture detail
+      const floorKeys = ['floor_0','floor_1','floor_2','floor_3'];
+      // Verify at least one floor texture loaded
+      const hasFloorTex = floorKeys.some(k => this.textures.exists(k));
+      if (hasFloorTex) {
+        for (const biome of BIOMES) {
+          for (let x = biome.x; x < biome.x + biome.w; x += TILE_SCALED) {
+            for (let y = biome.y; y < biome.y + biome.h; y += TILE_SCALED) {
+              const key = floorKeys[Math.floor(rng() * floorKeys.length)];
+              if (!this.textures.exists(key)) continue;
+              this.add.image(x + TILE_SCALED / 2, y + TILE_SCALED / 2, key)
+                .setScale(TILE_SCALE).setDepth(0).setTint(biome.groundTint);
+            }
           }
         }
+      }
+
+      // Biome borders
+      for (const biome of BIOMES) {
         const border = this.add.graphics().setDepth(0.1);
         border.lineStyle(2, 0x000000, 0.3);
         border.strokeRect(biome.x, biome.y, biome.w, biome.h);
@@ -458,7 +481,7 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
           if (!tmpl) continue;
           const ex = biome.x + 100 + rng() * (biome.w - 200);
           const ey = biome.y + 100 + rng() * (biome.h - 200);
-          if (CITIES.some(c => Math.hypot(c.x - ex, c.y - ey) < 500)) continue;
+          if (CITIES.some(c => Math.hypot(c.x - ex, c.y - ey) < 1000)) continue;
           this.spawnEnemy(ex, ey, tmpl, biome.id);
         }
         const boss = BIOME_BOSSES[biome.id];
@@ -582,8 +605,11 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
 
     /* ── PLAYER ──────────────────────────────────────── */
     createPlayer() {
-      const start = CITIES[0];
-      const px = start.x, py = start.y + 60;
+      const start = CITIES[0]; // Eldergrove — safe town
+      const px = start.x, py = start.y;
+      // Force full health on spawn
+      this.playerState.hp = this.playerState.maxHp;
+      this.playerState.mana = this.playerState.maxMana;
       if (this.textures.exists('player_idle')) {
         this.knight = this.physics.add.sprite(px, py, 'player_idle', 0).setScale(SPRITE_SCALE);
         try {
@@ -611,6 +637,18 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
         fontSize: '9px', fontFamily: 'Cinzel, serif', color: '#ffd700',
         stroke: '#000', strokeThickness: 2,
       }).setOrigin(0.5).setDepth(99999);
+    }
+
+    /* ── PURGE MOBS NEAR SPAWN ───────────────────────── */
+    purgeSpawnZone() {
+      const safeX = CITIES[0].x, safeY = CITIES[0].y;
+      for (let i = this.enemies.length - 1; i >= 0; i--) {
+        const e = this.enemies[i];
+        if (Phaser.Math.Distance.Between(safeX, safeY, e.x, e.y) < 1000) {
+          e.hpBg?.destroy(); e.hpFg?.destroy(); e.nameLabel?.destroy(); e.bossGlow?.destroy(); e.destroy();
+          this.enemies.splice(i, 1);
+        }
+      }
     }
 
     /* ── INPUT (Point-and-Click) ─────────────────────── */
@@ -1191,7 +1229,7 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
             for (let tries = 0; tries < 20; tries++) {
               rx = biome.x + 100 + Math.random() * (biome.w - 200);
               ry = biome.y + 100 + Math.random() * (biome.h - 200);
-              if (!CITIES.some(c => Math.hypot(c.x - rx, c.y - ry) < 500)) { safe = true; break; }
+              if (!CITIES.some(c => Math.hypot(c.x - rx, c.y - ry) < 1000)) { safe = true; break; }
             }
             if (safe) this.spawnEnemy(rx, ry, tmpl, biome.id);
           }
