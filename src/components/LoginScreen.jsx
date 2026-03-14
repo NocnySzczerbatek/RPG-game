@@ -199,19 +199,19 @@ const LoginScreen = ({ onLoginSuccess, onPlayOffline }) => {
       <div className="flex-1 flex items-stretch z-20 relative w-full max-w-[1400px] mx-auto px-4 py-6 gap-4 min-h-0">
 
         {/* ═══ LEFT COLUMN — Lore / Tutorial Scroll ═══ */}
-        <div className="hidden lg:flex flex-col w-[320px] shrink-0">
-          <div className="lore-scroll rounded-lg p-5 flex-1 overflow-y-auto max-h-[calc(100vh-100px)]">
+        <div className="hidden lg:flex flex-col w-[360px] shrink-0">
+          <div className="lore-scroll rounded-lg p-6 flex-1 overflow-y-auto max-h-[calc(100vh-100px)] bg-black/60 backdrop-blur-sm">
             {/* Scroll header */}
-            <div className="flex items-center gap-2 mb-4">
-              <span className="text-2xl">📜</span>
-              <h3 className="font-cinzel text-amber-500 text-lg font-bold tracking-wider">Manuskrypt</h3>
+            <div className="flex items-center gap-3 mb-5">
+              <span className="text-3xl">📜</span>
+              <h3 className="font-cinzel text-amber-400 text-2xl font-bold tracking-wider">Manuskrypt</h3>
             </div>
-            <div className="ornament-line mb-4" />
+            <div className="ornament-line mb-5" />
 
             {/* Lore intro */}
-            <div className="mb-5">
-              <h4 className="font-cinzel text-red-400 text-xs uppercase tracking-widest mb-2">Kronika Upadku</h4>
-              <p className="font-crimson text-slate-400 text-sm italic leading-relaxed">
+            <div className="mb-6">
+              <h4 className="font-cinzel text-red-400 text-sm uppercase tracking-widest mb-2">Kronika Upadku</h4>
+              <p className="font-crimson text-amber-100/80 text-base italic leading-relaxed">
                 "W Dniu Ciemności w Południe, czternastu Wielkich Bogów zamilkło na zawsze.
                 Niebo zgasło. Pustka sięgnęła po ziemię. Z popiołów świątyń wyrosły nowe,
                 mroczne potęgi — a ty, ostatni z Bożych Zabójców, wstajesz z martwych."
@@ -219,32 +219,32 @@ const LoginScreen = ({ onLoginSuccess, onPlayOffline }) => {
             </div>
 
             {/* How to Play */}
-            <div className="mb-5">
-              <h4 className="font-cinzel text-amber-400 text-xs uppercase tracking-widest mb-3">Jak Grać</h4>
-              <div className="space-y-3">
+            <div className="mb-6">
+              <h4 className="font-cinzel text-amber-400 text-sm uppercase tracking-widest mb-4">Jak Grać</h4>
+              <div className="space-y-4">
                 <div className="flex items-start gap-3">
-                  <span className="text-amber-500 text-sm mt-0.5">⚔️</span>
+                  <span className="text-amber-500 text-lg mt-0.5">⚔️</span>
                   <div>
-                    <p className="font-cinzel text-slate-300 text-xs font-bold">Sterowanie</p>
-                    <p className="font-crimson text-slate-500 text-xs">
-                      Kliknij myszą aby się poruszać. Klawisze <span className="text-amber-400 font-bold">Q W E R</span> uwalniają twoje moce.
+                    <p className="font-cinzel text-slate-100 text-sm font-bold">Sterowanie</p>
+                    <p className="font-crimson text-amber-100/70 text-sm">
+                      Kliknij myszą aby się poruszać. Klawisze <span className="text-amber-300 font-bold">Q W E R</span> uwalniają twoje moce.
                     </p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3">
-                  <span className="text-amber-500 text-sm mt-0.5">🏆</span>
+                  <span className="text-amber-500 text-lg mt-0.5">🏆</span>
                   <div>
-                    <p className="font-cinzel text-slate-300 text-xs font-bold">Cel</p>
-                    <p className="font-crimson text-slate-500 text-xs">
-                      Pokonaj <span className="text-red-400">6 Bossów Biomów</span> i odzyskaj Odłamki Bogów. Zdobądź tron Pustki.
+                    <p className="font-cinzel text-slate-100 text-sm font-bold">Cel</p>
+                    <p className="font-crimson text-amber-100/70 text-sm">
+                      Pokonaj <span className="text-red-400 font-semibold">6 Bossów Biomów</span> i odzyskaj Odłamki Bogów. Zdobądź tron Pustki.
                     </p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3">
-                  <span className="text-amber-500 text-sm mt-0.5">💀</span>
+                  <span className="text-amber-500 text-lg mt-0.5">💀</span>
                   <div>
-                    <p className="font-cinzel text-slate-300 text-xs font-bold">Śmierć</p>
-                    <p className="font-crimson text-slate-500 text-xs italic">
+                    <p className="font-cinzel text-slate-100 text-sm font-bold">Śmierć</p>
+                    <p className="font-crimson text-amber-100/70 text-sm italic">
                       Śmierć nie jest końcem — lecz popiół zapamięta twoją porażkę.
                     </p>
                   </div>
@@ -252,27 +252,27 @@ const LoginScreen = ({ onLoginSuccess, onPlayOffline }) => {
               </div>
             </div>
 
-            <div className="ornament-line my-4" />
+            <div className="ornament-line my-5" />
 
             {/* Classes preview */}
-            <div className="mb-4">
-              <h4 className="font-cinzel text-amber-400 text-xs uppercase tracking-widest mb-3">Klasy Bohaterów</h4>
-              <div className="grid grid-cols-2 gap-2">
+            <div className="mb-5">
+              <h4 className="font-cinzel text-amber-400 text-sm uppercase tracking-widest mb-4">Klasy Bohaterów</h4>
+              <div className="grid grid-cols-2 gap-3">
                 {Object.entries(CLASS_META).map(([key, meta]) => (
-                  <div key={key} className="flex items-center gap-2 bg-slate-900/60 rounded px-2 py-1.5 border border-slate-800/60">
-                    <span className="text-lg">{meta.icon}</span>
-                    <span className={`font-cinzel text-xs ${meta.color}`}>{meta.name}</span>
+                  <div key={key} className="class-icon-card flex items-center gap-2.5 bg-slate-900/70 rounded-lg px-3 py-2.5 border border-slate-700/60 cursor-default transition-all duration-300 hover:border-amber-500/60 hover:shadow-[0_0_16px_rgba(245,158,11,0.25)] hover:bg-slate-800/80">
+                    <span className="text-2xl">{meta.icon}</span>
+                    <span className={`font-cinzel text-sm font-semibold ${meta.color}`}>{meta.name}</span>
                   </div>
                 ))}
               </div>
             </div>
 
-            <div className="ornament-line my-4" />
+            <div className="ornament-line my-5" />
 
             {/* World hint */}
             <div>
-              <h4 className="font-cinzel text-red-400 text-xs uppercase tracking-widest mb-2">Świat Eldorii</h4>
-              <p className="font-crimson text-slate-500 text-xs leading-relaxed">
+              <h4 className="font-cinzel text-red-400 text-sm uppercase tracking-widest mb-2">Świat Eldorii</h4>
+              <p className="font-crimson text-amber-100/70 text-sm leading-relaxed">
                 Sześć biomów, każdy strzeżony przez pradawnego strażnika.
                 Królestwo Ironhold leży w ruinach. Mroczne lasy Whispergrove szepczą imiona
                 poległych. Pustynne miasto Sandspire kryje tajemnice upadłych bogów.
@@ -285,7 +285,7 @@ const LoginScreen = ({ onLoginSuccess, onPlayOffline }) => {
         <div className="flex-1 flex flex-col items-center justify-center min-w-0">
           {/* Title block */}
           <div className="flex flex-col items-center gap-1 mb-8">
-            <div className="text-5xl mb-2 animate-pulsate select-none">☄️</div>
+            <div className="text-6xl mb-2 animate-pulsate select-none">☄️</div>
             <h1 className="title-glow font-cinzel text-5xl sm:text-6xl lg:text-7xl font-black text-amber-500 text-center tracking-widest leading-none select-none">
               GOD-SLAYER
             </h1>
@@ -293,7 +293,7 @@ const LoginScreen = ({ onLoginSuccess, onPlayOffline }) => {
               Rise from Ashes
             </h2>
             <div className="ornament-line w-56 mt-3" />
-            <p className="font-crimson text-slate-500 text-center text-sm italic mt-3 max-w-sm px-4 hidden sm:block">
+            <p className="font-crimson text-amber-100/60 text-center text-base italic mt-3 max-w-md px-4 hidden sm:block">
               "Bogowie nie umarli z własnej woli. Ktoś ich zabił.<br />
               Teraz na tronie siedzi Pustka — i czeka na ciebie."
             </p>
@@ -307,11 +307,11 @@ const LoginScreen = ({ onLoginSuccess, onPlayOffline }) => {
           )}
 
           {/* ── Main action buttons ── */}
-          <div className="flex flex-col gap-3 items-center w-full max-w-xs">
+          <div className="flex flex-col gap-3 items-center w-full max-w-sm">
             {/* New Game / Offline */}
             <button
               onClick={onPlayOffline}
-              className="menu-btn btn-divine w-full py-3.5 text-base flex items-center justify-center gap-2"
+              className="menu-btn btn-divine w-full py-4 text-lg font-bold flex items-center justify-center gap-2"
             >
               <span>⚔️</span> Nowa Gra
             </button>
@@ -320,10 +320,10 @@ const LoginScreen = ({ onLoginSuccess, onPlayOffline }) => {
             {localSave && (
               <button
                 onClick={onPlayOffline}
-                className="menu-btn btn-gothic w-full py-3 text-sm"
+                className="menu-btn btn-gothic w-full py-3.5 text-base font-bold"
               >
                 📜 Kontynuuj
-                <span className="block text-[10px] text-slate-500 font-normal normal-case tracking-normal mt-0.5">
+                <span className="block text-xs text-slate-400 font-normal normal-case tracking-normal mt-0.5">
                   {localSave.player?.name} — Lv.{localSave.player?.level} — {formatSaveDate(localSave.timestamp)}
                 </span>
               </button>
@@ -333,7 +333,7 @@ const LoginScreen = ({ onLoginSuccess, onPlayOffline }) => {
 
             {/* Social login buttons */}
             {!configured && (
-              <div className="p-2 bg-amber-950/30 border border-amber-800/40 rounded-lg text-amber-400/70 text-[10px] font-crimson text-center w-full">
+              <div className="p-2.5 bg-amber-950/40 border border-amber-800/40 rounded-lg text-amber-300/80 text-xs font-crimson text-center w-full">
                 ⚠️ Supabase nie skonfigurowany — logowanie w chmurze niedostępne
               </div>
             )}
@@ -341,7 +341,7 @@ const LoginScreen = ({ onLoginSuccess, onPlayOffline }) => {
             <button
               onClick={handleGoogle}
               disabled={loading || !configured}
-              className="menu-btn w-full flex items-center justify-center gap-3 py-2.5 px-4 bg-white/90 hover:bg-white disabled:bg-gray-400/50 disabled:cursor-not-allowed text-gray-800 font-semibold rounded-lg transition-all text-sm"
+              className="menu-btn w-full flex items-center justify-center gap-3 py-3 px-4 bg-white/90 hover:bg-white disabled:bg-gray-400/50 disabled:cursor-not-allowed text-gray-800 font-bold rounded-lg transition-all text-base"
             >
               <GoogleIcon />
               {loading ? 'Łączenie...' : 'Zaloguj przez Google'}
@@ -350,51 +350,51 @@ const LoginScreen = ({ onLoginSuccess, onPlayOffline }) => {
             <button
               onClick={handleDiscord}
               disabled={loading || !configured}
-              className="menu-btn w-full flex items-center justify-center gap-3 py-2.5 px-4 bg-[#5865F2] hover:bg-[#4752C4] disabled:bg-[#5865F2]/40 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-all text-sm"
+              className="menu-btn w-full flex items-center justify-center gap-3 py-3 px-4 bg-[#5865F2] hover:bg-[#4752C4] disabled:bg-[#5865F2]/40 disabled:cursor-not-allowed text-white font-bold rounded-lg transition-all text-base"
             >
               <DiscordIcon />
               {loading ? 'Łączenie...' : 'Zaloguj przez Discord'}
             </button>
 
-            <p className="text-[10px] text-slate-600 text-center font-crimson mt-0.5">
+            <p className="text-xs text-slate-500 text-center font-crimson mt-0.5">
               Logowanie w chmurze synchronizuje postęp między urządzeniami
             </p>
           </div>
         </div>
 
         {/* ═══ RIGHT COLUMN — Character Cards / Stats ═══ */}
-        <div className="hidden lg:flex flex-col w-[300px] shrink-0">
-          <div className="lore-scroll rounded-lg p-5 flex-1 overflow-y-auto max-h-[calc(100vh-100px)]">
-            <div className="flex items-center gap-2 mb-4">
-              <span className="text-2xl">👤</span>
-              <h3 className="font-cinzel text-amber-500 text-lg font-bold tracking-wider">Bohaterowie</h3>
+        <div className="hidden lg:flex flex-col w-[340px] shrink-0">
+          <div className="lore-scroll rounded-lg p-6 flex-1 overflow-y-auto max-h-[calc(100vh-100px)] bg-black/60 backdrop-blur-sm">
+            <div className="flex items-center gap-3 mb-5">
+              <span className="text-3xl">👤</span>
+              <h3 className="font-cinzel text-amber-400 text-2xl font-bold tracking-wider">Bohaterowie</h3>
             </div>
-            <div className="ornament-line mb-4" />
+            <div className="ornament-line mb-5" />
 
             {/* Local save character card */}
             {localSave && localSave.player && (
-              <div className="mb-4">
-                <h4 className="font-cinzel text-xs text-slate-500 uppercase tracking-widest mb-2">💾 Zapis Lokalny</h4>
-                <div className="char-card bg-slate-900/70 rounded-lg p-3">
+              <div className="mb-5">
+                <h4 className="font-cinzel text-sm text-slate-300 uppercase tracking-widest mb-2">💾 Zapis Lokalny</h4>
+                <div className="char-card bg-black/50 rounded-lg p-4">
                   <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center overflow-hidden">
+                    <div className="w-14 h-14 rounded-lg bg-slate-800 border border-slate-600 flex items-center justify-center overflow-hidden">
                       <img
                         src={`${SP}knight.png`}
                         alt=""
-                        className="w-10 h-10 object-contain"
+                        className="w-12 h-12 object-contain"
                         style={{ imageRendering: 'pixelated' }}
                       />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-cinzel text-sm text-slate-200 truncate">{localSave.player.name}</p>
-                      <div className="flex items-center gap-2 text-[10px]">
+                      <p className="font-cinzel text-base text-slate-100 truncate font-semibold">{localSave.player.name}</p>
+                      <div className="flex items-center gap-2 text-xs">
                         <span className={`font-cinzel ${CLASS_META[localSave.player.class]?.color || 'text-slate-400'}`}>
                           {CLASS_META[localSave.player.class]?.icon} {CLASS_META[localSave.player.class]?.name || localSave.player.class}
                         </span>
-                        <span className="text-amber-400 font-cinzel">Lv.{localSave.player.level}</span>
+                        <span className="text-amber-400 font-cinzel font-bold">Lv.{localSave.player.level}</span>
                       </div>
                       {/* Mini HP bar */}
-                      <div className="mt-1.5 w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                      <div className="mt-2 w-full h-2 bg-slate-800 rounded-full overflow-hidden">
                         <div
                           className="h-full bg-red-600 rounded-full"
                           style={{ width: `${Math.min(100, ((localSave.player.hp ?? localSave.player.maxHp) / (localSave.player.maxHp || 1)) * 100)}%` }}
@@ -403,7 +403,7 @@ const LoginScreen = ({ onLoginSuccess, onPlayOffline }) => {
                     </div>
                   </div>
                   {localSave.player.gold != null && (
-                    <div className="mt-2 flex items-center gap-3 text-[10px] text-slate-500 font-crimson">
+                    <div className="mt-2.5 flex items-center gap-3 text-xs text-amber-100/60 font-crimson">
                       <span>🪙 {localSave.player.gold} złota</span>
                       {localSave.timestamp && <span>⏱ {formatSaveDate(localSave.timestamp)}</span>}
                     </div>
@@ -414,25 +414,25 @@ const LoginScreen = ({ onLoginSuccess, onPlayOffline }) => {
 
             {/* Cloud characters */}
             <div>
-              <h4 className="font-cinzel text-xs text-slate-500 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+              <h4 className="font-cinzel text-sm text-slate-300 uppercase tracking-widest mb-2 flex items-center gap-1.5">
                 <span>☁️</span> Chmura
-                {loadingChars && <span className="animate-spin text-[10px]">⏳</span>}
+                {loadingChars && <span className="animate-spin text-xs">⏳</span>}
               </h4>
               {cloudChars.length > 0 ? (
                 <div className="space-y-2">
                   {cloudChars.map(char => {
                     const meta = CLASS_META[char.class] || CLASS_META.warrior;
                     return (
-                      <div key={char.id} className="char-card bg-slate-900/70 rounded-lg p-3">
+                      <div key={char.id} className="char-card bg-black/50 rounded-lg p-3">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded bg-slate-800 border border-slate-700 flex items-center justify-center text-xl">
+                          <div className="w-11 h-11 rounded bg-slate-800 border border-slate-600 flex items-center justify-center text-2xl">
                             {meta.icon}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="font-cinzel text-sm text-slate-200 truncate">{char.name}</p>
-                            <div className="flex items-center gap-2 text-[10px]">
+                            <p className="font-cinzel text-base text-slate-100 truncate font-semibold">{char.name}</p>
+                            <div className="flex items-center gap-2 text-xs">
                               <span className={`font-cinzel ${meta.color}`}>{meta.name}</span>
-                              <span className="text-amber-400 font-cinzel">Lv.{char.level}</span>
+                              <span className="text-amber-400 font-cinzel font-bold">Lv.{char.level}</span>
                             </div>
                           </div>
                         </div>
@@ -441,36 +441,36 @@ const LoginScreen = ({ onLoginSuccess, onPlayOffline }) => {
                   })}
                 </div>
               ) : !loadingChars ? (
-                <div className="text-center py-4 bg-slate-900/40 rounded-lg border border-slate-800/40">
-                  <p className="text-slate-600 text-xs font-crimson">
+                <div className="text-center py-5 bg-black/40 rounded-lg border border-slate-700/40">
+                  <p className="text-slate-400 text-sm font-crimson">
                     {configured ? 'Zaloguj się aby zobaczyć postacie' : 'Brak połączenia z chmurą'}
                   </p>
                 </div>
               ) : null}
             </div>
 
-            <div className="ornament-line my-4" />
+            <div className="ornament-line my-5" />
 
             {/* Login status display */}
             <div>
-              <h4 className="font-cinzel text-xs text-slate-500 uppercase tracking-widest mb-2">Status Konta</h4>
-              <div className="bg-slate-900/50 rounded-lg p-3 border border-slate-800/40">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="w-2 h-2 rounded-full bg-green-500/50" />
-                  <span className="font-crimson text-xs text-slate-400">
+              <h4 className="font-cinzel text-sm text-slate-300 uppercase tracking-widest mb-3">Status Konta</h4>
+              <div className="bg-black/40 rounded-lg p-4 border border-slate-700/40">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className={`w-2.5 h-2.5 rounded-full ${configured ? 'bg-green-500' : 'bg-slate-600'}`} />
+                  <span className="font-crimson text-sm text-slate-200">
                     {configured ? 'Supabase połączony' : 'Tryb Offline'}
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
                   {/* Google logo small */}
-                  <div className={`p-1.5 rounded border ${configured ? 'bg-white/10 border-white/20' : 'bg-slate-800/60 border-slate-700/40 opacity-40'}`}>
+                  <div className={`p-2 rounded border ${configured ? 'bg-white/10 border-white/20' : 'bg-slate-800/60 border-slate-700/40 opacity-40'}`}>
                     <GoogleIcon />
                   </div>
                   {/* Discord logo small */}
-                  <div className={`p-1.5 rounded border ${configured ? 'bg-[#5865F2]/20 border-[#5865F2]/30' : 'bg-slate-800/60 border-slate-700/40 opacity-40'}`}>
+                  <div className={`p-2 rounded border ${configured ? 'bg-[#5865F2]/20 border-[#5865F2]/30' : 'bg-slate-800/60 border-slate-700/40 opacity-40'}`}>
                     <DiscordIcon />
                   </div>
-                  <span className="text-[10px] text-slate-600 font-crimson">
+                  <span className="text-xs text-slate-400 font-crimson">
                     {configured ? 'Gotowy do logowania' : 'Skonfiguruj .env'}
                   </span>
                 </div>
@@ -484,10 +484,10 @@ const LoginScreen = ({ onLoginSuccess, onPlayOffline }) => {
       <div className="z-20 relative">
         <div className="ornament-line w-full" />
         <div className="flex items-center justify-center gap-6 py-3 px-4">
-          <span className="text-[10px] text-slate-700 font-cinzel tracking-widest">
+          <span className="text-xs text-slate-500 font-cinzel tracking-widest">
             MROCZNE FANTASY • ACTION RPG • 2026
           </span>
-          <span className="text-[10px] text-slate-800 font-crimson">v1.0</span>
+          <span className="text-xs text-slate-600 font-crimson">v1.0</span>
         </div>
       </div>
     </div>
