@@ -4,6 +4,7 @@
 // ============================================================
 import React, { useState } from 'react';
 import { ITEMS } from '../data/items.js';
+import { getPortraitPath, CLASS_WEAPONS } from './GameMap.jsx';
 
 const RARITY_COLORS = {
   common:    { border: 'border-gray-600',   text: 'text-gray-300',   bg: 'bg-gray-800',   glow: '' },
@@ -206,6 +207,16 @@ const InventoryPanel = ({ player, dispatch, onClose }) => {
 
               {/* Character Stats */}
               <div className="w-44 border-l border-gray-800 pl-4">
+                {/* Class Portrait */}
+                <div className="flex items-center gap-2 mb-3 pb-2 border-b border-gray-800">
+                  <div className="w-12 h-12 rounded-lg border-2 border-amber-600 bg-gray-900 overflow-hidden flex-shrink-0">
+                    <img src={getPortraitPath(player.class || 'warrior')} alt={player.class} className="w-full h-full object-cover" style={{ imageRendering: 'pixelated' }} />
+                  </div>
+                  <div>
+                    <div className="font-cinzel text-amber-400 text-xs font-bold capitalize">{player.class || 'warrior'}</div>
+                    <div className="text-[9px] text-gray-500 font-crimson">{CLASS_WEAPONS[player.class] || CLASS_WEAPONS.warrior}</div>
+                  </div>
+                </div>
                 <div className="font-cinzel text-amber-400 text-xs font-bold mb-2">Character Stats</div>
                 <div className="space-y-1.5">
                   <StatRow label="Level" value={player.level} />

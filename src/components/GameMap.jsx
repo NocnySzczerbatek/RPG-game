@@ -29,6 +29,66 @@ const SLIME_DIR = `${SP}craftpix-net-788364-free-slime-mobs-pixel-art-top-down-s
 const MONSTER_DIR = `${SP}craftpix-561178-free-rpg-monster-sprites-pixel-art/PNG/`;
 const CHAR_DIR = `${SP}craftpix-net-555940-free-base-4-direction-male-character-pixel-art/PNG/`;
 const HOME_DIR = `${SP}craftpix-net-654184-main-characters-home-free-top-down-pixel-art-asset/PNG/`;
+const HERO_DIR = `${SP}craftpix-891165-assassin-mage-viking-free-pixel-art-game-heroes/PNG/`;
+
+// ── Class → sprite folder mapping (craftpix-891165) ───────
+const CLASS_SPRITE_MAP = {
+  warrior: {
+    folder: 'Knight', portrait: 'knight.png', weapon: 'Longsword',
+    idle: { prefix: 'idle', count: 12, start: 1 },
+    walk: { prefix: 'walk', count: 6, start: 1 },
+    run:  { prefix: 'run',  count: 8, start: 1 },
+    attack: { prefix: 'attack', count: 5, start: 0 },
+    hurt: { prefix: 'hurt', count: 4, start: 1 },
+    death: { prefix: 'death', count: 10, start: 1, size: 256 },
+  },
+  mage: {
+    folder: 'Mage', portrait: 'mage.png', weapon: 'Staff',
+    idle: { prefix: 'idle', count: 14, start: 1 },
+    walk: { prefix: 'walk', count: 6, start: 1 },
+    run:  { prefix: 'run',  count: 8, start: 1 },
+    attack: { prefix: 'attack', count: 7, start: 1 },
+    hurt: { prefix: 'hurt', count: 4, start: 1 },
+    death: { prefix: 'death', count: 10, start: 1, size: 256 },
+    fire: { prefix: 'fire', count: 9, start: 1, size: 32 },
+  },
+  ninja: {
+    folder: 'Rogue', portrait: 'rogue.png', weapon: 'Daggers',
+    idle: { prefix: 'idle', count: 17, start: 1, skip: [11] },
+    walk: { prefix: 'walk', count: 6, start: 1 },
+    run:  { prefix: 'run',  count: 8, start: 1 },
+    attack: { prefix: 'Attack', count: 7, start: 1 },
+    hurt: { prefix: 'hurt', count: 4, start: 1 },
+    death: { prefix: 'death', count: 10, start: 1, size: 256 },
+  },
+  paladin: {
+    folder: 'Knight', portrait: 'knight.png', weapon: 'Warhammer',
+    idle: { prefix: 'idle', count: 12, start: 1 },
+    walk: { prefix: 'walk', count: 6, start: 1 },
+    run:  { prefix: 'run',  count: 8, start: 1 },
+    attack: { prefix: 'attack', count: 5, start: 0 },
+    hurt: { prefix: 'hurt', count: 4, start: 1 },
+    death: { prefix: 'death', count: 10, start: 1, size: 256 },
+  },
+};
+
+function getHeroFrameKeys(cls, anim) {
+  const map = CLASS_SPRITE_MAP[cls] || CLASS_SPRITE_MAP.warrior;
+  const a = map[anim]; if (!a) return [];
+  const keys = [];
+  for (let i = a.start; i < a.start + a.count; i++) {
+    if (a.skip && a.skip.includes(i)) continue;
+    keys.push(`hero_${anim}_${i}`);
+  }
+  return keys;
+}
+
+function getPortraitPath(cls) {
+  const map = CLASS_SPRITE_MAP[cls] || CLASS_SPRITE_MAP.warrior;
+  return `${HERO_DIR}${map.folder}/${map.portrait}`;
+}
+
+const CLASS_WEAPONS = { warrior: '⚔️ Longsword', mage: '🪄 Staff', ninja: '🗡️ Daggers', paladin: '🔨 Warhammer' };
 
 // ── Biome Definitions ─────────────────────────────────────
 const BIOMES = [
@@ -222,12 +282,23 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
       this.load.image('ground_grass', `${HOME_DIR}ground_grass_details.png`);
       this.load.image('walls_floor', `${HOME_DIR}walls_floor.png`);
 
-      // Player spritesheets (4-direction male with sword)
-      this.load.spritesheet('player_idle',   `${CHAR_DIR}Sword/With_shadow/Sword_Idle_with_shadow.png`,   { frameWidth: 64, frameHeight: 64 });
-      this.load.spritesheet('player_walk',   `${CHAR_DIR}Sword/With_shadow/Sword_Walk_with_shadow.png`,   { frameWidth: 64, frameHeight: 64 });
-      this.load.spritesheet('player_attack', `${CHAR_DIR}Sword/With_shadow/Sword_attack_with_shadow.png`, { frameWidth: 64, frameHeight: 64 });
-      this.load.spritesheet('player_hurt',   `${CHAR_DIR}Sword/With_shadow/Sword_Hurt_with_shadow.png`,   { frameWidth: 64, frameHeight: 64 });
-      this.load.spritesheet('player_run',    `${CHAR_DIR}Sword/With_shadow/Sword_Run_with_shadow.png`,    { frameWidth: 64, frameHeight: 64 });
+      // Player class-specific frames from craftpix-891165
+      const cm = CLASS_SPRITE_MAP[playerClass] || CLASS_SPRITE_MAP.warrior;
+      const heroBase = `${HERO_DIR}${cm.folder}/`;
+      this.load.image('hero_portrait', `${heroBase}${cm.portrait}`);
+      const loadAnim = (anim) => {
+        const a = cm[anim]; if (!a) return;
+        for (let i = a.start; i < a.start + a.count; i++) {
+          if (a.skip && a.skip.includes(i)) continue;
+          this.load.image(`hero_${anim}_${i}`, `${heroBase}${anim.charAt(0).toUpperCase() + anim.slice(1)}/${a.prefix}${i}.png`);
+        }
+      };
+      ['idle','walk','run','attack','hurt','death'].forEach(a => loadAnim(a));
+      // Mage fire projectile sprites
+      if (cm.fire) {
+        for (let i = cm.fire.start; i < cm.fire.start + cm.fire.count; i++)
+          this.load.image(`hero_fire_${i}`, `${heroBase}Fire/${cm.fire.prefix}${i}.png`);
+      }
 
       // Orc spritesheets (top-down 64×64)
       ['orc1','orc2','orc3'].forEach(id => {
@@ -537,13 +608,15 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
     createPlayer() {
       const start = CITIES[0];
       this.playerState.hp = this.playerState.maxHp; this.playerState.mana = this.playerState.maxMana;
-      if (this.textures.exists('player_idle')) {
-        this.knight = this.physics.add.sprite(start.x, start.y, 'player_idle', 0).setScale(SPRITE_SCALE);
-        try {
-          const mk = (k, s, r, rep) => { const fc = this.textures.get(s).frameTotal - 1; if (fc > 1) this.anims.create({ key: k, frames: this.anims.generateFrameNumbers(s, { start: 0, end: fc - 1 }), frameRate: r, repeat: rep }); };
-          mk('player_idle_anim', 'player_idle', 6, -1); mk('player_walk_anim', 'player_walk', 10, -1);
-          mk('player_attack_anim', 'player_attack', 12, 0); mk('player_run_anim', 'player_run', 10, -1);
-        } catch (_) {}
+      this.playerAnim = 'idle'; this.playerAnimFrame = 0; this.playerAnimTimer = 0;
+      this.playerAttacking = false; this.playerAttackTimer = 0;
+      const idleKeys = getHeroFrameKeys(playerClass, 'idle');
+      const firstKey = idleKeys.length > 0 && this.textures.exists(idleKeys[0]) ? idleKeys[0] : null;
+      if (firstKey) {
+        this.knight = this.add.image(start.x, start.y, firstKey).setScale(SPRITE_SCALE);
+        this.physics.add.existing(this.knight);
+        // Apply golden tint for paladin to differentiate from warrior
+        if (playerClass === 'paladin') this.knight.setTint(0xffd700);
       } else {
         this.knight = this.add.rectangle(start.x, start.y, 24, 32, 0x4488ff);
         this.physics.add.existing(this.knight);
@@ -621,22 +694,45 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
       if (this.saveTimer > 10000) { this.saveTimer = 0; this._saveToLocalStorage(); }
     }
 
-    updatePlayerMovement() {
+    setPlayerAnim(anim) {
+      if (this.playerAnim !== anim) { this.playerAnim = anim; this.playerAnimFrame = 0; this.playerAnimTimer = 0; }
+    }
+
+    updatePlayerAnimation(delta) {
+      if (!this.knight || !this.knight.setTexture) return;
+      const rate = this.playerAnim === 'attack' ? 80 : this.playerAnim === 'idle' ? 140 : 100;
+      this.playerAnimTimer += delta;
+      if (this.playerAnimTimer >= rate) {
+        this.playerAnimTimer = 0;
+        const keys = getHeroFrameKeys(playerClass, this.playerAnim);
+        if (keys.length === 0) return;
+        this.playerAnimFrame = (this.playerAnimFrame + 1) % keys.length;
+        const k = keys[this.playerAnimFrame];
+        if (this.textures.exists(k)) this.knight.setTexture(k);
+        // End attack anim
+        if (this.playerAttacking && this.playerAnim === 'attack' && this.playerAnimFrame === keys.length - 1) {
+          this.playerAttacking = false; this.setPlayerAnim('idle');
+        }
+      }
+    }
+
+    updatePlayerMovement(delta) {
       if (this.isDashing) return;
+      this.updatePlayerAnimation(delta);
       if (this.moveTarget) {
         const dist = Phaser.Math.Distance.Between(this.knight.x, this.knight.y, this.moveTarget.x, this.moveTarget.y);
         if (dist < 8) {
           this.knight.body.setVelocity(0, 0); this.moveTarget = null;
-          if (this.anims.exists('player_idle_anim') && this.knight.anims) this.knight.anims.play('player_idle_anim', true);
+          if (!this.playerAttacking) this.setPlayerAnim('idle');
         } else {
           const a = Math.atan2(this.moveTarget.y - this.knight.y, this.moveTarget.x - this.knight.x);
           this.knight.body.setVelocity(Math.cos(a) * PLAYER_SPEED, Math.sin(a) * PLAYER_SPEED);
           this.knight.setFlipX(Math.cos(a) < 0);
-          if (this.anims.exists('player_walk_anim') && this.knight.anims) this.knight.anims.play('player_walk_anim', true);
+          if (!this.playerAttacking) this.setPlayerAnim('walk');
         }
       } else {
         this.knight.body.setVelocity(0, 0);
-        if (this.anims.exists('player_idle_anim') && this.knight.anims && !this.knight.anims.isPlaying) this.knight.anims.play('player_idle_anim', true);
+        if (!this.playerAttacking) this.setPlayerAnim('idle');
       }
     }
 
@@ -697,10 +793,8 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
     performBasicAttack() {
       if (!this.knight) return;
       this.moveTarget = null;
-      if (this.anims.exists('player_attack_anim') && this.knight.anims) {
-        this.knight.anims.play('player_attack_anim', true);
-        this.knight.once('animationcomplete', () => { if (this.knight && this.anims.exists('player_idle_anim')) this.knight.anims.play('player_idle_anim', true); });
-      }
+      this.playerAttacking = true;
+      this.setPlayerAnim('attack');
       this.knight.setFlipX(this.mouseWorldPos.x < this.knight.x);
       const range = 70; let closest = null, cd = Infinity;
       for (const e of this.enemies) { if (e.enemyData.isDead) continue; const d = Phaser.Math.Distance.Between(this.knight.x, this.knight.y, e.x, e.y); if (d < range && d < cd) { closest = e; cd = d; } }
@@ -1018,7 +1112,7 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
 // ═══════════════════════════════════════════════════════════
 // REACT WRAPPER
 // ═══════════════════════════════════════════════════════════
-export { BIOMES, CITIES, CITY_NPCS, BIOME_BOSSES, WORLD_W, WORLD_H };
+export { BIOMES, CITIES, CITY_NPCS, BIOME_BOSSES, WORLD_W, WORLD_H, CLASS_SPRITE_MAP, CLASS_WEAPONS, getPortraitPath };
 
 export default function GameMap({ dispatch, player }) {
   const containerRef = useRef(null);
@@ -1064,7 +1158,10 @@ export default function GameMap({ dispatch, player }) {
     handleCloseDialogue();
   };
 
-  const classSkills = getClassSkills(player?.class || 'warrior');
+  const pClass = player?.class || 'warrior';
+  const classSkills = getClassSkills(pClass);
+  const portraitSrc = getPortraitPath(pClass);
+  const weaponLabel = CLASS_WEAPONS[pClass] || CLASS_WEAPONS.warrior;
   const ps = playerState || {
     hp: player?.hp ?? 100, maxHp: player?.maxHp ?? 100, mana: player?.mana ?? 50, maxMana: player?.maxMana ?? 50,
     level: player?.level ?? 1, exp: player?.exp ?? 0, expToNext: player?.expToNext ?? 100, gold: player?.gold ?? 0,
@@ -1079,14 +1176,18 @@ export default function GameMap({ dispatch, player }) {
     <div className="relative w-full h-screen bg-black overflow-hidden">
       <div ref={containerRef} className="w-full h-full" />
 
-      {/* ── Health & Mana Orbs (2x) ─── */}
-      <div className="absolute bottom-4 left-4 flex items-end gap-5 z-50">
+      {/* ── Health & Mana Orbs + Portrait ─── */}
+      <div className="absolute bottom-4 left-4 flex items-end gap-3 z-50">
         <div className="relative w-36 h-36">
           <div className="absolute inset-0 rounded-full border-4 border-red-900 bg-gray-950 overflow-hidden">
             <div className="absolute bottom-0 w-full transition-all duration-300" style={{ height: `${hpPct}%`, background: 'radial-gradient(circle at 30% 40%, #ff3333, #881111)' }} />
           </div>
           <div className="absolute inset-0 rounded-full border-2 border-red-700/50" />
           <div className="absolute inset-0 flex items-center justify-center"><span className="text-sm font-bold text-white drop-shadow-lg font-cinzel">{Math.floor(ps.hp)}/{ps.maxHp}</span></div>
+        </div>
+        <div className="relative w-16 h-16 mb-10 rounded-lg border-2 border-amber-500 bg-gray-900 overflow-hidden shadow-lg shadow-amber-900/30">
+          <img src={portraitSrc} alt={pClass} className="w-full h-full object-cover" style={{ imageRendering: 'pixelated' }} />
+          <div className="absolute bottom-0 left-0 right-0 bg-black/70 text-center"><span className="text-[8px] text-amber-400 font-cinzel capitalize">{pClass}</span></div>
         </div>
         <div className="relative w-36 h-36">
           <div className="absolute inset-0 rounded-full border-4 border-blue-900 bg-gray-950 overflow-hidden">
@@ -1120,13 +1221,23 @@ export default function GameMap({ dispatch, player }) {
         })}
       </div>
 
-      {/* ── Top Bar ─── */}
-      <div className="absolute top-2 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 bg-gray-950/80 border border-amber-900/50 rounded-lg px-4 py-2">
-        <span className="font-cinzel text-amber-400 font-bold text-sm">{player?.name || 'Hero'}</span>
-        <span className="font-cinzel text-purple-400 text-xs capitalize">{player?.class || 'warrior'}</span>
-        <span className="font-cinzel text-yellow-500 text-xs">Lv.{ps.level}</span>
-        <div className="w-32 h-2 bg-gray-800 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-green-600 to-green-400 transition-all" style={{ width: `${expPct}%` }} /></div>
-        <span className="text-xs text-gray-400 font-mono">{Math.floor(ps.exp)}/{ps.expToNext} XP</span>
+      {/* ── Top Bar with Portrait ─── */}
+      <div className="absolute top-2 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-gray-950/80 border border-amber-900/50 rounded-lg px-3 py-1.5">
+        <div className="w-10 h-10 rounded-lg border-2 border-amber-600 bg-gray-900 overflow-hidden flex-shrink-0">
+          <img src={portraitSrc} alt={pClass} className="w-full h-full object-cover" style={{ imageRendering: 'pixelated' }} />
+        </div>
+        <div className="flex flex-col">
+          <div className="flex items-center gap-2">
+            <span className="font-cinzel text-amber-400 font-bold text-sm">{player?.name || 'Hero'}</span>
+            <span className="font-cinzel text-purple-400 text-xs capitalize">{pClass}</span>
+            <span className="font-cinzel text-yellow-500 text-xs">Lv.{ps.level}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-gray-500 font-crimson">{weaponLabel}</span>
+            <div className="w-24 h-1.5 bg-gray-800 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-green-600 to-green-400 transition-all" style={{ width: `${expPct}%` }} /></div>
+            <span className="text-[10px] text-gray-400 font-mono">{Math.floor(ps.exp)}/{ps.expToNext} XP</span>
+          </div>
+        </div>
         <span className="text-yellow-400 text-xs font-cinzel">{'\uD83D\uDCB0'} {ps.gold}</span>
         {ps.bossKeys > 0 && <span className="text-amber-400 text-xs font-cinzel">{'\uD83D\uDD11'} {ps.bossKeys}</span>}
       </div>
