@@ -323,7 +323,7 @@ const LoginScreen = ({ onLoginSuccess, onPlayOffline }) => {
                 className="menu-btn btn-gothic w-full py-3.5 text-base font-bold"
               >
                 📜 Kontynuuj
-                <span className="block text-xs text-slate-400 font-normal normal-case tracking-normal mt-0.5">
+                <span className="block text-sm text-slate-400 font-semibold normal-case tracking-normal mt-0.5">
                   {localSave.player?.name} — Lv.{localSave.player?.level} — {formatSaveDate(localSave.timestamp)}
                 </span>
               </button>
@@ -333,7 +333,7 @@ const LoginScreen = ({ onLoginSuccess, onPlayOffline }) => {
 
             {/* Social login buttons */}
             {!configured && (
-              <div className="p-2.5 bg-amber-950/40 border border-amber-800/40 rounded-lg text-amber-300/80 text-xs font-crimson text-center w-full">
+              <div className="p-2.5 bg-amber-950/40 border border-amber-800/40 rounded-lg text-amber-300/80 text-sm font-semibold font-crimson text-center w-full">
                 ⚠️ Supabase nie skonfigurowany — logowanie w chmurze niedostępne
               </div>
             )}
@@ -356,7 +356,7 @@ const LoginScreen = ({ onLoginSuccess, onPlayOffline }) => {
               {loading ? 'Łączenie...' : 'Zaloguj przez Discord'}
             </button>
 
-            <p className="text-xs text-slate-500 text-center font-crimson mt-0.5">
+            <p className="text-sm text-slate-500 text-center font-crimson font-semibold mt-0.5">
               Logowanie w chmurze synchronizuje postęp między urządzeniami
             </p>
           </div>

@@ -311,6 +311,9 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
       this.physics.world.setBounds(0, 0, WORLD_W, WORLD_H);
       this.cameras.main.setBounds(0, 0, WORLD_W, WORLD_H);
 
+      // NUCLEAR FALLBACK: solid rectangle so the world is NEVER black
+      this.add.rectangle(WORLD_W / 2, WORLD_H / 2, WORLD_W, WORLD_H, 0x2d2d2d).setDepth(-2);
+
       this.renderGround(rng);
       this.renderBiomeDecorations(rng);
       this.renderCities(rng);
@@ -356,14 +359,12 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
 
       // STEP 2: Overlay floor tiles on top for texture detail
       const floorKeys = ['floor_0','floor_1','floor_2','floor_3'];
-      // Verify at least one floor texture loaded
-      const hasFloorTex = floorKeys.some(k => this.textures.exists(k));
-      if (hasFloorTex) {
+      const validFloorKeys = floorKeys.filter(k => this.textures.exists(k));
+      if (validFloorKeys.length > 0) {
         for (const biome of BIOMES) {
           for (let x = biome.x; x < biome.x + biome.w; x += TILE_SCALED) {
             for (let y = biome.y; y < biome.y + biome.h; y += TILE_SCALED) {
-              const key = floorKeys[Math.floor(rng() * floorKeys.length)];
-              if (!this.textures.exists(key)) continue;
+              const key = validFloorKeys[Math.floor(rng() * validFloorKeys.length)];
               this.add.image(x + TILE_SCALED / 2, y + TILE_SCALED / 2, key)
                 .setScale(TILE_SCALE).setDepth(0).setTint(biome.groundTint);
             }
@@ -641,12 +642,14 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
 
     /* ── PURGE MOBS NEAR SPAWN ───────────────────────── */
     purgeSpawnZone() {
-      const safeX = CITIES[0].x, safeY = CITIES[0].y;
-      for (let i = this.enemies.length - 1; i >= 0; i--) {
-        const e = this.enemies[i];
-        if (Phaser.Math.Distance.Between(safeX, safeY, e.x, e.y) < 1000) {
-          e.hpBg?.destroy(); e.hpFg?.destroy(); e.nameLabel?.destroy(); e.bossGlow?.destroy(); e.destroy();
-          this.enemies.splice(i, 1);
+      const SAFE_RADIUS = 1000;
+      for (const city of CITIES) {
+        for (let i = this.enemies.length - 1; i >= 0; i--) {
+          const e = this.enemies[i];
+          if (Phaser.Math.Distance.Between(city.x, city.y, e.x, e.y) < SAFE_RADIUS) {
+            e.hpBg?.destroy(); e.hpFg?.destroy(); e.nameLabel?.destroy(); e.bossGlow?.destroy(); e.destroy();
+            this.enemies.splice(i, 1);
+          }
         }
       }
     }
@@ -1595,23 +1598,23 @@ export default function GameMap({ dispatch, player }) {
       <div ref={containerRef} className="w-full h-full" />
 
       {/* ── Health & Mana Orbs ─── */}
-      <div className="absolute bottom-4 left-4 flex items-end gap-4 z-50">
-        <div className="relative w-20 h-20">
-          <div className="absolute inset-0 rounded-full border-2 border-red-900 bg-gray-950 overflow-hidden">
+      <div className="absolute bottom-4 left-4 flex items-end gap-5 z-50">
+        <div className="relative w-36 h-36">
+          <div className="absolute inset-0 rounded-full border-4 border-red-900 bg-gray-950 overflow-hidden">
             <div className="absolute bottom-0 w-full transition-all duration-300" style={{ height: `${hpPct}%`, background: 'radial-gradient(circle at 30% 40%, #ff3333, #881111)' }} />
           </div>
           <div className="absolute inset-0 rounded-full border-2 border-red-700/50" />
           <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-xs font-bold text-white drop-shadow-lg font-cinzel">{Math.floor(ps.hp)}/{ps.maxHp}</span>
+            <span className="text-sm font-bold text-white drop-shadow-lg font-cinzel">{Math.floor(ps.hp)}/{ps.maxHp}</span>
           </div>
         </div>
-        <div className="relative w-20 h-20">
-          <div className="absolute inset-0 rounded-full border-2 border-blue-900 bg-gray-950 overflow-hidden">
+        <div className="relative w-36 h-36">
+          <div className="absolute inset-0 rounded-full border-4 border-blue-900 bg-gray-950 overflow-hidden">
             <div className="absolute bottom-0 w-full transition-all duration-300" style={{ height: `${mpPct}%`, background: 'radial-gradient(circle at 30% 40%, #3366ff, #112288)' }} />
           </div>
           <div className="absolute inset-0 rounded-full border-2 border-blue-700/50" />
           <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-xs font-bold text-white drop-shadow-lg font-cinzel">{Math.floor(ps.mana)}/{ps.maxMana}</span>
+            <span className="text-sm font-bold text-white drop-shadow-lg font-cinzel">{Math.floor(ps.mana)}/{ps.maxMana}</span>
           </div>
         </div>
       </div>

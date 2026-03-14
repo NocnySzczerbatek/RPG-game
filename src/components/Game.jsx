@@ -38,12 +38,20 @@ const GameOver = ({ player, dispatch }) => (
       <p className="text-slate-500 font-crimson text-base mb-6">
         {player?.name ?? 'Bohater'} poległ w ciemnościach. Jego imię przepadło razem z nim.
       </p>
-      <button
-        onClick={() => dispatch({ type: 'RESET_GAME' })}
-        className="btn-gothic px-8 py-3"
-      >
-        Nowa Gra
-      </button>
+      <div className="flex flex-col gap-3">
+        <button
+          onClick={() => dispatch({ type: 'RESURRECT' })}
+          className="btn-gothic px-8 py-3 border-amber-700 text-amber-400 hover:border-amber-500"
+        >
+          ⚡ Wskrześ (powrót do mapy)
+        </button>
+        <button
+          onClick={() => dispatch({ type: 'RESET_GAME' })}
+          className="px-8 py-3 bg-slate-800 border border-slate-700 text-slate-400 font-cinzel text-sm rounded hover:border-slate-600 transition-all"
+        >
+          Nowa Gra
+        </button>
+      </div>
     </div>
   </div>
 );

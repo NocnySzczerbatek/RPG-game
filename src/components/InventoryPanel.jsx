@@ -21,7 +21,7 @@ const SLOT_LABELS = {
   amulet: '\uD83D\uDCFF Amulet',
 };
 
-const getItemData = (id) => ITEMS?.find(i => i.id === id) || ITEMS?.[id] || null;
+const getItemData = (id) => ITEMS?.[id] || null;
 
 const ItemSlot = ({ item, onClick, selected, size = 'normal' }) => {
   if (!item) {

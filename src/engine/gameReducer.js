@@ -171,6 +171,11 @@ export const gameReducer = (state, action) => {
     case 'LOAD_GAME': {
       const save = loadGame();
       if (!save) return state;
+      // Ensure player is never loaded with 0 HP
+      if (save.player) {
+        if (!save.player.hp || save.player.hp <= 0) save.player.hp = save.player.maxHp || 100;
+        if (!save.player.mana || save.player.mana <= 0) save.player.mana = save.player.maxMana || 50;
+      }
       return {
         ...createInitialGameState(),
         ...save,
@@ -185,9 +190,14 @@ export const gameReducer = (state, action) => {
     case 'LOAD_CLOUD_SAVE': {
       const cloud = action.payload;
       if (!cloud || !cloud.player) return state;
+      // Ensure player is never loaded with 0 HP (prevents death loop)
+      const p = { ...cloud.player };
+      if (!p.hp || p.hp <= 0) p.hp = p.maxHp || 100;
+      if (!p.mana || p.mana <= 0) p.mana = p.maxMana || 50;
       return {
         ...createInitialGameState(),
         ...cloud,
+        player: p,
         screen: 'world_map',
         notifications: [{ id: Date.now(), message: '☁ Zapis z chmury wczytany!', type: 'success' }],
         combat: null,
@@ -707,6 +717,23 @@ export const gameReducer = (state, action) => {
         },
         combat: null,
         notifications: [{ id: Date.now(), message: 'Poległeś... Budzisz się w mieście.', type: 'error' }],
+      };
+
+    // ── RESURRECT — return to world map with full HP ────────
+    case 'RESURRECT':
+      if (!state.player) return { ...createInitialGameState(), screen: 'title' };
+      return {
+        ...state,
+        screen: 'world_map',
+        player: {
+          ...state.player,
+          hp: state.player.maxHp,
+          mana: state.player.maxMana,
+          statusEffects: [],
+          skillCooldowns: {},
+        },
+        combat: null,
+        notifications: [{ id: Date.now(), message: '⚡ Wskrzeszony! Wracasz do mapy.', type: 'success' }],
       };
 
     case 'RESET_GAME':
