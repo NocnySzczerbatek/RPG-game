@@ -324,6 +324,7 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
       this.isDashing = false; this.mouseWorldPos = { x: 0, y: 0 };
       this.dialogueActive = false; this.moveTarget = null; this.moveMarker = null;
       this.activeQuests = []; this.completedQuestIds = []; this.saveTimer = 0;
+      this.staticObjects = null; this.respawnTimer = 0;
       this._loadQuestState();
     }
 
@@ -447,6 +448,7 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
       this.add.rectangle(WORLD_W / 2, WORLD_H / 2, WORLD_W, WORLD_H, 0x2d4a1e).setDepth(-2);
 
       this.renderGround(rng);
+      this.staticObjects = this.physics.add.staticGroup();
       this.renderBiomeDecorations(rng);
       this.renderCities(rng);
       this.spawnAllEnemies(rng);
@@ -454,6 +456,7 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
       this.spawnChests(rng);
       this.spawnFetchItems(rng);
       this.createPlayer();
+      this.physics.add.collider(this.knight, this.staticObjects);
       this.cameras.main.startFollow(this.knight, true, 0.08, 0.08);
       this.purgeSpawnZone();
       this.setupInput();
@@ -603,8 +606,13 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
           const tx = pt.x, ty = pt.y;
           if (isInSafeZone(tx, ty)) continue;
           const tn = b.treePalette[Math.floor(rng() * b.treePalette.length)];
-          if (this.textures.exists(`tree_${tn}`))
-            this.add.image(tx, ty, `tree_${tn}`).setScale(SPRITE_SCALE * (0.8 + rng() * 0.4)).setDepth(ty + 40).setAlpha(0.9 + rng() * 0.1);
+          if (this.textures.exists(`tree_${tn}`)) {
+            const treeImg = this.add.image(tx, ty, `tree_${tn}`).setScale(SPRITE_SCALE * (0.8 + rng() * 0.4)).setDepth(ty + 40).setAlpha(0.9 + rng() * 0.1);
+            // Collision body at tree base
+            const col = this.staticObjects.create(tx, ty + 20, null).setVisible(false);
+            col.body.setSize(24, 16).setOffset(-12, -8);
+            col.body.immovable = true;
+          }
         }
         // Rocks from craftpix-974061
         for (let i = 0, n = 15 + Math.floor(rng() * 10); i < n; i++) {
@@ -612,8 +620,13 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
           const rx = pt.x, ry = pt.y;
           if (isInSafeZone(rx, ry)) continue;
           const rk = `rock_${1 + Math.floor(rng() * 8)}`;
-          if (this.textures.exists(rk))
-            this.add.image(rx, ry, rk).setScale(SPRITE_SCALE * (0.6 + rng() * 0.5)).setDepth(ry + 10);
+          if (this.textures.exists(rk)) {
+            const rockImg = this.add.image(rx, ry, rk).setScale(SPRITE_SCALE * (0.6 + rng() * 0.5)).setDepth(ry + 10);
+            // Collision body at rock center
+            const col = this.staticObjects.create(rx, ry, null).setVisible(false);
+            col.body.setSize(20, 14).setOffset(-10, -7);
+            col.body.immovable = true;
+          }
         }
       }
     }
@@ -624,21 +637,47 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
     renderCities(rng) {
       CITIES.forEach(city => {
         const biome = BIOMES.find(b => b.id === city.biome);
-        // Ground platform (cobblestone from floor_tiles)
+        // Extended ground platform (larger for expanded towns)
         const cg = this.add.graphics().setDepth(0.8);
-        cg.fillStyle(0x554433, 0.6); cg.fillRoundedRect(city.x - 200, city.y - 180, 400, 360, 24);
-        cg.fillStyle(0x665544, 0.35); cg.fillRoundedRect(city.x - 180, city.y - 160, 360, 320, 18);
+        cg.fillStyle(0x554433, 0.6); cg.fillRoundedRect(city.x - 320, city.y - 280, 640, 560, 28);
+        cg.fillStyle(0x665544, 0.35); cg.fillRoundedRect(city.x - 300, city.y - 260, 600, 520, 22);
 
-        // Lay floor_tiles on the city ground
+        // Lay stone path tiles on city ground (larger area)
         if (this.textures.exists('floor_tiles')) {
           const totalFrames = this.textures.get('floor_tiles').frameTotal - 1;
           const cityStep = TILE_SCALED * 2;
-          for (let fx = city.x - 180; fx < city.x + 180; fx += cityStep) {
-            for (let fy = city.y - 160; fy < city.y + 160; fy += cityStep) {
+          for (let fx = city.x - 300; fx < city.x + 300; fx += cityStep) {
+            for (let fy = city.y - 260; fy < city.y + 260; fy += cityStep) {
               const fr = Math.min(Math.floor(rng() * 4), totalFrames - 1);
               this.add.image(fx + cityStep/2, fy + cityStep/2, 'floor_tiles', fr)
                 .setScale(TILE_SCALE * 2).setDepth(0.85).setAlpha(0.55);
             }
+          }
+        }
+
+        // Fence perimeter
+        if (this.textures.exists('exterior_tiles')) {
+          const extTotal = this.textures.get('exterior_tiles').frameTotal - 1;
+          const fenceFrame = Math.min(60, extTotal - 1); // fence-like frame
+          const fenceStep = TILE_SCALED;
+          // Top and bottom fences
+          for (let fx = city.x - 300; fx <= city.x + 300; fx += fenceStep) {
+            this.add.image(fx, city.y - 270, 'exterior_tiles', fenceFrame).setScale(TILE_SCALE).setDepth(city.y - 270 + 100);
+            this.add.image(fx, city.y + 270, 'exterior_tiles', fenceFrame).setScale(TILE_SCALE).setDepth(city.y + 270 + 100);
+            // Collision for fences
+            const colT = this.staticObjects.create(fx, city.y - 270, null).setVisible(false);
+            colT.body.setSize(TILE_SCALED, 12).setOffset(-TILE_SCALED/2, -6); colT.body.immovable = true;
+            const colB = this.staticObjects.create(fx, city.y + 270, null).setVisible(false);
+            colB.body.setSize(TILE_SCALED, 12).setOffset(-TILE_SCALED/2, -6); colB.body.immovable = true;
+          }
+          // Left and right fences
+          for (let fy = city.y - 270; fy <= city.y + 270; fy += fenceStep) {
+            this.add.image(city.x - 310, fy, 'exterior_tiles', fenceFrame).setScale(TILE_SCALE).setDepth(fy + 100);
+            this.add.image(city.x + 310, fy, 'exterior_tiles', fenceFrame).setScale(TILE_SCALE).setDepth(fy + 100);
+            const colL = this.staticObjects.create(city.x - 310, fy, null).setVisible(false);
+            colL.body.setSize(12, TILE_SCALED).setOffset(-6, -TILE_SCALED/2); colL.body.immovable = true;
+            const colR = this.staticObjects.create(city.x + 310, fy, null).setVisible(false);
+            colR.body.setSize(12, TILE_SCALED).setOffset(-6, -TILE_SCALED/2); colR.body.immovable = true;
           }
         }
 
@@ -649,22 +688,26 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
         const extTotal = hasExterior ? this.textures.get('exterior_tiles').frameTotal - 1 : 0;
         const houseTotal = hasHouse ? this.textures.get('house_tiles').frameTotal - 1 : 0;
 
-        // Building positions around city center
+        // Expanded building positions (12 positions for larger towns)
         const buildingPositions = [
-          { x: city.x - 120, y: city.y - 80 },
-          { x: city.x + 100, y: city.y - 60 },
-          { x: city.x - 80,  y: city.y + 80 },
-          { x: city.x + 120, y: city.y + 60 },
-          { x: city.x,       y: city.y - 120 },
-          { x: city.x - 140, y: city.y + 20 },
+          { x: city.x - 200, y: city.y - 160 },
+          { x: city.x - 60,  y: city.y - 170 },
+          { x: city.x + 100, y: city.y - 150 },
+          { x: city.x + 220, y: city.y - 120 },
+          { x: city.x - 220, y: city.y - 30 },
+          { x: city.x - 100, y: city.y + 10 },
+          { x: city.x + 140, y: city.y - 20 },
+          { x: city.x + 240, y: city.y + 40 },
+          { x: city.x - 200, y: city.y + 120 },
+          { x: city.x - 50,  y: city.y + 140 },
+          { x: city.x + 100, y: city.y + 130 },
+          { x: city.x + 230, y: city.y + 160 },
         ];
-        const count = 4 + Math.floor(rng() * 3);
+        const count = 8 + Math.floor(rng() * 5);
         for (let i = 0; i < Math.min(count, buildingPositions.length); i++) {
           const bp = buildingPositions[i];
           if (hasExterior && extTotal > 10) {
-            // Compose a 3×4 tile building from exterior spritesheet
-            // Exterior tiles: rows of building parts (walls, roofs, windows, doors)
-            const wallBase = Math.floor(rng() * 4) * 15; // Different building "rows"
+            const wallBase = Math.floor(rng() * 4) * 15;
             for (let tx = 0; tx < 3; tx++) {
               for (let ty = 0; ty < 4; ty++) {
                 const frameIdx = Math.min(wallBase + ty * 15 + tx, extTotal - 1);
@@ -676,7 +719,6 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
               }
             }
           } else if (hasHouse && houseTotal > 5) {
-            // Compose from house_tiles: 2×3 tile building
             for (let tx = 0; tx < 2; tx++) {
               for (let ty = 0; ty < 3; ty++) {
                 const frameIdx = Math.min(ty * 10 + tx + Math.floor(rng() * 3), houseTotal - 1);
@@ -688,7 +730,6 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
               }
             }
           } else {
-            // Fallback: drawn building
             const fg = this.add.graphics().setDepth(bp.y + 100);
             const bw = 60 + rng() * 40, bh = 50 + rng() * 30;
             fg.fillStyle(0x000000, 0.3); fg.fillRect(bp.x-bw/2+4, bp.y-bh/2+4, bw, bh);
@@ -697,6 +738,10 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
             const rc = biome.id === 'volcanic' ? 0x881100 : biome.id === 'ice' ? 0x4466aa : 0x884422;
             fg.fillStyle(rc); fg.fillTriangle(bp.x-bw/2-8, bp.y-bh/2, bp.x, bp.y-bh/2-28, bp.x+bw/2+8, bp.y-bh/2);
           }
+          // Collision body at building base
+          const col = this.staticObjects.create(bp.x, bp.y + TILE_SCALED, null).setVisible(false);
+          col.body.setSize(TILE_SCALED * 2.5, TILE_SCALED * 1.2).setOffset(-TILE_SCALED * 1.25, -TILE_SCALED * 0.6);
+          col.body.immovable = true;
         }
 
         // Shop building (uses shop.png from loose sprites)
@@ -982,6 +1027,30 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
       this.syncPlayerState();
       this.saveTimer += delta;
       if (this.saveTimer > 10000) { this.saveTimer = 0; this._saveToLocalStorage(); }
+      // Periodic mob respawn (every 30 seconds)
+      this.respawnTimer += delta;
+      if (this.respawnTimer >= 30000) {
+        this.respawnTimer = 0;
+        this.periodicRespawn();
+      }
+    }
+
+    periodicRespawn() {
+      const MAX_PER_BIOME = 40;
+      for (const b of BIOMES) {
+        const alive = this.enemies.filter(e => !e.enemyData.isDead && e.enemyData.biome === b.id).length;
+        if (alive >= MAX_PER_BIOME) continue;
+        const toSpawn = Math.min(5, MAX_PER_BIOME - alive);
+        const templates = BIOME_ENEMIES[b.id] || [];
+        if (!templates.length) continue;
+        for (let i = 0; i < toSpawn; i++) {
+          const tmpl = templates[Math.floor(Math.random() * templates.length)];
+          const pt = randomBiomePoint(b, Math.random, 100);
+          if (isInSafeZone(pt.x, pt.y)) continue;
+          if (CITIES.some(c => Math.hypot(c.x - pt.x, c.y - pt.y) < 1000)) continue;
+          this.spawnEnemy(pt.x, pt.y, tmpl, b.id);
+        }
+      }
     }
 
     setPlayerAnim(anim) {
@@ -1246,15 +1315,46 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
     }
 
     spawnLootDrop(x, y, ed) {
-      if (Math.random() >= (ed.isBoss ? 1.0 : 0.3)) return;
-      const loot = this.add.circle(x + (Math.random()-0.5)*30, y + (Math.random()-0.5)*20, 8, 0x44ff44).setDepth(99000).setInteractive();
-      loot.lootData = { type: ed.isBoss ? 'epic' : (Math.random() < 0.2 ? 'rare' : 'common'), lifetime: 30000 };
-      this.tweens.add({ targets: loot, scaleX: 1.3, scaleY: 1.3, yoyo: true, repeat: -1, duration: 500 });
-      loot.on('pointerdown', () => this.pickupLoot(loot)); this.lootDrops.push(loot);
+      // Always drop gold (5-10)
+      const goldAmount = 5 + Math.floor(Math.random() * 6);
+      const goldDrop = this.add.circle(x + (Math.random()-0.5)*30, y + (Math.random()-0.5)*20, 7, 0xffdd44).setDepth(99000).setInteractive();
+      goldDrop.lootData = { type: 'gold', gold: goldAmount, lifetime: 30000 };
+      this.tweens.add({ targets: goldDrop, scaleX: 1.3, scaleY: 1.3, yoyo: true, repeat: -1, duration: 500 });
+      goldDrop.on('pointerdown', () => this.pickupLoot(goldDrop));
+      this.lootDrops.push(goldDrop);
+
+      // Boss always drops epic loot, otherwise 30% chance for rarity loot
+      if (ed.isBoss || Math.random() < 0.3) {
+        const rareLoot = this.add.circle(x + (Math.random()-0.5)*40, y + 10 + (Math.random()-0.5)*20, 8, ed.isBoss ? 0xaa44ff : 0x44ff44).setDepth(99000).setInteractive();
+        rareLoot.lootData = { type: ed.isBoss ? 'epic' : (Math.random() < 0.2 ? 'rare' : 'common'), lifetime: 30000 };
+        this.tweens.add({ targets: rareLoot, scaleX: 1.3, scaleY: 1.3, yoyo: true, repeat: -1, duration: 500 });
+        rareLoot.on('pointerdown', () => this.pickupLoot(rareLoot));
+        this.lootDrops.push(rareLoot);
+      }
+
+      // 20% chance to drop a health potion
+      if (Math.random() < 0.2) {
+        const potionDrop = this.add.circle(x + (Math.random()-0.5)*40, y - 10 + (Math.random()-0.5)*20, 6, 0xff4466).setDepth(99000).setInteractive();
+        potionDrop.lootData = { type: 'potion', lifetime: 30000 };
+        this.tweens.add({ targets: potionDrop, scaleX: 1.2, scaleY: 1.2, yoyo: true, repeat: -1, duration: 600 });
+        potionDrop.on('pointerdown', () => this.pickupLoot(potionDrop));
+        this.lootDrops.push(potionDrop);
+      }
     }
     pickupLoot(loot) {
-      const g = loot.lootData.type === 'epic' ? 50 : loot.lootData.type === 'rare' ? 20 : 5;
-      this.playerState.gold += g; this.spawnDamageText(loot.x, loot.y - 10, `+${g}g ${loot.lootData.type}`, loot.lootData.type === 'epic' ? '#aa44ff' : '#44ff44');
+      if (loot.lootData.type === 'gold') {
+        const g = loot.lootData.gold;
+        this.playerState.gold += g;
+        this.spawnDamageText(loot.x, loot.y - 10, `+${g}g`, '#ffdd44');
+      } else if (loot.lootData.type === 'potion') {
+        const heal = Math.floor(this.playerState.maxHp * 0.25);
+        this.playerState.hp = Math.min(this.playerState.maxHp, this.playerState.hp + heal);
+        this.spawnDamageText(loot.x, loot.y - 10, `+${heal} HP ❤️`, '#ff4466');
+      } else {
+        const g = loot.lootData.type === 'epic' ? 50 : loot.lootData.type === 'rare' ? 20 : 5;
+        this.playerState.gold += g;
+        this.spawnDamageText(loot.x, loot.y - 10, `+${g}g ${loot.lootData.type}`, loot.lootData.type === 'epic' ? '#aa44ff' : '#44ff44');
+      }
       loot.destroy(); this.lootDrops = this.lootDrops.filter(l => l !== loot); this.syncPlayerState();
     }
 
