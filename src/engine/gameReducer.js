@@ -46,11 +46,15 @@ export const createInitialPlayer = (name, playerClass, difficulty) => {
     gold: difficulty === 'hardcore' ? 50 : 100,
     statusEffects: [],
     skillCooldowns: {},
+    statPoints: 0,
+    skillPoints: 0,
+    allocatedSkills: {},
+    bossKeys: 0,
   };
 };
 
 export const createInitialGameState = () => ({
-  screen: 'title',           // title | difficulty | character_creation | city | combat | world_map | shop | forge | inventory | quest_tracker | dialogue | bounty_board | game_over | victory
+  screen: 'title',           // title | difficulty | character_creation | city | combat | world_map | shop | forge | inventory | skill_tree | quest_tracker | dialogue | bounty_board | game_over | victory
   player: null,
   difficulty: 'normal',
   currentCity: 'bastion',
@@ -103,6 +107,9 @@ const applyLevelUp = (player) => {
     p.exp -= EXP_TABLE[p.level - 1];
     p.level += 1;
     leveled = true;
+    // Grant stat points and skill points on level up
+    p.statPoints = (p.statPoints ?? 0) + 3;
+    p.skillPoints = (p.skillPoints ?? 0) + 1;
 
     const newStats = computePlayerStats(p.class, p.level);
     const hpGain = newStats.maxHp - p.maxHp;
@@ -169,6 +176,20 @@ export const gameReducer = (state, action) => {
         ...save,
         screen: 'world_map',
         notifications: [{ id: Date.now(), message: 'Gra wczytana!', type: 'success' }],
+        combat: null,
+        currentNPC: null,
+      };
+    }
+
+    // ── LOAD CLOUD SAVE (from Supabase) ────────────────────
+    case 'LOAD_CLOUD_SAVE': {
+      const cloud = action.payload;
+      if (!cloud || !cloud.player) return state;
+      return {
+        ...createInitialGameState(),
+        ...cloud,
+        screen: 'world_map',
+        notifications: [{ id: Date.now(), message: '☁ Zapis z chmury wczytany!', type: 'success' }],
         combat: null,
         currentNPC: null,
       };
@@ -570,6 +591,59 @@ export const gameReducer = (state, action) => {
     // ── INVENTORY ──────────────────────────────────────────
     case 'OPEN_INVENTORY':
       return { ...state, screen: 'inventory' };
+
+    // ── SKILL TREE ─────────────────────────────────────────
+    case 'OPEN_SKILL_TREE':
+      return { ...state, screen: 'skill_tree' };
+
+    case 'ALLOCATE_STAT': {
+      if (!state.player || (state.player.statPoints ?? 0) <= 0) return state;
+      const { attribute } = action;
+      const validAttrs = ['strength', 'agility', 'intelligence', 'endurance'];
+      if (!validAttrs.includes(attribute)) return state;
+      const newPlayer = {
+        ...state.player,
+        statPoints: (state.player.statPoints ?? 0) - 1,
+        stats: { ...state.player.stats, [attribute]: (state.player.stats?.[attribute] ?? 0) + 1 },
+      };
+      // Bonus HP/Mana from stat allocation
+      if (attribute === 'strength') newPlayer.maxHp = (newPlayer.maxHp ?? 100) + 5;
+      if (attribute === 'endurance') newPlayer.maxHp = (newPlayer.maxHp ?? 100) + 8;
+      if (attribute === 'intelligence') newPlayer.maxMana = (newPlayer.maxMana ?? 50) + 3;
+      const newState = { ...state, player: newPlayer };
+      saveGame(newState);
+      return addNotification(newState, `+1 ${attribute.charAt(0).toUpperCase() + attribute.slice(1)}!`, 'success');
+    }
+
+    case 'ALLOCATE_SKILL': {
+      if (!state.player) return state;
+      const { skillId, cost } = action;
+      const sp = state.player.skillPoints ?? 0;
+      if (sp < cost) return addNotification(state, 'Not enough skill points!', 'error');
+      const allocatedSkills = { ...(state.player.allocatedSkills ?? {}) };
+      allocatedSkills[skillId] = (allocatedSkills[skillId] ?? 0) + 1;
+      const newPlayer = {
+        ...state.player,
+        skillPoints: sp - cost,
+        allocatedSkills,
+      };
+      const newState = { ...state, player: newPlayer };
+      saveGame(newState);
+      return addNotification(newState, `Skill upgraded: ${skillId}!`, 'success');
+    }
+
+    case 'HEAL_AT_HEALER': {
+      if (!state.player || state.player.gold < 20) return addNotification(state, 'Not enough gold! (20g required)', 'error');
+      const newPlayer = {
+        ...state.player,
+        hp: state.player.maxHp,
+        mana: state.player.maxMana,
+        gold: state.player.gold - 20,
+      };
+      const newState = { ...state, player: newPlayer };
+      saveGame(newState);
+      return addNotification(newState, 'Fully healed and restored!', 'success');
+    }
 
     case 'USE_ITEM_OUTSIDE_COMBAT': {
       // Support both instanceId and itemId lookups

@@ -75,3 +75,13 @@
 
 .font-cinzel { font-family: 'Cinzel', serif; }
 .font-crimson { font-family: 'Crimson Text', serif; }
+
+/* Smooth transitions for overlay panels */
+.fixed { animation: fadeIn 0.15s ease-out; }
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Phaser canvas should fill its container */
+canvas { display: block; }

@@ -1,869 +1,1764 @@
 // ============================================================
-// COMPONENT: Diablo-style 2D ARPG World Map (Phaser 3)
-// Real DCSS tileset sprites, particle effects, atmospheric
-// lighting, gothic dark fantasy aesthetic.
+// COMPONENT: Real-Time ARPG World Map (Phaser 3)
+// Point-and-Click movement, QWER cursor-aimed skills,
+// NPC side quests (Kill/Fetch), LocalStorage save,
+// Per-class unique VFX, 5000x5000 world, 6 biomes
 // ============================================================
 import React, { useEffect, useRef, useState } from 'react';
 
-// ── World ─────────────────────────────────────────────────
-const WORLD_W = 4000;
-const WORLD_H = 3200;
-const PLAYER_SPEED = 200;
-const INTERACT_RADIUS = 55;
-const SPRITE_SCALE = 2.5;      // 32px tiles → 80px on screen
-const TILE_SCALED = 32 * SPRITE_SCALE;
+// ── World Constants ───────────────────────────────────────
+const WORLD_W = 5000;
+const WORLD_H = 5000;
+const TILE_SIZE = 32;
+const TILE_SCALE = 2.5;
+const TILE_SCALED = TILE_SIZE * TILE_SCALE;
+const PLAYER_SPEED = 220;
+const INTERACT_RADIUS = 80;
+const SPRITE_SCALE = 2;
+const SAVE_KEY = 'eldoria_arpg_save_v2';
 
-// ── Enemy spawns ──────────────────────────────────────────
-const ENEMY_SPAWNS = [
-  { x: 900,  y: 600,  enemyId: 'skeleton_guard',     label: 'Szkielet Strażnik',  isBoss: false, sprite: 'spr_skeleton_guard' },
-  { x: 1400, y: 450,  enemyId: 'corrupted_hound',    label: 'Skaźony Kundel',     isBoss: false, sprite: 'spr_corrupted_hound' },
-  { x: 650,  y: 1100, enemyId: 'ruin_crawler',        label: 'Pełzacz Ruin',       isBoss: false, sprite: 'spr_ruin_crawler' },
-  { x: 1800, y: 900,  enemyId: 'fallen_knight',      label: 'Upadły Rycerz',      isBoss: false, sprite: 'spr_fallen_knight' },
-  { x: 2500, y: 600,  enemyId: 'wraith_archer',      label: 'Łucznik-Widmo',      isBoss: false, sprite: 'spr_wraith_archer' },
-  { x: 2200, y: 1500, enemyId: 'void_acolyte',       label: 'Akolita Pustki',     isBoss: false, sprite: 'spr_void_acolyte' },
-  { x: 3100, y: 1100, enemyId: 'stone_sentinel',     label: 'Kamienny Strażnik',  isBoss: false, sprite: 'spr_stone_sentinel' },
-  { x: 3300, y: 700,  enemyId: 'skeleton_guard',     label: 'Szkielet Strażnik',  isBoss: false, sprite: 'spr_skeleton_guard' },
-  { x: 1200, y: 1700, enemyId: 'corrupted_hound',    label: 'Skaźony Kundel',     isBoss: false, sprite: 'spr_corrupted_hound' },
-  { x: 2800, y: 1800, enemyId: 'fallen_knight',      label: 'Upadły Rycerz',      isBoss: false, sprite: 'spr_fallen_knight' },
-  { x: 1900, y: 2400, enemyId: 'the_undying_warden', label: 'Nieśmiertelny Strażnik', isBoss: true, sprite: 'spr_boss_warden' },
+// ── Asset path helpers ────────────────────────────────────
+const SP = 'assets/sprites/';
+const TREES_DIR = `${SP}craftpix-net-385863-free-top-down-trees-pixel-art/PNG/Assets_separately/Trees/`;
+const ROCKS_DIR = `${SP}craftpix-net-974061-free-rocks-and-stones-top-down-pixel-art/PNG/Objects_separately/`;
+const ORC_DIR = `${SP}craftpix-net-363992-free-top-down-orc-game-character-pixel-art/PNG/`;
+const SLIME_DIR = `${SP}craftpix-net-788364-free-slime-mobs-pixel-art-top-down-sprite-pack/PNG/`;
+const MONSTER_DIR = `${SP}craftpix-561178-free-rpg-monster-sprites-pixel-art/PNG/`;
+const CHAR_DIR = `${SP}craftpix-net-555940-free-base-4-direction-male-character-pixel-art/PNG/`;
+const HOME_DIR = `${SP}craftpix-net-654184-main-characters-home-free-top-down-pixel-art-asset/PNG/`;
+
+// ── Biome Definitions ─────────────────────────────────────
+const BIOMES = [
+  { id: 'forest',   name: 'Verdant Forest',   color: 0x2d5a1e, x: 0,    y: 0,    w: 2500, h: 2500, groundTint: 0x3a7a2a, treePalette: ['Tree1','Tree2','Tree3','Flower_tree1','Moss_tree1'] },
+  { id: 'desert',   name: 'Scorched Desert',  color: 0x8a7540, x: 2500, y: 0,    w: 2500, h: 2500, groundTint: 0xc4a84a, treePalette: ['Palm_tree1_1','Palm_tree2_1','Burned_tree1'] },
+  { id: 'ice',      name: 'Frozen Wastes',    color: 0x4a6a8a, x: 0,    y: 2500, w: 2500, h: 1250, groundTint: 0x8ab8d8, treePalette: ['Snow_tree1','Snow_tree2','Snow_christmass_tree1','Christmas_tree1'] },
+  { id: 'volcanic', name: 'Volcanic Caldera',  color: 0x5a1a0a, x: 2500, y: 2500, w: 2500, h: 1250, groundTint: 0x8a2a0a, treePalette: ['Burned_tree1','Burned_tree2','Burned_tree3','Broken_tree1'] },
+  { id: 'swamp',    name: 'Blighted Swamp',   color: 0x2a3a1a, x: 0,    y: 3750, w: 2500, h: 1250, groundTint: 0x3a4a2a, treePalette: ['Moss_tree1','Moss_tree2','Moss_tree3','Broken_tree4','Broken_tree5'] },
+  { id: 'mountain', name: 'Ashen Peaks',      color: 0x4a4a4a, x: 2500, y: 3750, w: 2500, h: 1250, groundTint: 0x6a6a6a, treePalette: ['Broken_tree6','Broken_tree7','Autumn_tree1','Autumn_tree2'] },
 ];
 
-// ── NPC positions ─────────────────────────────────────────
-const NPC_DATA = [
-  { x: 460, y: 340, id: 'merchant_goran', label: 'Goran — Kupiec', icon: '🏪' },
+// ── City data per biome ───────────────────────────────────
+const CITIES = [
+  { id: 'eldergrove', biome: 'forest',   x: 1250, y: 1200, name: 'Eldergrove',  subtitle: 'Heart of the Forest' },
+  { id: 'sunhold',    biome: 'desert',   x: 3750, y: 1200, name: 'Sunhold',     subtitle: 'Jewel of the Sands' },
+  { id: 'frostholm',  biome: 'ice',      x: 1250, y: 3100, name: 'Frostholm',   subtitle: 'Citadel of Eternal Ice' },
+  { id: 'emberpeak',  biome: 'volcanic', x: 3750, y: 3100, name: 'Emberpeak',   subtitle: 'Forge of the World' },
+  { id: 'mirewood',   biome: 'swamp',    x: 1250, y: 4300, name: 'Mirewood',    subtitle: 'The Sunken Village' },
+  { id: 'ironspire',  biome: 'mountain', x: 3750, y: 4300, name: 'Ironspire',   subtitle: 'Summit Stronghold' },
 ];
 
-// ── Buildings ─────────────────────────────────────────────
-const BUILDINGS = [
-  { x: 320, y: 320, w: 120, h: 100, label: 'Sklep Gorana',    color: 0x5a3a1a, roofColor: 0x8b1a1a, spriteKey: 'spr_shop' },
-  { x: 600, y: 200, w: 100, h: 80,  label: 'Dom Strażników',  color: 0x4a3a2a, roofColor: 0x6b4423, spriteKey: 'spr_door' },
-  { x: 180, y: 600, w: 140, h: 90,  label: 'Kaplica',         color: 0x3a3a4a, roofColor: 0x444466, spriteKey: 'spr_altar' },
-  { x: 550, y: 520, w: 90,  h: 70,  label: 'Zbrojownia',      color: 0x4a3020, roofColor: 0x7a2020, spriteKey: 'spr_shop_weapon' },
-];
+// ── NPC archetypes per city ───────────────────────────────
+const CITY_NPCS = CITIES.flatMap(city => [
+  { id: `${city.id}_blacksmith`, cityId: city.id, x: city.x - 100, y: city.y + 50, label: 'Blacksmith', role: 'blacksmith', icon: '\u2692\uFE0F' },
+  { id: `${city.id}_healer`,    cityId: city.id, x: city.x + 100, y: city.y + 50, label: 'Healer',     role: 'healer',     icon: '\uD83D\uDC9A' },
+  { id: `${city.id}_quest`,     cityId: city.id, x: city.x,       y: city.y - 80, label: 'Quest Board', role: 'questgiver', icon: '\u2757' },
+]);
 
-// ── Portals ───────────────────────────────────────────────
-const PORTALS = [
-  { x: 3800, y: 2900, label: 'Portal do Iglicza', targetCity: 'iglieze',  spriteKey: 'spr_portal_purple' },
-  { x: 3800, y: 400,  label: 'Portal do Cytadeli', targetCity: 'cytadela', spriteKey: 'spr_portal_red' },
-];
-
-// ── Tree & rock placements ────────────────────────────────
-const TREES = [
-  [100,150],[250,100],[3800,150],[3700,280],[80,900],[170,1050],
-  [1700,150],[1850,260],[3500,750],[3600,900],[300,1850],[450,1970],
-  [1900,1500],[2050,1620],[2400,500],[2500,650],[700,1480],[810,1610],
-  [1250,1980],[1150,2150],[2750,1650],[2850,1850],[500,2280],[620,2380],
-  [380,650],[300,1320],[1680,1170],[2530,1970],[920,370],[3150,1370],
-  [580,1680],[1080,1970],[2050,360],[2830,560],[360,2070],[1580,2170],
-  [3400,1600],[3500,2100],[3200,2400],[2600,2600],[1000,2600],[400,2800],
-  [3700,1200],[3600,500],[3100,300],[2200,200],[1500,100],[800,2400],
-];
-
-const ROCKS = [
-  [680,220],[1280,420],[2030,770],[2720,380],[480,1270],[1780,620],
-  [1080,1470],[2420,1070],[880,1770],[3020,670],[1480,2070],[2220,1670],
-  [3350,1900],[3100,2200],[2900,2500],[1600,2800],[600,2600],[200,2200],
-];
-
-// ── Decorative placements ─────────────────────────────────
-const COLUMNS = [
-  [760,340],[1580,340],[2320,340],[3050,340],
-  [350,800],[350,1300],[350,1800],[350,2300],
-  [1800,700],[1800,1200],[2500,900],[2500,1400],
-];
-
-const STATUES = [
-  [200,300],[540,170],[700,550],[1200,200],[2000,180],[2700,250],
-];
-
-const FOUNTAINS = [
-  [420,500],[1600,500],[2600,1600],[1000,1800],
-];
-
-const CHESTS = [
-  [1000,300],[2100,400],[3000,500],[1500,1500],[2500,2000],[800,2200],
-];
-
-// ── Sprite asset map ──────────────────────────────────────
-const SPRITE_ASSETS = {
-  spr_knight:           'assets/sprites/knight.png',
-  spr_skeleton_guard:   'assets/sprites/skeleton_guard.png',
-  spr_corrupted_hound:  'assets/sprites/corrupted_hound.png',
-  spr_ruin_crawler:     'assets/sprites/ruin_crawler.png',
-  spr_fallen_knight:    'assets/sprites/fallen_knight.png',
-  spr_wraith_archer:    'assets/sprites/wraith_archer.png',
-  spr_void_acolyte:     'assets/sprites/void_acolyte.png',
-  spr_stone_sentinel:   'assets/sprites/stone_sentinel.png',
-  spr_boss_warden:      'assets/sprites/boss_warden.png',
-  spr_npc_merchant:     'assets/sprites/npc_merchant.png',
-  spr_tree_1:           'assets/sprites/tree_1.png',
-  spr_tree_2:           'assets/sprites/tree_2.png',
-  spr_tree_3:           'assets/sprites/tree_3.png',
-  spr_portal_purple:    'assets/sprites/portal_purple.png',
-  spr_portal_red:       'assets/sprites/portal_red.png',
-  spr_shop:             'assets/sprites/shop.png',
-  spr_shop_weapon:      'assets/sprites/shop_weapon.png',
-  spr_door:             'assets/sprites/door.png',
-  spr_altar:            'assets/sprites/altar.png',
-  spr_fountain:         'assets/sprites/fountain.png',
-  spr_chest:            'assets/sprites/chest.png',
-  spr_statue:           'assets/sprites/statue.png',
-  spr_column:           'assets/sprites/column.png',
-  spr_wall_0:           'assets/sprites/wall_0.png',
-  spr_wall_1:           'assets/sprites/wall_1.png',
-  spr_floor_0:          'assets/sprites/floor_0.png',
-  spr_floor_1:          'assets/sprites/floor_1.png',
-  spr_floor_2:          'assets/sprites/floor_2.png',
-  spr_floor_3:          'assets/sprites/floor_3.png',
-  spr_road:             'assets/sprites/road_tile.png',
-  spr_torch_0:          'assets/sprites/torch_0.png',
-  spr_torch_1:          'assets/sprites/torch_1.png',
-  spr_torch_2:          'assets/sprites/torch_2.png',
-  spr_torch_3:          'assets/sprites/torch_3.png',
-  spr_torch_4:          'assets/sprites/torch_4.png',
+// ── Enemy spawn templates per biome ───────────────────────
+const BIOME_ENEMIES = {
+  forest:   [
+    { type: 'slime1',   hp: 40,  atk: 8,  def: 2,  exp: 15,  gold: 5,  name: 'Green Slime',   sprite: 'slime1', isBoss: false },
+    { type: 'slime2',   hp: 55,  atk: 12, def: 4,  exp: 22,  gold: 8,  name: 'Blue Slime',    sprite: 'slime2', isBoss: false },
+    { type: 'orc1',     hp: 80,  atk: 18, def: 8,  exp: 35,  gold: 15, name: 'Orc Grunt',     sprite: 'orc1',   isBoss: false },
+  ],
+  desert:   [
+    { type: 'lizard',   hp: 70,  atk: 22, def: 6,  exp: 40,  gold: 18, name: 'Sand Lizard',   sprite: 'lizard', isBoss: false },
+    { type: 'medusa',   hp: 100, atk: 28, def: 10, exp: 55,  gold: 25, name: 'Desert Medusa',  sprite: 'medusa', isBoss: false },
+    { type: 'orc2',     hp: 90,  atk: 25, def: 12, exp: 45,  gold: 20, name: 'Desert Orc',    sprite: 'orc2',   isBoss: false },
+  ],
+  ice:      [
+    { type: 'slime3',   hp: 60,  atk: 15, def: 8,  exp: 30,  gold: 12, name: 'Frost Slime',   sprite: 'slime3', isBoss: false },
+    { type: 'orc3',     hp: 100, atk: 30, def: 15, exp: 50,  gold: 22, name: 'Frost Orc',     sprite: 'orc3',   isBoss: false },
+  ],
+  volcanic: [
+    { type: 'demon',    hp: 150, atk: 40, def: 18, exp: 80,  gold: 40, name: 'Magma Demon',   sprite: 'demon',  isBoss: false },
+    { type: 'sdragon',  hp: 120, atk: 35, def: 14, exp: 65,  gold: 30, name: 'Fire Drake',    sprite: 'small_dragon', isBoss: false },
+  ],
+  swamp:    [
+    { type: 'slime1_s', hp: 50,  atk: 10, def: 5,  exp: 20,  gold: 8,  name: 'Poison Slime',  sprite: 'slime1', isBoss: false },
+    { type: 'jinn',     hp: 90,  atk: 24, def: 10, exp: 45,  gold: 20, name: 'Swamp Jinn',    sprite: 'jinn',   isBoss: false },
+  ],
+  mountain: [
+    { type: 'orc3_m',   hp: 130, atk: 35, def: 20, exp: 70,  gold: 35, name: 'Mountain Orc',  sprite: 'orc3',   isBoss: false },
+    { type: 'dragon',   hp: 200, atk: 50, def: 25, exp: 120, gold: 60, name: 'Elder Dragon',  sprite: 'dragon', isBoss: false },
+  ],
 };
 
-// ── Main Phaser launcher ──────────────────────────────────
-function launchPhaser(Phaser, container, playerName, dispatchRef, playerDataRef) {
-  class GameScene extends Phaser.Scene {
+const BIOME_BOSSES = {
+  forest:   { type: 'boss_orc',    hp: 500,  atk: 45,  def: 20, exp: 300,  gold: 150, name: 'Warchief Grommash', sprite: 'orc1',   isBoss: true },
+  desert:   { type: 'boss_medusa', hp: 600,  atk: 55,  def: 25, exp: 400,  gold: 200, name: 'Medusa Queen',      sprite: 'medusa', isBoss: true },
+  ice:      { type: 'boss_frost',  hp: 700,  atk: 60,  def: 30, exp: 500,  gold: 250, name: 'Frost Titan',       sprite: 'orc3',   isBoss: true },
+  volcanic: { type: 'boss_demon',  hp: 900,  atk: 75,  def: 35, exp: 700,  gold: 350, name: 'Infernal Lord',     sprite: 'demon',  isBoss: true },
+  swamp:    { type: 'boss_jinn',   hp: 650,  atk: 50,  def: 22, exp: 450,  gold: 225, name: 'Jinn Overlord',     sprite: 'jinn',   isBoss: true },
+  mountain: { type: 'boss_dragon', hp: 1200, atk: 90,  def: 40, exp: 1000, gold: 500, name: 'Ancient Wyrm',      sprite: 'dragon', isBoss: true },
+};
+
+// ══════════════════════════════════════════════════════════
+// CLASS-SPECIFIC SKILL DEFINITIONS (per-class QWER)
+// ══════════════════════════════════════════════════════════
+const CLASS_SKILLS = {
+  warrior: {
+    Q: { name: 'Blade Throw',   manaCost: 8,  cooldown: 700,  damage: 1.4, type: 'projectile', color: 0xff4444, desc: 'Throw a spinning blade at cursor' },
+    W: { name: 'Shield Charge', manaCost: 12, cooldown: 2000, damage: 0.5, type: 'dash',       color: 0xffaa44, desc: 'Charge forward with shield' },
+    E: { name: 'Whirlwind',     manaCost: 22, cooldown: 3500, damage: 1.8, type: 'aoe',        color: 0xff6644, desc: 'Spinning slash around you' },
+    R: { name: 'Executioner',   manaCost: 30, cooldown: 7000, damage: 3.5, type: 'strike',     color: 0xff0000, desc: 'Devastating overhead strike' },
+  },
+  mage: {
+    Q: { name: 'Arcane Bolt',   manaCost: 10, cooldown: 600,  damage: 1.6, type: 'projectile', color: 0x00ccff, desc: 'Fire arcane bolt at cursor' },
+    W: { name: 'Blink',         manaCost: 15, cooldown: 1800, damage: 0,   type: 'dash',       color: 0x9944ff, desc: 'Teleport toward cursor' },
+    E: { name: 'Frost Nova',    manaCost: 25, cooldown: 4000, damage: 2.0, type: 'aoe',        color: 0x44ddff, desc: 'Freeze enemies around you' },
+    R: { name: 'Meteor Strike', manaCost: 40, cooldown: 9000, damage: 4.0, type: 'strike',     color: 0xff4400, desc: 'Call a meteor at cursor' },
+  },
+  paladin: {
+    Q: { name: 'Holy Bolt',     manaCost: 10, cooldown: 800,  damage: 1.3, type: 'projectile', color: 0xffdd44, desc: 'Holy projectile at cursor' },
+    W: { name: 'Divine Leap',   manaCost: 14, cooldown: 2200, damage: 0.3, type: 'dash',       color: 0xffff88, desc: 'Leap toward cursor with light' },
+    E: { name: 'Consecration',  manaCost: 28, cooldown: 4500, damage: 1.6, type: 'aoe',        color: 0xffee00, desc: 'Sanctify ground around you' },
+    R: { name: 'Divine Smite',  manaCost: 35, cooldown: 8000, damage: 3.2, type: 'strike',     color: 0xffffff, desc: 'Heavenly strike at cursor' },
+  },
+  ninja: {
+    Q: { name: 'Shuriken',      manaCost: 6,  cooldown: 500,  damage: 1.2, type: 'projectile', color: 0x88ff88, desc: 'Throw a shuriken at cursor' },
+    W: { name: 'Shadow Step',   manaCost: 12, cooldown: 1500, damage: 0,   type: 'dash',       color: 0x444444, desc: 'Vanish and reappear at cursor' },
+    E: { name: 'Smoke Bomb',    manaCost: 20, cooldown: 3500, damage: 1.5, type: 'aoe',        color: 0x666688, desc: 'Poison cloud around you' },
+    R: { name: 'Assassination', manaCost: 30, cooldown: 7000, damage: 4.0, type: 'strike',     color: 0xcc00cc, desc: 'Lethal strike from shadows' },
+  },
+};
+
+// Helper to get skills for a class, fallback to warrior
+export const getClassSkills = (cls) => CLASS_SKILLS[cls] || CLASS_SKILLS.warrior;
+export const SKILLS = CLASS_SKILLS.warrior; // default export for HUD compat
+
+// ══════════════════════════════════════════════════════════
+// SIDE QUEST TEMPLATES (Kill / Fetch)
+// ══════════════════════════════════════════════════════════
+const QUEST_TEMPLATES = {
+  forest: [
+    { id: 'fq1', type: 'kill', target: 'slime1',  count: 5,  name: 'Slime Infestation',  desc: 'Kill 5 Green Slimes', reward: { gold: 30, exp: 60 } },
+    { id: 'fq2', type: 'kill', target: 'orc1',    count: 3,  name: 'Orc Patrol',         desc: 'Defeat 3 Orc Grunts', reward: { gold: 50, exp: 100 } },
+    { id: 'fq3', type: 'fetch', item: 'herb',     count: 3,  name: 'Gather Forest Herbs', desc: 'Collect 3 Forest Herbs', reward: { gold: 40, exp: 50 } },
+  ],
+  desert: [
+    { id: 'dq1', type: 'kill', target: 'lizard',  count: 4,  name: 'Lizard Hunt',        desc: 'Slay 4 Sand Lizards', reward: { gold: 60, exp: 120 } },
+    { id: 'dq2', type: 'kill', target: 'medusa',  count: 2,  name: 'Medusa Threat',      desc: 'Defeat 2 Desert Medusas', reward: { gold: 80, exp: 160 } },
+    { id: 'dq3', type: 'fetch', item: 'ore',      count: 4,  name: 'Desert Ore',         desc: 'Collect 4 Desert Ores', reward: { gold: 70, exp: 90 } },
+  ],
+  ice: [
+    { id: 'iq1', type: 'kill', target: 'slime3',  count: 5,  name: 'Frost Slime Menace', desc: 'Kill 5 Frost Slimes', reward: { gold: 50, exp: 100 } },
+    { id: 'iq2', type: 'kill', target: 'orc3',    count: 3,  name: 'Frost Orc Riders',   desc: 'Defeat 3 Frost Orcs', reward: { gold: 75, exp: 150 } },
+    { id: 'iq3', type: 'fetch', item: 'crystal',  count: 3,  name: 'Ice Crystals',       desc: 'Collect 3 Ice Crystals', reward: { gold: 60, exp: 80 } },
+  ],
+  volcanic: [
+    { id: 'vq1', type: 'kill', target: 'demon',   count: 3,  name: 'Demon Incursion',    desc: 'Slay 3 Magma Demons', reward: { gold: 120, exp: 250 } },
+    { id: 'vq2', type: 'kill', target: 'sdragon', count: 4,  name: 'Drake Culling',      desc: 'Kill 4 Fire Drakes', reward: { gold: 100, exp: 200 } },
+    { id: 'vq3', type: 'fetch', item: 'magma',    count: 3,  name: 'Magma Samples',      desc: 'Collect 3 Magma Cores', reward: { gold: 90, exp: 120 } },
+  ],
+  swamp: [
+    { id: 'sq1', type: 'kill', target: 'slime1_s', count: 5, name: 'Poison Cleanup',     desc: 'Kill 5 Poison Slimes', reward: { gold: 40, exp: 80 } },
+    { id: 'sq2', type: 'kill', target: 'jinn',    count: 3,  name: 'Jinn Banishment',    desc: 'Defeat 3 Swamp Jinns', reward: { gold: 70, exp: 140 } },
+    { id: 'sq3', type: 'fetch', item: 'moss',     count: 4,  name: 'Swamp Moss',         desc: 'Collect 4 Swamp Mosses', reward: { gold: 50, exp: 70 } },
+  ],
+  mountain: [
+    { id: 'mq1', type: 'kill', target: 'orc3_m',  count: 4,  name: 'Mountain Guard',     desc: 'Defeat 4 Mountain Orcs', reward: { gold: 110, exp: 220 } },
+    { id: 'mq2', type: 'kill', target: 'dragon',  count: 2,  name: 'Dragon Slayer',      desc: 'Slay 2 Elder Dragons', reward: { gold: 180, exp: 350 } },
+    { id: 'mq3', type: 'fetch', item: 'stone',    count: 5,  name: 'Rare Stones',        desc: 'Collect 5 Mountain Stones', reward: { gold: 80, exp: 100 } },
+  ],
+};
+
+const FETCH_ITEM_COLORS = { herb: 0x44ff44, ore: 0xccaa44, crystal: 0x88ddff, magma: 0xff4400, moss: 0x668844, stone: 0x888888 };
+
+// ── Seeded RNG ────────────────────────────────────────────
+function seededRandom(seed) {
+  let s = seed;
+  return () => { s = (s * 16807 + 0) % 2147483647; return (s - 1) / 2147483646; };
+}
+
+// ══════════════════════════════════════════════════════════
+// PHASER LAUNCHER
+// ══════════════════════════════════════════════════════════
+function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate) {
+  const playerClass = playerData.class || 'warrior';
+  const skills = getClassSkills(playerClass);
+
+  class ARPGScene extends Phaser.Scene {
     constructor() {
-      super({ key: 'GameScene' });
-      this.knight       = null;
-      this.knightLabel  = null;
-      this.moveTarget   = null;
-      this.isMoving     = false;
-      this.monsters     = [];
-      this.npcs         = [];
-      this.portals      = [];
-      this.cursorGfx    = null;
-      this.busy         = false;
-      this.attackTarget = null;
+      super({ key: 'ARPGScene' });
+      this.knight = null;
+      this.playerState = {
+        hp: playerData.hp ?? playerData.maxHp ?? 100,
+        maxHp: playerData.maxHp ?? 100,
+        mana: playerData.mana ?? playerData.maxMana ?? 50,
+        maxMana: playerData.maxMana ?? 50,
+        level: playerData.level ?? 1,
+        exp: playerData.exp ?? 0,
+        expToNext: playerData.expToNext ?? 100,
+        gold: playerData.gold ?? 0,
+        attack: playerData.stats?.strength ?? 10,
+        defense: playerData.stats?.endurance ?? 5,
+        intelligence: playerData.stats?.intelligence ?? 5,
+        statPoints: playerData.statPoints ?? 0,
+        skillPoints: playerData.skillPoints ?? 0,
+        bossKeys: playerData.bossKeys ?? 0,
+        class: playerClass,
+      };
+      this.enemies = [];
+      this.npcs = [];
+      this.projectiles = [];
+      this.damageTexts = [];
+      this.lootDrops = [];
+      this.chests = [];
+      this.fetchItems = [];       // fetch quest collectibles
+      this.skillCooldowns = { Q: 0, W: 0, E: 0, R: 0 };
+      this.isDashing = false;
+      this.mouseWorldPos = { x: 0, y: 0 };
+      this.dialogueActive = false;
+      // Point-and-click
+      this.moveTarget = null;
+      this.moveMarker = null;
+      // Quests
+      this.activeQuests = [];     // [{ ...template, progress: 0, completed: false }]
+      this.completedQuestIds = [];
+      // Save timer
+      this.saveTimer = 0;
+      // Load saved quest state
+      this._loadQuestState();
     }
 
+    _loadQuestState() {
+      try {
+        const raw = localStorage.getItem(SAVE_KEY);
+        if (!raw) return;
+        const d = JSON.parse(raw);
+        if (d.activeQuests) this.activeQuests = d.activeQuests;
+        if (d.completedQuestIds) this.completedQuestIds = d.completedQuestIds;
+        if (d.playerState) {
+          Object.assign(this.playerState, d.playerState);
+        }
+      } catch (_) { /* ignore */ }
+    }
+
+    _saveToLocalStorage() {
+      try {
+        const data = {
+          playerState: { ...this.playerState },
+          activeQuests: this.activeQuests,
+          completedQuestIds: this.completedQuestIds,
+          timestamp: Date.now(),
+        };
+        localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+      } catch (_) { /* ignore */ }
+    }
+
+    /* ── PRELOAD ─────────────────────────────────────── */
     preload() {
-      for (const [key, path] of Object.entries(SPRITE_ASSETS)) {
-        this.load.image(key, path);
-      }
+      for (let i = 0; i < 8; i++) this.load.image(`floor_${i}`, `${SP}floor_${i}.png`);
+      this.load.image('road', `${SP}road_tile.png`);
+
+      this.load.spritesheet('player_idle',   `${CHAR_DIR}Sword/With_shadow/Sword_Idle_with_shadow.png`,   { frameWidth: 64, frameHeight: 64 });
+      this.load.spritesheet('player_walk',   `${CHAR_DIR}Sword/With_shadow/Sword_Walk_with_shadow.png`,   { frameWidth: 64, frameHeight: 64 });
+      this.load.spritesheet('player_attack', `${CHAR_DIR}Sword/With_shadow/Sword_attack_with_shadow.png`, { frameWidth: 64, frameHeight: 64 });
+      this.load.spritesheet('player_hurt',   `${CHAR_DIR}Sword/With_shadow/Sword_Hurt_with_shadow.png`,   { frameWidth: 64, frameHeight: 64 });
+      this.load.spritesheet('player_run',    `${CHAR_DIR}Sword/With_shadow/Sword_Run_with_shadow.png`,    { frameWidth: 64, frameHeight: 64 });
+
+      ['orc1','orc2','orc3'].forEach(id => {
+        const cap = id.charAt(0).toUpperCase() + id.slice(1);
+        const dir = `${ORC_DIR}${cap}/With_shadow/`;
+        this.load.spritesheet(`${id}_idle`,   `${dir}${id}_idle_with_shadow.png`,   { frameWidth: 64, frameHeight: 64 });
+        this.load.spritesheet(`${id}_walk`,   `${dir}${id}_walk_with_shadow.png`,   { frameWidth: 64, frameHeight: 64 });
+        this.load.spritesheet(`${id}_attack`, `${dir}${id}_attack_with_shadow.png`, { frameWidth: 64, frameHeight: 64 });
+        this.load.spritesheet(`${id}_hurt`,   `${dir}${id}_hurt_with_shadow.png`,   { frameWidth: 64, frameHeight: 64 });
+        this.load.spritesheet(`${id}_death`,  `${dir}${id}_death_with_shadow.png`,  { frameWidth: 64, frameHeight: 64 });
+      });
+
+      ['Slime1','Slime2','Slime3'].forEach(id => {
+        const dir = `${SLIME_DIR}${id}/With_shadow/`;
+        const lc = id.toLowerCase();
+        this.load.spritesheet(`${lc}_idle`,   `${dir}${id}_Idle_with_shadow.png`,   { frameWidth: 32, frameHeight: 32 });
+        this.load.spritesheet(`${lc}_walk`,   `${dir}${id}_Walk_with_shadow.png`,   { frameWidth: 32, frameHeight: 32 });
+        this.load.spritesheet(`${lc}_attack`, `${dir}${id}_Attack_with_shadow.png`, { frameWidth: 32, frameHeight: 32 });
+        this.load.spritesheet(`${lc}_hurt`,   `${dir}${id}_Hurt_with_shadow.png`,   { frameWidth: 32, frameHeight: 32 });
+        this.load.spritesheet(`${lc}_death`,  `${dir}${id}_Death_with_shadow.png`,  { frameWidth: 32, frameHeight: 32 });
+      });
+
+      ['demon','dragon','jinn_animation','lizard','medusa','small_dragon'].forEach(id => {
+        const dir = `${MONSTER_DIR}${id}/`;
+        const key = id === 'jinn_animation' ? 'jinn' : id;
+        this.load.image(`${key}_idle1`,   `${dir}Idle1.png`);
+        this.load.image(`${key}_idle2`,   `${dir}Idle2.png`);
+        this.load.image(`${key}_idle3`,   `${dir}Idle3.png`);
+        this.load.image(`${key}_walk1`,   `${dir}Walk1.png`);
+        this.load.image(`${key}_walk2`,   `${dir}Walk2.png`);
+        this.load.image(`${key}_attack1`, `${dir}Attack1.png`);
+        this.load.image(`${key}_attack2`, `${dir}Attack2.png`);
+        this.load.image(`${key}_hurt1`,   `${dir}Hurt1.png`);
+        this.load.image(`${key}_death1`,  `${dir}Death1.png`);
+      });
+
+      const allTreeTypes = new Set();
+      BIOMES.forEach(b => b.treePalette.forEach(t => allTreeTypes.add(t)));
+      allTreeTypes.forEach(t => this.load.image(`tree_${t}`, `${TREES_DIR}${t}.png`));
+      for (let i = 1; i <= 7; i++) this.load.image(`rock_${i}`, `${ROCKS_DIR}Rock${i}_1.png`);
+      this.load.image('building_exterior', `${HOME_DIR}exterior.png`);
+      this.load.image('building_house',    `${HOME_DIR}house_details.png`);
+      this.load.image('chest_sprite',    `${SP}chest.png`);
+      this.load.image('fountain_sprite', `${SP}fountain.png`);
+      this.load.image('npc_sprite',      `${SP}npc_merchant.png`);
+      for (let i = 0; i < 5; i++) this.load.image(`torch_${i}`, `${SP}torch_${i}.png`);
+      this.load.image('dark_particle', `${SP}dark_particle.png`);
     }
 
+    /* ── CREATE ──────────────────────────────────────── */
     create() {
-      // ── Tiled ground using real floor sprites ───────────
-      const floorKeys = ['spr_floor_0','spr_floor_1','spr_floor_2','spr_floor_3'];
-      for (let x = 0; x < WORLD_W; x += TILE_SCALED) {
-        for (let y = 0; y < WORLD_H; y += TILE_SCALED) {
-          const key = floorKeys[Math.floor(Math.random() * floorKeys.length)];
-          this.add.image(x + TILE_SCALED / 2, y + TILE_SCALED / 2, key)
-            .setScale(SPRITE_SCALE).setDepth(0);
-        }
-      }
-
-      // ── Dark ambient overlay ────────────────────────────
-      const ambientOverlay = this.add.graphics().setDepth(0.5);
-      ambientOverlay.fillStyle(0x000000, 0.3);
-      ambientOverlay.fillRect(0, 0, WORLD_W, WORLD_H);
-
-      // ── Dirt roads using road tiles ─────────────────────
-      for (let x = 200; x < 3700; x += TILE_SCALED) {
-        this.add.image(x, 370, 'spr_road').setScale(SPRITE_SCALE).setDepth(1);
-      }
-      for (let y = 200; y < 3000; y += TILE_SCALED) {
-        this.add.image(370, y, 'spr_road').setScale(SPRITE_SCALE).setDepth(1);
-      }
-      for (let y = 350; y < 2550; y += TILE_SCALED) {
-        this.add.image(1820, y, 'spr_road').setScale(SPRITE_SCALE).setDepth(1);
-      }
-      for (let y = 350; y < 1150; y += TILE_SCALED) {
-        this.add.image(2520, y, 'spr_road').setScale(SPRITE_SCALE).setDepth(1);
-      }
-
-      // ── Buildings with sprite overlays ──────────────────
-      BUILDINGS.forEach(b => {
-        const bg = this.add.graphics().setDepth(2);
-        bg.fillStyle(0x222222, 0.5);
-        bg.fillRect(b.x - 2, b.y + b.h - 4, b.w + 4, 8);
-        bg.fillStyle(b.color);
-        bg.fillRect(b.x, b.y, b.w, b.h);
-        bg.fillStyle(0x000000, 0.2);
-        bg.fillRect(b.x + 2, b.y + 2, b.w - 4, b.h - 4);
-        bg.fillStyle(0xffcc66, 0.4);
-        bg.fillRect(b.x + 10, b.y + 12, 12, 10);
-        bg.fillRect(b.x + b.w - 22, b.y + 12, 12, 10);
-        bg.lineStyle(1, 0x333333);
-        bg.strokeRect(b.x + 10, b.y + 12, 12, 10);
-        bg.strokeRect(b.x + b.w - 22, b.y + 12, 12, 10);
-        bg.fillStyle(b.roofColor);
-        bg.fillTriangle(b.x - 10, b.y, b.x + b.w / 2, b.y - 35, b.x + b.w + 10, b.y);
-        bg.fillStyle(0x000000, 0.15);
-        bg.fillTriangle(b.x - 10, b.y, b.x + b.w / 2, b.y - 35, b.x + b.w / 2, b.y);
-        bg.fillStyle(0x555555);
-        bg.fillRect(b.x + b.w - 25, b.y - 28, 10, 18);
-        bg.fillStyle(0x666666);
-        bg.fillRect(b.x + b.w - 27, b.y - 30, 14, 4);
-
-        // Door sprite on building
-        this.add.image(b.x + b.w / 2, b.y + b.h - 12, 'spr_door')
-          .setScale(SPRITE_SCALE * 0.7).setDepth(2.5);
-
-        // Building icon sprite
-        const iconSpr = this.add.image(b.x + b.w / 2, b.y - 48, b.spriteKey)
-          .setScale(SPRITE_SCALE * 0.8).setDepth(8);
-        this.tweens.add({ targets: iconSpr, y: b.y - 52, duration: 1200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-
-        this.add.text(b.x + b.w / 2, b.y - 72, b.label, {
-          fontSize: '11px', fontFamily: 'Cinzel, serif',
-          color: '#aa8844', stroke: '#000000', strokeThickness: 3,
-        }).setOrigin(0.5, 0.5).setDepth(8);
-      });
-
-      // ── Trees with real sprites ─────────────────────────
-      const treeKeys = ['spr_tree_1', 'spr_tree_2', 'spr_tree_3'];
-      TREES.forEach(([tx, ty]) => {
-        const key = treeKeys[Math.floor(Math.random() * treeKeys.length)];
-        const spr = this.add.image(tx, ty, key).setScale(SPRITE_SCALE).setDepth(2);
-        spr.setTint(Phaser.Display.Color.GetColor(
-          180 + Math.floor(Math.random() * 50),
-          200 + Math.floor(Math.random() * 55),
-          180 + Math.floor(Math.random() * 50)
-        ));
-      });
-
-      // ── Rocks with wall sprites ─────────────────────────
-      ROCKS.forEach(([rx, ry]) => {
-        const key = Math.random() > 0.5 ? 'spr_wall_0' : 'spr_wall_1';
-        this.add.image(rx, ry, key).setScale(SPRITE_SCALE * 0.8).setDepth(2)
-          .setTint(0x888888);
-      });
-
-      // ── Columns ─────────────────────────────────────────
-      COLUMNS.forEach(([cx, cy]) => {
-        this.add.image(cx, cy, 'spr_column').setScale(SPRITE_SCALE).setDepth(2);
-      });
-
-      // ── Statues ─────────────────────────────────────────
-      STATUES.forEach(([sx, sy]) => {
-        this.add.image(sx, sy, 'spr_statue').setScale(SPRITE_SCALE).setDepth(2);
-      });
-
-      // ── Fountains ───────────────────────────────────────
-      FOUNTAINS.forEach(([fx, fy]) => {
-        const spr = this.add.image(fx, fy, 'spr_fountain').setScale(SPRITE_SCALE).setDepth(2);
-        this.tweens.add({
-          targets: spr, alpha: 0.7, duration: 800,
-          yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
-        });
-        const glow = this.add.graphics().setDepth(2.1);
-        glow.fillStyle(0x4488ff, 0.12);
-        glow.fillCircle(fx, fy, 30);
-        this.tweens.add({ targets: glow, alpha: 0.3, duration: 1000, yoyo: true, repeat: -1 });
-      });
-
-      // ── Chests ──────────────────────────────────────────
-      CHESTS.forEach(([cx, cy]) => {
-        this.add.image(cx, cy, 'spr_chest').setScale(SPRITE_SCALE).setDepth(2);
-        const glow = this.add.graphics().setDepth(1.9);
-        glow.fillStyle(0xffaa33, 0.06);
-        glow.fillCircle(cx, cy, 20);
-        this.tweens.add({ targets: glow, alpha: 0.15, duration: 1500, yoyo: true, repeat: -1 });
-      });
-
-      // ── Skull & bone decorations ────────────────────────
-      [[750,350],[1600,380],[2300,330],[3000,370],[1100,900],[2600,1300]].forEach(([sx,sy]) => {
-        const sg = this.add.graphics().setDepth(1.5);
-        sg.fillStyle(0xaaaaaa, 0.3);
-        sg.fillCircle(sx, sy, 6);
-        sg.fillRect(sx - 8, sy + 4, 16, 2);
-        sg.fillRect(sx - 2, sy + 2, 4, 8);
-      });
-
-      // ── Torches along roads ─────────────────────────────
-      const torchFrameKeys = ['spr_torch_0','spr_torch_1','spr_torch_2','spr_torch_3','spr_torch_4'];
-      const torchPositions = [500, 900, 1300, 1700, 2100, 2500, 2900, 3300];
-      torchPositions.forEach(tx => {
-        const tg = this.add.graphics().setDepth(3);
-        tg.fillStyle(0x4a3010); tg.fillRect(tx - 3, 320, 6, 35);
-
-        const torchSpr = this.add.image(tx, 308, torchFrameKeys[0]).setScale(SPRITE_SCALE).setDepth(3.1);
-        let frameIdx = 0;
-        this.time.addEvent({
-          delay: 150,
-          loop: true,
-          callback: () => {
-            frameIdx = (frameIdx + 1) % torchFrameKeys.length;
-            torchSpr.setTexture(torchFrameKeys[frameIdx]);
-          },
-        });
-
-        const flame = this.add.graphics().setDepth(3.2);
-        flame.fillStyle(0xff6600, 0.2); flame.fillCircle(tx, 316, 18);
-        flame.fillStyle(0xff9933, 0.35); flame.fillCircle(tx, 316, 10);
-        flame.fillStyle(0xffcc00, 0.6); flame.fillCircle(tx, 316, 4);
-        this.tweens.add({
-          targets: flame, alpha: 0.3,
-          duration: 250 + Math.random() * 200,
-          yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
-        });
-
-        const lightPool = this.add.graphics().setDepth(0.8);
-        lightPool.fillStyle(0xffaa33, 0.08);
-        lightPool.fillCircle(tx, 360, 50);
-        this.tweens.add({
-          targets: lightPool, alpha: 0.04,
-          duration: 400, yoyo: true, repeat: -1,
-        });
-      });
-
-      // ── Portals with real sprites ───────────────────────
-      PORTALS.forEach(p => {
-        const portalSpr = this.add.image(p.x, p.y, p.spriteKey)
-          .setScale(SPRITE_SCALE * 1.5).setDepth(5);
-        this.tweens.add({
-          targets: portalSpr,
-          scaleX: SPRITE_SCALE * 1.7, scaleY: SPRITE_SCALE * 1.7,
-          alpha: 0.6,
-          duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
-        });
-
-        const pg = this.add.graphics().setDepth(4.9);
-        const color = p.spriteKey === 'spr_portal_purple' ? 0x9933ff : 0xcc3333;
-        pg.lineStyle(3, color, 0.5); pg.strokeCircle(p.x, p.y, 48);
-        pg.fillStyle(color, 0.06); pg.fillCircle(p.x, p.y, 48);
-        this.tweens.add({
-          targets: pg, alpha: 0.2,
-          duration: 700, yoyo: true, repeat: -1,
-        });
-
-        this.add.text(p.x, p.y + 55, p.label, {
-          fontSize: '12px', fontFamily: 'Cinzel, serif',
-          color: '#ddaaff', stroke: '#000000', strokeThickness: 4,
-        }).setOrigin(0.5, 0).setDepth(8);
-
-        this.portals.push({ x: p.x, y: p.y, targetCity: p.targetCity, radius: 50 });
-      });
-
-      // ── Spawn monsters with real sprites ────────────────
-      ENEMY_SPAWNS.forEach(m => {
-        const scale = m.isBoss ? SPRITE_SCALE * 1.8 : SPRITE_SCALE * 1.2;
-        const sprite = this.physics.add.sprite(m.x, m.y, m.sprite)
-          .setScale(scale).setDepth(6)
-          .setInteractive({ cursor: 'pointer' });
-
-        if (m.isBoss) sprite.setTint(0xff6666);
-
-        const hpBg = this.add.graphics().setDepth(7);
-        hpBg.fillStyle(0x000000, 0.7); hpBg.fillRect(-20, -8, 40, 6);
-        hpBg.setPosition(m.x, m.y - (m.isBoss ? 55 : 35));
-
-        const hpFill = this.add.graphics().setDepth(7.1);
-        hpFill.fillStyle(m.isBoss ? 0xff2200 : 0xcc3333); hpFill.fillRect(-19, -7, 38, 4);
-        hpFill.setPosition(m.x, m.y - (m.isBoss ? 55 : 35));
-
-        const color = m.isBoss ? '#ff4444' : '#ff8866';
-        const label = this.add.text(m.x, m.y - (m.isBoss ? 65 : 43), m.label, {
-          fontSize: m.isBoss ? '12px' : '10px', fontFamily: 'Cinzel, serif',
-          color, stroke: '#000000', strokeThickness: 3,
-        }).setOrigin(0.5, 0.5).setDepth(8);
-
-        if (m.isBoss) {
-          const bossTag = this.add.text(m.x, m.y - 78, '⚠ BOSS ⚠', {
-            fontSize: '11px', fontFamily: 'Cinzel, serif',
-            color: '#ff2222', stroke: '#000000', strokeThickness: 3,
-          }).setOrigin(0.5, 0.5).setDepth(8);
-          this.tweens.add({ targets: bossTag, alpha: 0.2, duration: 400, yoyo: true, repeat: -1 });
-        }
-
-        this.tweens.add({
-          targets: sprite,
-          x: m.x + (Math.random() - 0.5) * 60,
-          y: m.y + (Math.random() - 0.5) * 40,
-          duration: 2000 + Math.random() * 2000,
-          yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
-        });
-
-        sprite.on('pointerdown', () => {
-          if (this.busy) return;
-          this._spriteClicked = true;
-          this.attackTarget = { sprite, enemyId: m.enemyId, isBoss: m.isBoss, label };
-          this._npcTarget = null;
-          this.moveTarget = { x: sprite.x, y: sprite.y };
-          this.isMoving = true;
-          this._showClickRipple(sprite.x, sprite.y, 0xff4444);
-        });
-
-        this.monsters.push({ sprite, enemyId: m.enemyId, isBoss: m.isBoss, x: m.x, y: m.y, label, hpBg, hpFill, active: true });
-      });
-
-      // ── NPCs with real sprites ──────────────────────────
-      NPC_DATA.forEach(n => {
-        const sprite = this.physics.add.sprite(n.x, n.y, 'spr_npc_merchant')
-          .setScale(SPRITE_SCALE * 1.1).setDepth(6)
-          .setInteractive({ cursor: 'pointer' });
-
-        const label = this.add.text(n.x, n.y - 40, n.label, {
-          fontSize: '11px', fontFamily: 'Cinzel, serif',
-          color: '#ffdd88', stroke: '#000000', strokeThickness: 3,
-        }).setOrigin(0.5, 0.5).setDepth(8);
-
-        const exMark = this.add.text(n.x, n.y - 54, '❗', {
-          fontSize: '14px', stroke: '#000000', strokeThickness: 2,
-        }).setOrigin(0.5, 0.5).setDepth(9);
-        this.tweens.add({ targets: exMark, y: n.y - 60, duration: 600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-
-        sprite.on('pointerdown', () => {
-          if (this.busy) return;
-          this._spriteClicked = true;
-          this.attackTarget = null;
-          this.moveTarget = { x: n.x, y: n.y };
-          this.isMoving = true;
-          this._npcTarget = { sprite, npcId: n.id };
-          this._showClickRipple(n.x, n.y, 0xffdd88);
-        });
-
-        this.npcs.push({ sprite, label, npcId: n.id });
-      });
-
-      // ── Knight (player) with real sprite ────────────────
-      this.knight = this.physics.add.sprite(380, 400, 'spr_knight')
-        .setScale(SPRITE_SCALE * 1.2).setDepth(10).setCollideWorldBounds(true);
-
-      this._shadowObj = this.add.ellipse(0, 0, 36, 12, 0x000000, 0.4).setDepth(9);
-
-      this.knightLabel = this.add.text(380, 360, playerName, {
-        fontSize: '12px', fontFamily: 'Cinzel, serif',
-        color: '#ffffff', stroke: '#000000', strokeThickness: 4,
-      }).setOrigin(0.5, 1).setDepth(11);
-
-      this.cursorGfx = this.add.graphics().setDepth(5);
-
-      // ── Atmospheric particles ───────────────────────────
-      this._createAtmosphericParticles(Phaser);
-
-      // ── Physics & camera ────────────────────────────────
+      const rng = seededRandom(42);
       this.physics.world.setBounds(0, 0, WORLD_W, WORLD_H);
       this.cameras.main.setBounds(0, 0, WORLD_W, WORLD_H);
+
+      this.renderGround(rng);
+      this.renderBiomeDecorations(rng);
+      this.renderCities(rng);
+      this.spawnAllEnemies(rng);
+      this.spawnNPCs();
+      this.spawnChests(rng);
+      this.spawnFetchItems(rng);
+      this.createPlayer();
+
       this.cameras.main.startFollow(this.knight, true, 0.08, 0.08);
-      this.cameras.main.setZoom(1.4);
-      this.cameras.main.setBackgroundColor('#0a0a08');
+      this.cameras.main.setZoom(1);
+      this.setupInput();
+      this.createAtmosphere();
 
-      // ── Click-to-move ───────────────────────────────────
-      this._spriteClicked = false;
-      this.input.on('pointerdown', (ptr) => {
-        if (this.busy) return;
-        if (ptr.downElement && ptr.downElement.tagName !== 'CANVAS') return;
-        if (this._spriteClicked) { this._spriteClicked = false; return; }
-        this.attackTarget = null;
-        this._npcTarget = null;
-        this.moveTarget = { x: ptr.worldX, y: ptr.worldY };
-        this.isMoving = true;
-        this._showClickRipple(ptr.worldX, ptr.worldY, 0xffffff);
+      this.minimapCam = this.cameras.add(this.scale.width - 180, 10, 170, 170)
+        .setZoom(0.034).setName('minimap');
+      this.minimapCam.setBounds(0, 0, WORLD_W, WORLD_H);
+      this.minimapCam.startFollow(this.knight);
+      this.minimapCam.setBackgroundColor(0x111111);
+
+      this.input.on('pointermove', (pointer) => {
+        this.mouseWorldPos = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+      });
+
+      // Click-to-move marker
+      this.moveMarker = this.add.graphics().setDepth(99998);
+    }
+
+    /* ── GROUND ──────────────────────────────────────── */
+    renderGround(rng) {
+      const floorKeys = ['floor_0','floor_1','floor_2','floor_3'];
+      for (const biome of BIOMES) {
+        for (let x = biome.x; x < biome.x + biome.w; x += TILE_SCALED) {
+          for (let y = biome.y; y < biome.y + biome.h; y += TILE_SCALED) {
+            const key = floorKeys[Math.floor(rng() * floorKeys.length)];
+            this.add.image(x + TILE_SCALED / 2, y + TILE_SCALED / 2, key)
+              .setScale(TILE_SCALE).setDepth(0).setTint(biome.groundTint);
+          }
+        }
+        const border = this.add.graphics().setDepth(0.1);
+        border.lineStyle(2, 0x000000, 0.3);
+        border.strokeRect(biome.x, biome.y, biome.w, biome.h);
+      }
+      this.renderRoads();
+    }
+
+    renderRoads() {
+      const gfx = this.add.graphics().setDepth(0.5);
+      gfx.lineStyle(TILE_SCALED * 0.6, 0x8a7755, 0.5);
+      for (let i = 0; i < CITIES.length; i++) {
+        for (let j = i + 1; j < CITIES.length; j++) {
+          const dx = CITIES[j].x - CITIES[i].x;
+          const dy = CITIES[j].y - CITIES[i].y;
+          if (Math.sqrt(dx * dx + dy * dy) < 2800) {
+            gfx.lineBetween(CITIES[i].x, CITIES[i].y, CITIES[j].x, CITIES[j].y);
+            const steps = Math.floor(Math.sqrt(dx * dx + dy * dy) / TILE_SCALED);
+            for (let s = 0; s <= steps; s++) {
+              const t = s / steps;
+              this.add.image(CITIES[i].x + dx * t, CITIES[i].y + dy * t, 'road')
+                .setScale(TILE_SCALE).setDepth(0.6).setAlpha(0.4);
+            }
+          }
+        }
+      }
+    }
+
+    /* ── BIOME DECORATIONS ───────────────────────────── */
+    renderBiomeDecorations(rng) {
+      for (const biome of BIOMES) {
+        const treeCount = 40 + Math.floor(rng() * 20);
+        for (let i = 0; i < treeCount; i++) {
+          const tx = biome.x + 80 + rng() * (biome.w - 160);
+          const ty = biome.y + 80 + rng() * (biome.h - 160);
+          if (CITIES.some(c => Math.hypot(c.x - tx, c.y - ty) < 250)) continue;
+          const treeName = biome.treePalette[Math.floor(rng() * biome.treePalette.length)];
+          this.add.image(tx, ty, `tree_${treeName}`)
+            .setScale(SPRITE_SCALE * (0.8 + rng() * 0.4))
+            .setDepth(ty + 40).setAlpha(0.9 + rng() * 0.1);
+        }
+        const rockCount = 15 + Math.floor(rng() * 10);
+        for (let i = 0; i < rockCount; i++) {
+          const rx = biome.x + 60 + rng() * (biome.w - 120);
+          const ry = biome.y + 60 + rng() * (biome.h - 120);
+          if (CITIES.some(c => Math.hypot(c.x - rx, c.y - ry) < 200)) continue;
+          this.add.image(rx, ry, `rock_${1 + Math.floor(rng() * 7)}`)
+            .setScale(SPRITE_SCALE * (0.6 + rng() * 0.5)).setDepth(ry + 10);
+        }
+      }
+    }
+
+    /* ── CITY RENDERING ──────────────────────────────── */
+    renderCities(rng) {
+      CITIES.forEach(city => {
+        const biome = BIOMES.find(b => b.id === city.biome);
+        const cg = this.add.graphics().setDepth(0.8);
+        cg.fillStyle(0x554433, 0.5);
+        cg.fillRoundedRect(city.x - 180, city.y - 160, 360, 320, 20);
+        cg.fillStyle(0x665544, 0.3);
+        cg.fillRoundedRect(city.x - 160, city.y - 140, 320, 280, 16);
+        const bc = 4 + Math.floor(rng() * 3);
+        for (let i = 0; i < bc; i++) {
+          const angle = (i / bc) * Math.PI * 2 + rng() * 0.3;
+          const radius = 80 + rng() * 50;
+          const bx = city.x + Math.cos(angle) * radius;
+          const by = city.y + Math.sin(angle) * radius - 20;
+          const bw = 60 + rng() * 40;
+          const bh = 50 + rng() * 30;
+          const g = this.add.graphics().setDepth(by + bh);
+          g.fillStyle(0x000000, 0.3); g.fillRect(bx - bw/2 + 4, by - bh/2 + 4, bw, bh);
+          const wc = biome.id === 'ice' ? 0x8899aa : biome.id === 'volcanic' ? 0x553322 : biome.id === 'desert' ? 0xaa9966 : 0x665544;
+          g.fillStyle(wc); g.fillRect(bx - bw/2, by - bh/2, bw, bh);
+          g.fillStyle(0x000000, 0.15); g.fillRect(bx - bw/2 + 3, by - bh/2 + 3, bw - 6, bh - 6);
+          g.fillStyle(0xffcc66, 0.5);
+          g.fillRect(bx - bw/4, by - bh/4, 8, 6);
+          g.fillRect(bx + bw/4 - 8, by - bh/4, 8, 6);
+          const rc = biome.id === 'volcanic' ? 0x881100 : biome.id === 'ice' ? 0x4466aa : 0x884422;
+          g.fillStyle(rc);
+          g.fillTriangle(bx - bw/2 - 8, by - bh/2, bx, by - bh/2 - 28, bx + bw/2 + 8, by - bh/2);
+          g.fillStyle(0x443322); g.fillRect(bx - 6, by + bh/2 - 14, 12, 14);
+        }
+        this.add.text(city.x, city.y - 180, city.name, {
+          fontFamily: 'Cinzel, serif', fontSize: '16px', color: '#ffd700',
+          stroke: '#000000', strokeThickness: 3, align: 'center',
+        }).setOrigin(0.5).setDepth(9999);
+        this.add.text(city.x, city.y - 164, city.subtitle, {
+          fontFamily: 'Crimson Text, serif', fontSize: '10px', color: '#aaa',
+          stroke: '#000', strokeThickness: 2,
+        }).setOrigin(0.5).setDepth(9999);
+        for (let t = 0; t < 4; t++) {
+          const ta = (t / 4) * Math.PI * 2;
+          this.add.image(city.x + Math.cos(ta) * 140, city.y + Math.sin(ta) * 120, `torch_${Math.floor(rng() * 5)}`)
+            .setScale(SPRITE_SCALE).setDepth(city.y + Math.sin(ta) * 120 + 20);
+        }
+        this.add.image(city.x, city.y - 30, 'fountain_sprite').setScale(SPRITE_SCALE).setDepth(city.y - 10);
       });
     }
 
-    // ── Atmospheric particle systems ──────────────────────
-    _createAtmosphericParticles(Phaser) {
-      // Ember texture
-      const emberGfx = this.make.graphics({ add: false });
-      emberGfx.fillStyle(0xff8833, 0.8);
-      emberGfx.fillCircle(2, 2, 2);
-      emberGfx.generateTexture('ember_particle', 4, 4);
-      emberGfx.destroy();
-
-      // Dust texture
-      const dustGfx = this.make.graphics({ add: false });
-      dustGfx.fillStyle(0xaa9977, 0.4);
-      dustGfx.fillCircle(1, 1, 1);
-      dustGfx.generateTexture('dust_particle', 3, 3);
-      dustGfx.destroy();
-
-      // Dark mist texture
-      const mistGfx = this.make.graphics({ add: false });
-      mistGfx.fillStyle(0x334455, 0.3);
-      mistGfx.fillCircle(4, 4, 4);
-      mistGfx.generateTexture('mist_particle', 8, 8);
-      mistGfx.destroy();
-
-      // Ember particles near torches
-      [500, 900, 1300, 1700, 2100, 2500, 2900, 3300].forEach(tx => {
-        this.add.particles(tx, 310, 'ember_particle', {
-          speed: { min: 10, max: 30 },
-          angle: { min: 240, max: 300 },
-          lifespan: { min: 1000, max: 2500 },
-          alpha: { start: 0.8, end: 0 },
-          scale: { start: 1, end: 0.3 },
-          quantity: 1,
-          frequency: 300,
-          blendMode: 'ADD',
-        }).setDepth(3.5);
-      });
-
-      // Global floating dust
-      this.add.particles(WORLD_W / 2, WORLD_H / 2, 'dust_particle', {
-        emitZone: {
-          type: 'random',
-          source: new Phaser.Geom.Rectangle(-WORLD_W / 2, -WORLD_H / 2, WORLD_W, WORLD_H),
-        },
-        speed: { min: 5, max: 20 },
-        angle: { min: 0, max: 360 },
-        lifespan: { min: 3000, max: 6000 },
-        alpha: { start: 0.3, end: 0 },
-        scale: { start: 1.5, end: 0.5 },
-        quantity: 1,
-        frequency: 200,
-      }).setDepth(3);
-
-      // Boss area dark mist
-      this.add.particles(1900, 2400, 'mist_particle', {
-        emitZone: {
-          type: 'random',
-          source: new Phaser.Geom.Circle(0, 0, 200),
-        },
-        speed: { min: 3, max: 12 },
-        angle: { min: 0, max: 360 },
-        lifespan: { min: 3000, max: 5000 },
-        alpha: { start: 0.4, end: 0 },
-        scale: { start: 2, end: 4 },
-        quantity: 1,
-        frequency: 400,
-      }).setDepth(3);
+    /* ── ENEMIES ─────────────────────────────────────── */
+    spawnAllEnemies(rng) {
+      for (const biome of BIOMES) {
+        const templates = BIOME_ENEMIES[biome.id] || [];
+        const count = 15 + Math.floor(rng() * 6);
+        for (let i = 0; i < count; i++) {
+          const tmpl = templates[Math.floor(rng() * templates.length)];
+          if (!tmpl) continue;
+          const ex = biome.x + 100 + rng() * (biome.w - 200);
+          const ey = biome.y + 100 + rng() * (biome.h - 200);
+          if (CITIES.some(c => Math.hypot(c.x - ex, c.y - ey) < 280)) continue;
+          this.spawnEnemy(ex, ey, tmpl, biome.id);
+        }
+        const boss = BIOME_BOSSES[biome.id];
+        if (boss) {
+          const bx = biome.x + biome.w / 2 + (rng() - 0.5) * 400;
+          const by = biome.y + biome.h / 2 + (rng() - 0.5) * 200;
+          this.spawnEnemy(bx, by, boss, biome.id);
+        }
+      }
     }
 
-    update() {
-      if (!this.knight || this.busy) return;
+    spawnEnemy(x, y, template, biomeId) {
+      const spriteKey = template.sprite;
+      let enemy;
+      const isTopDown = spriteKey.startsWith('orc') || spriteKey.startsWith('slime');
+      if (isTopDown && this.textures.exists(`${spriteKey}_idle`)) {
+        enemy = this.add.sprite(x, y, `${spriteKey}_idle`, 0).setScale(SPRITE_SCALE);
+      } else if (this.textures.exists(`${spriteKey}_idle1`)) {
+        enemy = this.add.sprite(x, y, `${spriteKey}_idle1`).setScale(SPRITE_SCALE * 0.7);
+      } else {
+        enemy = this.add.rectangle(x, y, 28, 28, template.isBoss ? 0xff0000 : 0xff6600);
+      }
+      this.physics.add.existing(enemy);
+      enemy.body.setCollideWorldBounds(true);
+      enemy.enemyData = {
+        ...template, currentHp: template.hp, maxHp: template.hp,
+        biome: biomeId, originX: x, originY: y,
+        state: 'wander', wanderTarget: null, wanderTimer: 0,
+        attackCooldown: 0, aggroRadius: template.isBoss ? 300 : 200,
+        attackRange: template.isBoss ? 80 : 50, hitFlashTimer: 0, isDead: false,
+        animTimer: 0, animFrame: 0,
+      };
+      enemy.hpBg = this.add.graphics().setDepth(9990);
+      enemy.hpFg = this.add.graphics().setDepth(9991);
+      enemy.nameLabel = this.add.text(x, y - 35, template.name, {
+        fontSize: template.isBoss ? '11px' : '9px', fontFamily: 'Cinzel, serif',
+        color: template.isBoss ? '#ff4444' : '#ff8866', stroke: '#000', strokeThickness: 2,
+      }).setOrigin(0.5).setDepth(9992);
+      if (template.isBoss) {
+        enemy.setTint(0xff4444);
+        enemy.bossGlow = this.add.graphics().setDepth(enemy.depth - 1);
+      }
+      enemy.setDepth(y);
+      this.enemies.push(enemy);
+    }
 
-      if (this.moveTarget && this.isMoving) {
-        const tx = this.attackTarget ? this.attackTarget.sprite.x : this.moveTarget.x;
-        const ty = this.attackTarget ? this.attackTarget.sprite.y : this.moveTarget.y;
-        const dx = tx - this.knight.x;
-        const dy = ty - this.knight.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-
-        if (Math.abs(dx) > 2) this.knight.setFlipX(dx < 0);
-
-        if (this.attackTarget && dist < INTERACT_RADIUS) {
-          this.knight.setVelocity(0, 0);
-          this.isMoving = false;
-          this._triggerCombat(this.attackTarget);
-          this.attackTarget = null;
-          return;
+    /* ── NPCs ────────────────────────────────────────── */
+    spawnNPCs() {
+      CITY_NPCS.forEach(nd => {
+        const npc = this.add.image(nd.x, nd.y, 'npc_sprite')
+          .setScale(SPRITE_SCALE).setDepth(nd.y).setInteractive();
+        npc.npcData = nd;
+        const labelColor = nd.role === 'blacksmith' ? '#ffaa44' : nd.role === 'healer' ? '#44ff88' : '#ffdd00';
+        npc.labelText = this.add.text(nd.x, nd.y - 30, `${nd.icon} ${nd.label}`, {
+          fontSize: '10px', fontFamily: 'Cinzel, serif',
+          color: labelColor, stroke: '#000', strokeThickness: 2,
+        }).setOrigin(0.5).setDepth(9999);
+        npc.indicator = this.add.text(nd.x, nd.y - 44, '[Click] Talk', {
+          fontSize: '8px', fontFamily: 'Cinzel, serif',
+          color: '#ffdd00', stroke: '#000', strokeThickness: 2,
+        }).setOrigin(0.5).setDepth(9999).setAlpha(0);
+        // Quest exclamation for questgivers with available quests
+        if (nd.role === 'questgiver') {
+          npc.questMark = this.add.text(nd.x, nd.y - 55, '!', {
+            fontSize: '16px', fontFamily: 'Cinzel, serif', fontStyle: 'bold',
+            color: '#ffdd00', stroke: '#000', strokeThickness: 3,
+          }).setOrigin(0.5).setDepth(9999);
+          this.tweens.add({ targets: npc.questMark, y: nd.y - 60, yoyo: true, repeat: -1, duration: 600, ease: 'Sine.easeInOut' });
         }
+        this.npcs.push(npc);
+      });
+    }
 
-        if (this._npcTarget && dist < INTERACT_RADIUS) {
-          this.knight.setVelocity(0, 0);
-          this.isMoving = false;
-          this._interactNPC(this._npcTarget);
-          this._npcTarget = null;
-          return;
+    /* ── FETCH ITEMS (world collectibles for quests) ── */
+    spawnFetchItems(rng) {
+      for (const biome of BIOMES) {
+        const quests = QUEST_TEMPLATES[biome.id]?.filter(q => q.type === 'fetch') || [];
+        for (const q of quests) {
+          const count = q.count + 2; // spawn more than needed
+          for (let i = 0; i < count; i++) {
+            const fx = biome.x + 100 + rng() * (biome.w - 200);
+            const fy = biome.y + 100 + rng() * (biome.h - 200);
+            if (CITIES.some(c => Math.hypot(c.x - fx, c.y - fy) < 200)) continue;
+            const color = FETCH_ITEM_COLORS[q.item] || 0xffffff;
+            const item = this.add.circle(fx, fy, 7, color, 0.8).setDepth(fy - 1).setInteractive();
+            const glow = this.add.circle(fx, fy, 12, color, 0.2).setDepth(fy - 2);
+            this.tweens.add({ targets: glow, scaleX: 1.5, scaleY: 1.5, alpha: 0, yoyo: true, repeat: -1, duration: 1000 });
+            item.fetchData = { itemType: q.item, biome: biome.id };
+            item.glowObj = glow;
+            this.fetchItems.push(item);
+          }
         }
+      }
+    }
 
-        if (dist < 6) {
-          this.knight.setVelocity(0, 0);
-          this.isMoving = false;
+    /* ── CHESTS ──────────────────────────────────────── */
+    spawnChests(rng) {
+      for (const biome of BIOMES) {
+        const cc = 3 + Math.floor(rng() * 3);
+        for (let i = 0; i < cc; i++) {
+          const cx = biome.x + 120 + rng() * (biome.w - 240);
+          const cy = biome.y + 120 + rng() * (biome.h - 240);
+          this.createChest(cx, cy, 'common', biome.id);
+        }
+        this.createChest(biome.x + biome.w / 2 + 60, biome.y + biome.h / 2 + 60, 'golden', biome.id);
+      }
+    }
+
+    createChest(x, y, type) {
+      const chest = this.add.image(x, y, 'chest_sprite')
+        .setScale(SPRITE_SCALE).setDepth(y).setInteractive();
+      if (type === 'golden') chest.setTint(0xffdd00);
+      chest.chestData = { type, opened: false };
+      chest.label = this.add.text(x, y - 24, type === 'golden' ? '\uD83D\uDD12 Boss Chest' : 'Chest', {
+        fontSize: '8px', fontFamily: 'Cinzel, serif',
+        color: type === 'golden' ? '#ffd700' : '#aaaaaa',
+        stroke: '#000', strokeThickness: 2,
+      }).setOrigin(0.5).setDepth(9999).setAlpha(0.7);
+      this.chests.push(chest);
+    }
+
+    /* ── PLAYER ──────────────────────────────────────── */
+    createPlayer() {
+      const start = CITIES[0];
+      const px = start.x, py = start.y + 60;
+      if (this.textures.exists('player_idle')) {
+        this.knight = this.physics.add.sprite(px, py, 'player_idle', 0).setScale(SPRITE_SCALE);
+        try {
+          const mkAnim = (key, sheet, rate, rep) => {
+            const tex = this.textures.get(sheet);
+            const fc = tex.frameTotal - 1;
+            if (fc > 1) this.anims.create({ key, frames: this.anims.generateFrameNumbers(sheet, { start: 0, end: fc - 1 }), frameRate: rate, repeat: rep });
+          };
+          mkAnim('player_idle_anim',   'player_idle',   6,  -1);
+          mkAnim('player_walk_anim',   'player_walk',   10, -1);
+          mkAnim('player_attack_anim', 'player_attack', 12,  0);
+          mkAnim('player_run_anim',    'player_run',    10, -1);
+        } catch (_) { /* optional */ }
+      } else {
+        this.knight = this.add.rectangle(px, py, 24, 32, 0x4488ff);
+        this.physics.add.existing(this.knight);
+      }
+      this.knight.body.setCollideWorldBounds(true);
+      this.knight.setDepth(py);
+      this.knightLabel = this.add.text(px, py - 36, playerData.name || 'Hero', {
+        fontSize: '11px', fontFamily: 'Cinzel, serif', color: '#66ccff',
+        stroke: '#000', strokeThickness: 3,
+      }).setOrigin(0.5).setDepth(99999);
+      this.levelBadge = this.add.text(px, py - 48, `Lv.${this.playerState.level}`, {
+        fontSize: '9px', fontFamily: 'Cinzel, serif', color: '#ffd700',
+        stroke: '#000', strokeThickness: 2,
+      }).setOrigin(0.5).setDepth(99999);
+    }
+
+    /* ── INPUT (Point-and-Click) ─────────────────────── */
+    setupInput() {
+      // Skill keys
+      this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.Q);
+      this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.W);
+      this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E);
+      this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.R);
+      this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.F);
+
+      // Right-click to move (point-and-click)
+      this.input.on('pointerdown', (pointer) => {
+        if (this.dialogueActive) return;
+        const wp = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+
+        if (pointer.rightButtonDown()) {
+          // Right-click = move to point
+          this.setMoveTarget(wp.x, wp.y);
+        } else if (pointer.leftButtonDown()) {
+          // Left-click = attack toward cursor OR interact if near NPC/Chest
+          const clickedNPC = this.npcs.find(n => Phaser.Math.Distance.Between(wp.x, wp.y, n.x, n.y) < 40);
+          if (clickedNPC && Phaser.Math.Distance.Between(this.knight.x, this.knight.y, clickedNPC.x, clickedNPC.y) < INTERACT_RADIUS) {
+            this.openNPCDialogue(clickedNPC);
+            return;
+          }
+          const clickedChest = this.chests.find(c => !c.chestData.opened && Phaser.Math.Distance.Between(wp.x, wp.y, c.x, c.y) < 40);
+          if (clickedChest && Phaser.Math.Distance.Between(this.knight.x, this.knight.y, clickedChest.x, clickedChest.y) < INTERACT_RADIUS) {
+            this.openChest(clickedChest);
+            return;
+          }
+          // Otherwise basic attack
+          this.performBasicAttack();
+        }
+      });
+
+      // Prevent context menu on right-click
+      container.addEventListener('contextmenu', (e) => e.preventDefault());
+
+      // QWER skills (all aimed at cursor)
+      this.input.keyboard.on('keydown-Q', () => this.useSkill('Q'));
+      this.input.keyboard.on('keydown-W', () => this.useSkill('W'));
+      this.input.keyboard.on('keydown-E', () => this.useSkill('E'));
+      this.input.keyboard.on('keydown-R', () => this.useSkill('R'));
+      this.input.keyboard.on('keydown-F', () => this.interactWithNearby());
+    }
+
+    setMoveTarget(x, y) {
+      this.moveTarget = { x: Phaser.Math.Clamp(x, 20, WORLD_W - 20), y: Phaser.Math.Clamp(y, 20, WORLD_H - 20) };
+      // Draw click marker
+      if (this.moveMarker) {
+        this.moveMarker.clear();
+        this.moveMarker.lineStyle(2, 0x44ff44, 0.8);
+        this.moveMarker.strokeCircle(this.moveTarget.x, this.moveTarget.y, 12);
+        this.moveMarker.fillStyle(0x44ff44, 0.3);
+        this.moveMarker.fillCircle(this.moveTarget.x, this.moveTarget.y, 6);
+        this.tweens.add({ targets: this.moveMarker, alpha: 0, duration: 800, onComplete: () => { if (this.moveMarker) this.moveMarker.clear(); this.moveMarker.alpha = 1; } });
+      }
+    }
+
+    /* ── ATMOSPHERE ──────────────────────────────────── */
+    createAtmosphere() {
+      if (this.textures.exists('dark_particle')) {
+        this.add.particles(0, 0, 'dark_particle', {
+          x: { min: 0, max: WORLD_W }, y: { min: 0, max: WORLD_H },
+          lifespan: 6000, speed: { min: 5, max: 20 },
+          scale: { start: 0.3, end: 0 }, alpha: { start: 0.3, end: 0 },
+          frequency: 200, quantity: 1,
+        }).setDepth(99990);
+      }
+    }
+
+    /* ══════════════════════════════════════════════════ */
+    /* UPDATE LOOP                                       */
+    /* ══════════════════════════════════════════════════ */
+    update(time, delta) {
+      if (!this.knight || this.dialogueActive) return;
+      this.updatePlayerMovement(delta);
+      this.updateEnemyAI(time, delta);
+      this.updateProjectiles(delta);
+      this.updateCooldowns(delta);
+      this.updateDepthSorting();
+      this.updateHPBars();
+      this.updateLabels();
+      this.updateNPCIndicators();
+      this.updateDamageTexts(delta);
+      this.updateLoot(delta);
+      this.updateFetchPickup();
+      this.checkPlayerDeath();
+      this.syncPlayerState();
+      // Auto-save every 10 seconds
+      this.saveTimer += delta;
+      if (this.saveTimer > 10000) { this.saveTimer = 0; this._saveToLocalStorage(); }
+    }
+
+    /* ── Player Movement (Point-and-Click) ───────────── */
+    updatePlayerMovement() {
+      if (this.isDashing) return;
+      if (this.moveTarget) {
+        const dist = Phaser.Math.Distance.Between(this.knight.x, this.knight.y, this.moveTarget.x, this.moveTarget.y);
+        if (dist < 8) {
+          this.knight.body.setVelocity(0, 0);
+          this.moveTarget = null;
+          if (this.anims.exists('player_idle_anim') && this.knight.anims) this.knight.anims.play('player_idle_anim', true);
         } else {
-          const r = PLAYER_SPEED / dist;
-          this.knight.setVelocity(dx * r, dy * r);
+          const a = Math.atan2(this.moveTarget.y - this.knight.y, this.moveTarget.x - this.knight.x);
+          this.knight.body.setVelocity(Math.cos(a) * PLAYER_SPEED, Math.sin(a) * PLAYER_SPEED);
+          if (Math.cos(a) < 0) this.knight.setFlipX(true);
+          else if (Math.cos(a) > 0) this.knight.setFlipX(false);
+          if (this.anims.exists('player_walk_anim') && this.knight.anims) this.knight.anims.play('player_walk_anim', true);
         }
+      } else {
+        this.knight.body.setVelocity(0, 0);
+        if (this.anims.exists('player_idle_anim') && this.knight.anims && !this.knight.anims.isPlaying) this.knight.anims.play('player_idle_anim', true);
       }
+    }
 
-      const px = this.knight.x;
-      const py = this.knight.y;
-      if (this.knightLabel) this.knightLabel.setPosition(px, py - 35);
-      if (this._shadowObj) this._shadowObj.setPosition(px, py + 20);
-
-      for (const p of this.portals) {
-        const dx = px - p.x;
-        const dy = py - p.y;
-        if (Math.sqrt(dx * dx + dy * dy) < p.radius) {
-          this._enterPortal(p);
-          return;
+    /* ── Enemy AI ────────────────────────────────────── */
+    updateEnemyAI(time, delta) {
+      const px = this.knight.x, py = this.knight.y;
+      for (const enemy of this.enemies) {
+        if (enemy.enemyData.isDead) continue;
+        const ed = enemy.enemyData;
+        const dist = Phaser.Math.Distance.Between(enemy.x, enemy.y, px, py);
+        if (ed.hitFlashTimer > 0) { ed.hitFlashTimer -= delta; if (ed.hitFlashTimer <= 0) enemy.clearTint(); }
+        if (ed.attackCooldown > 0) ed.attackCooldown -= delta;
+        const isTopDown = ed.sprite.startsWith('orc') || ed.sprite.startsWith('slime');
+        if (!isTopDown) {
+          ed.animTimer = (ed.animTimer || 0) + delta;
+          if (ed.animTimer > 400) {
+            ed.animTimer = 0;
+            ed.animFrame = ((ed.animFrame || 0) + 1) % 3;
+            const frame = ed.animFrame + 1;
+            const key = `${ed.sprite}_idle${frame}`;
+            if (this.textures.exists(key)) enemy.setTexture(key);
+          }
+        }
+        switch (ed.state) {
+          case 'wander': {
+            ed.wanderTimer -= delta;
+            if (ed.wanderTimer <= 0 || !ed.wanderTarget) {
+              ed.wanderTarget = { x: ed.originX + (Math.random() - 0.5) * 200, y: ed.originY + (Math.random() - 0.5) * 200 };
+              ed.wanderTimer = 2000 + Math.random() * 3000;
+            }
+            const wd = Phaser.Math.Distance.Between(enemy.x, enemy.y, ed.wanderTarget.x, ed.wanderTarget.y);
+            if (wd > 10) {
+              const a = Math.atan2(ed.wanderTarget.y - enemy.y, ed.wanderTarget.x - enemy.x);
+              enemy.body.setVelocity(Math.cos(a) * 30, Math.sin(a) * 30);
+              enemy.setFlipX(Math.cos(a) < 0);
+            } else enemy.body.setVelocity(0, 0);
+            if (dist < ed.aggroRadius) ed.state = 'chase';
+            break;
+          }
+          case 'chase': {
+            if (dist > ed.attackRange) {
+              const a = Math.atan2(py - enemy.y, px - enemy.x);
+              const sp = ed.isBoss ? 100 : 70;
+              enemy.body.setVelocity(Math.cos(a) * sp, Math.sin(a) * sp);
+              enemy.setFlipX(Math.cos(a) < 0);
+            } else { enemy.body.setVelocity(0, 0); ed.state = 'attack'; }
+            if (dist > ed.aggroRadius * 2.5) { ed.state = 'wander'; enemy.body.setVelocity(0, 0); }
+            break;
+          }
+          case 'attack': {
+            enemy.body.setVelocity(0, 0);
+            if (dist > ed.attackRange * 1.5) { ed.state = 'chase'; break; }
+            if (ed.attackCooldown <= 0) { this.enemyAttackPlayer(enemy); ed.attackCooldown = ed.isBoss ? 1200 : 1800; }
+            break;
+          }
         }
       }
     }
 
-    _showClickRipple(wx, wy, color) {
-      this.cursorGfx.clear();
-      this.cursorGfx.setAlpha(1).setScale(1);
-      this.cursorGfx.lineStyle(2, color, 0.9);
-      this.cursorGfx.strokeCircle(wx, wy, 14);
-      this.cursorGfx.fillStyle(color, 0.12);
-      this.cursorGfx.fillCircle(wx, wy, 14);
+    enemyAttackPlayer(enemy) {
+      const dmg = Math.max(1, enemy.enemyData.atk - Math.floor(this.playerState.defense * 0.4));
+      this.playerState.hp = Math.max(0, this.playerState.hp - dmg);
+      this.spawnDamageText(this.knight.x, this.knight.y - 20, dmg, '#ff4444');
+      this.knight.setTint(0xff4444);
+      this.time.delayedCall(200, () => { if (this.knight) this.knight.clearTint(); });
+      this.syncPlayerState();
+    }
+
+    /* ── Basic Attack (Left Click — melee toward cursor) ── */
+    performBasicAttack() {
+      if (!this.knight) return;
+      this.moveTarget = null; // stop moving when attacking
+      if (this.anims.exists('player_attack_anim') && this.knight.anims) {
+        this.knight.anims.play('player_attack_anim', true);
+        this.knight.once('animationcomplete', () => {
+          if (this.knight && this.anims.exists('player_idle_anim')) this.knight.anims.play('player_idle_anim', true);
+        });
+      }
+      // Face cursor
+      if (this.mouseWorldPos.x < this.knight.x) this.knight.setFlipX(true);
+      else this.knight.setFlipX(false);
+
+      const range = 70;
+      let closest = null, cd = Infinity;
+      for (const e of this.enemies) {
+        if (e.enemyData.isDead) continue;
+        const d = Phaser.Math.Distance.Between(this.knight.x, this.knight.y, e.x, e.y);
+        if (d < range && d < cd) { closest = e; cd = d; }
+      }
+      if (closest) {
+        const base = this.playerState.attack + this.playerState.level * 2;
+        const crit = Math.random() < 0.15;
+        this.damageEnemy(closest, crit ? Math.floor(base * 1.8) : base, crit);
+      }
+      // Swing arc visual
+      const sg = this.add.graphics().setDepth(99999);
+      const a = Math.atan2(this.mouseWorldPos.y - this.knight.y, this.mouseWorldPos.x - this.knight.x);
+      sg.lineStyle(3, 0xffffff, 0.6);
+      sg.beginPath(); sg.arc(this.knight.x, this.knight.y, range * 0.7, a - 0.5, a + 0.5); sg.strokePath();
+      this.tweens.add({ targets: sg, alpha: 0, duration: 200, onComplete: () => sg.destroy() });
+    }
+
+    /* ══════════════════════════════════════════════════ */
+    /* SKILLS (QWER) — CLASS-SPECIFIC VFX               */
+    /* ══════════════════════════════════════════════════ */
+    useSkill(key) {
+      const skill = skills[key];
+      if (!skill || this.skillCooldowns[key] > 0) return;
+      if (this.playerState.mana < skill.manaCost) {
+        this.spawnDamageText(this.knight.x, this.knight.y - 40, 'No Mana!', '#4488ff');
+        return;
+      }
+      this.playerState.mana -= skill.manaCost;
+      this.skillCooldowns[key] = skill.cooldown;
+      this.moveTarget = null; // stop moving when casting
+      // Face cursor
+      if (this.mouseWorldPos.x < this.knight.x) this.knight.setFlipX(true);
+      else this.knight.setFlipX(false);
+
+      switch (skill.type) {
+        case 'projectile': this.fireProjectile(skill); break;
+        case 'dash':       this.performDash(skill);    break;
+        case 'aoe':        this.performAOE(skill);     break;
+        case 'strike':     this.performStrike(skill);  break;
+      }
+      this.syncPlayerState();
+    }
+
+    // ── PROJECTILE (Q) — class-specific visuals ──
+    fireProjectile(skill) {
+      const a = Math.atan2(this.mouseWorldPos.y - this.knight.y, this.mouseWorldPos.x - this.knight.x);
+      const cls = playerClass;
+      let size = 6, trailW = 2;
+      if (cls === 'ninja') { size = 4; trailW = 1; }
+      if (cls === 'mage')  { size = 8; trailW = 3; }
+
+      const proj = this.add.circle(this.knight.x, this.knight.y, size, skill.color).setDepth(99990);
+      this.physics.add.existing(proj);
+      const speed = cls === 'ninja' ? 500 : cls === 'mage' ? 350 : 400;
+      proj.body.setVelocity(Math.cos(a) * speed, Math.sin(a) * speed);
+
+      const trail = this.add.graphics().setDepth(99989);
+      proj.projectileData = {
+        damage: Math.floor((this.playerState.attack + this.playerState.intelligence) * skill.damage),
+        lifetime: 2000, skill, trail, prevX: this.knight.x, prevY: this.knight.y, trailW,
+      };
+      this.projectiles.push(proj);
+
+      // Class-specific spawn VFX
+      if (cls === 'warrior') {
+        // Spinning blade effect
+        const blade = this.add.graphics().setDepth(99991);
+        blade.lineStyle(2, 0xff4444, 0.7);
+        blade.strokeCircle(this.knight.x, this.knight.y, 14);
+        this.tweens.add({ targets: blade, alpha: 0, scaleX: 2, scaleY: 2, duration: 300, onComplete: () => blade.destroy() });
+      } else if (cls === 'mage') {
+        // Arcane circle at cast point
+        const arc = this.add.graphics().setDepth(99991);
+        arc.lineStyle(2, 0x00ccff, 0.6);
+        arc.strokeCircle(this.knight.x, this.knight.y, 20);
+        arc.lineStyle(1, 0x9944ff, 0.4);
+        arc.strokeCircle(this.knight.x, this.knight.y, 28);
+        this.tweens.add({ targets: arc, alpha: 0, duration: 400, onComplete: () => arc.destroy() });
+      } else if (cls === 'paladin') {
+        // Holy glow
+        const hg = this.add.graphics().setDepth(99991);
+        hg.fillStyle(0xffdd44, 0.3);
+        hg.fillCircle(this.knight.x, this.knight.y, 18);
+        this.tweens.add({ targets: hg, alpha: 0, scaleX: 1.5, scaleY: 1.5, duration: 350, onComplete: () => hg.destroy() });
+      } else if (cls === 'ninja') {
+        // Quick shadow puff
+        const puff = this.add.graphics().setDepth(99991);
+        puff.fillStyle(0x333333, 0.4);
+        puff.fillCircle(this.knight.x, this.knight.y, 12);
+        this.tweens.add({ targets: puff, alpha: 0, duration: 200, onComplete: () => puff.destroy() });
+      }
+    }
+
+    // ── DASH (W) — class-specific visuals ──
+    performDash(skill) {
+      this.isDashing = true;
+      const a = Math.atan2(this.mouseWorldPos.y - this.knight.y, this.mouseWorldPos.x - this.knight.x);
+      const dist = Math.min(200, Phaser.Math.Distance.Between(this.knight.x, this.knight.y, this.mouseWorldPos.x, this.mouseWorldPos.y));
+      const tx = Phaser.Math.Clamp(this.knight.x + Math.cos(a) * dist, 20, WORLD_W - 20);
+      const ty = Phaser.Math.Clamp(this.knight.y + Math.sin(a) * dist, 20, WORLD_H - 20);
+      const cls = playerClass;
+      const ox = this.knight.x, oy = this.knight.y;
+      const dur = cls === 'ninja' ? 100 : cls === 'mage' ? 80 : 150;
+
+      // Class-specific trail
+      const tg = this.add.graphics().setDepth(99988);
+      if (cls === 'warrior') {
+        // Orange shield charge trail
+        tg.lineStyle(6, 0xffaa44, 0.5);
+        tg.lineBetween(ox, oy, tx, ty);
+        tg.fillStyle(0xffaa44, 0.15);
+        tg.fillCircle(tx, ty, 25);
+      } else if (cls === 'mage') {
+        // Purple blink particles (no trail line)
+        tg.fillStyle(0x9944ff, 0.4);
+        for (let i = 0; i < 6; i++) {
+          tg.fillCircle(ox + (Math.random()-0.5) * 30, oy + (Math.random()-0.5) * 30, 4 + Math.random() * 4);
+        }
+        // Arrival particles
+        this.time.delayedCall(dur, () => {
+          const ag = this.add.graphics().setDepth(99988);
+          ag.fillStyle(0x9944ff, 0.4);
+          for (let i = 0; i < 6; i++) ag.fillCircle(tx + (Math.random()-0.5) * 30, ty + (Math.random()-0.5) * 30, 4 + Math.random() * 4);
+          this.tweens.add({ targets: ag, alpha: 0, duration: 400, onComplete: () => ag.destroy() });
+        });
+      } else if (cls === 'paladin') {
+        // Golden light trail
+        tg.lineStyle(4, 0xffff88, 0.6);
+        tg.lineBetween(ox, oy, tx, ty);
+        tg.fillStyle(0xffee00, 0.2);
+        tg.fillCircle(tx, ty, 30);
+      } else if (cls === 'ninja') {
+        // Dark smoke at origin + arrival
+        tg.fillStyle(0x222222, 0.5);
+        tg.fillCircle(ox, oy, 20);
+        this.time.delayedCall(dur, () => {
+          const sg = this.add.graphics().setDepth(99988);
+          sg.fillStyle(0x222222, 0.5);
+          sg.fillCircle(tx, ty, 20);
+          this.tweens.add({ targets: sg, alpha: 0, scaleX: 2, scaleY: 2, duration: 400, onComplete: () => sg.destroy() });
+        });
+      }
+      this.tweens.add({ targets: tg, alpha: 0, duration: 500, onComplete: () => tg.destroy() });
+
+      // Damage enemies along dash path (warrior/paladin)
+      if (skill.damage > 0) {
+        const dmg = Math.floor(this.playerState.attack * skill.damage);
+        for (const e of this.enemies) {
+          if (e.enemyData.isDead) continue;
+          // Check if enemy is near the dash line
+          const dd = Phaser.Math.Distance.BetweenPointsSquared(
+            { x: e.x, y: e.y },
+            Phaser.Geom.Line.GetNearestPoint(new Phaser.Geom.Line(ox, oy, tx, ty), { x: e.x, y: e.y })
+          );
+          if (dd < 50 * 50) this.damageEnemy(e, dmg, false);
+        }
+      }
+
+      this.tweens.add({ targets: this.knight, x: tx, y: ty, duration: dur, ease: 'Quad.easeOut', onComplete: () => { this.isDashing = false; } });
+    }
+
+    // ── AOE (E) — class-specific visuals ──
+    performAOE(skill) {
+      const radius = 120;
+      const dmg = Math.floor((this.playerState.attack + this.playerState.intelligence * 0.5) * skill.damage);
+      const cls = playerClass;
+      const cx = this.knight.x, cy = this.knight.y;
+      const ng = this.add.graphics().setDepth(99999);
+
+      if (cls === 'warrior') {
+        // Whirlwind — spinning red arcs
+        let angle = 0;
+        this.tweens.add({
+          targets: { r: 10, a: 0 }, r: radius, a: Math.PI * 4, duration: 400,
+          onUpdate: (tw) => {
+            const r = tw.targets[0].r;
+            const a = tw.targets[0].a;
+            ng.clear();
+            for (let i = 0; i < 3; i++) {
+              const sa = a + (i * Math.PI * 2 / 3);
+              ng.lineStyle(3 * (1 - r/radius), 0xff6644, 0.8 * (1 - r/radius));
+              ng.beginPath();
+              ng.arc(cx, cy, r, sa - 0.3, sa + 0.3);
+              ng.strokePath();
+            }
+            ng.fillStyle(0xff4444, 0.08 * (1 - r/radius));
+            ng.fillCircle(cx, cy, r);
+          },
+          onComplete: () => ng.destroy(),
+        });
+      } else if (cls === 'mage') {
+        // Frost Nova — expanding ice ring with crystals
+        this.tweens.add({
+          targets: { r: 10 }, r: radius, duration: 350,
+          onUpdate: (tw) => {
+            const r = tw.getValue();
+            ng.clear();
+            ng.lineStyle(3 * (1 - r/radius), 0x44ddff, 0.9 * (1 - r/radius));
+            ng.strokeCircle(cx, cy, r);
+            ng.lineStyle(1, 0xffffff, 0.4 * (1 - r/radius));
+            ng.strokeCircle(cx, cy, r * 0.7);
+            ng.fillStyle(0x44ddff, 0.12 * (1 - r/radius));
+            ng.fillCircle(cx, cy, r);
+            // Crystal shards
+            for (let i = 0; i < 8; i++) {
+              const sa = (i / 8) * Math.PI * 2;
+              const sx = cx + Math.cos(sa) * r * 0.8;
+              const sy = cy + Math.sin(sa) * r * 0.8;
+              ng.fillStyle(0xaaeeff, 0.5 * (1 - r/radius));
+              ng.fillRect(sx - 2, sy - 4, 4, 8);
+            }
+          },
+          onComplete: () => ng.destroy(),
+        });
+      } else if (cls === 'paladin') {
+        // Consecration — golden circle with rays
+        this.tweens.add({
+          targets: { r: 10 }, r: radius, duration: 400,
+          onUpdate: (tw) => {
+            const r = tw.getValue();
+            ng.clear();
+            ng.fillStyle(0xffee00, 0.15 * (1 - r/radius));
+            ng.fillCircle(cx, cy, r);
+            ng.lineStyle(2 * (1 - r/radius), 0xffdd44, 0.8 * (1 - r/radius));
+            ng.strokeCircle(cx, cy, r);
+            // Rays
+            for (let i = 0; i < 6; i++) {
+              const ra = (i / 6) * Math.PI * 2 + r * 0.02;
+              ng.lineStyle(1, 0xffffff, 0.5 * (1 - r/radius));
+              ng.lineBetween(cx, cy, cx + Math.cos(ra) * r, cy + Math.sin(ra) * r);
+            }
+          },
+          onComplete: () => ng.destroy(),
+        });
+      } else if (cls === 'ninja') {
+        // Smoke Bomb — dark expanding cloud
+        this.tweens.add({
+          targets: { r: 10 }, r: radius, duration: 300,
+          onUpdate: (tw) => {
+            const r = tw.getValue();
+            ng.clear();
+            const alpha = 0.3 * (1 - r/radius);
+            // Multiple overlapping clouds
+            for (let i = 0; i < 5; i++) {
+              const ox = (Math.sin(i * 7) * r * 0.3);
+              const oy = (Math.cos(i * 11) * r * 0.2);
+              ng.fillStyle(0x666688, alpha);
+              ng.fillCircle(cx + ox, cy + oy, r * (0.5 + i * 0.1));
+            }
+            ng.fillStyle(0x88ff44, 0.08 * (1 - r/radius));
+            ng.fillCircle(cx, cy, r * 0.7);
+          },
+          onComplete: () => ng.destroy(),
+        });
+      }
+
+      for (const e of this.enemies) {
+        if (e.enemyData.isDead) continue;
+        if (Phaser.Math.Distance.Between(cx, cy, e.x, e.y) < radius) this.damageEnemy(e, dmg, false);
+      }
+    }
+
+    // ── POWER STRIKE (R) — class-specific visuals ──
+    performStrike(skill) {
+      const range = 90;
+      const dmg = Math.floor(this.playerState.attack * skill.damage);
+      const a = Math.atan2(this.mouseWorldPos.y - this.knight.y, this.mouseWorldPos.x - this.knight.x);
+      const hx = this.knight.x + Math.cos(a) * 50, hy = this.knight.y + Math.sin(a) * 50;
+      const cls = playerClass;
+      const sg = this.add.graphics().setDepth(99999);
+
+      if (cls === 'warrior') {
+        // Executioner — heavy red slash
+        sg.fillStyle(0xff0000, 0.5); sg.fillCircle(hx, hy, 35);
+        sg.lineStyle(4, 0xff4444, 0.9);
+        sg.beginPath(); sg.arc(hx, hy, 40, a - 0.8, a + 0.8); sg.strokePath();
+        this.tweens.add({ targets: sg, alpha: 0, scaleX: 1.5, scaleY: 1.5, duration: 400, onComplete: () => sg.destroy() });
+      } else if (cls === 'mage') {
+        // Meteor — impact at cursor pos
+        const mx = this.mouseWorldPos.x, my = this.mouseWorldPos.y;
+        // Meteor falling line
+        const ml = this.add.graphics().setDepth(99999);
+        ml.lineStyle(3, 0xff4400, 0.6);
+        ml.lineBetween(mx, my - 200, mx, my);
+        this.tweens.add({ targets: ml, alpha: 0, duration: 300, onComplete: () => ml.destroy() });
+        // Impact
+        sg.fillStyle(0xff4400, 0.6); sg.fillCircle(mx, my, 10);
+        this.tweens.add({
+          targets: { r: 10 }, r: 60, duration: 350,
+          onUpdate: (tw) => {
+            const r = tw.getValue();
+            sg.clear();
+            sg.fillStyle(0xff4400, 0.5 * (1 - r/60));
+            sg.fillCircle(mx, my, r);
+            sg.lineStyle(2, 0xffaa00, 0.6 * (1 - r/60));
+            sg.strokeCircle(mx, my, r);
+          },
+          onComplete: () => sg.destroy(),
+        });
+        // Damage in meteor area
+        for (const e of this.enemies) {
+          if (e.enemyData.isDead) continue;
+          if (Phaser.Math.Distance.Between(mx, my, e.x, e.y) < 60) this.damageEnemy(e, dmg, true);
+        }
+        this.cameras.main.shake(250, 0.008);
+        return; // skip default damage below
+      } else if (cls === 'paladin') {
+        // Divine Smite — white-gold explosion
+        sg.fillStyle(0xffffff, 0.7); sg.fillCircle(hx, hy, 15);
+        sg.fillStyle(0xffee00, 0.3); sg.fillCircle(hx, hy, 40);
+        // Rays from center
+        for (let i = 0; i < 8; i++) {
+          const ra = (i / 8) * Math.PI * 2;
+          sg.lineStyle(2, 0xffffff, 0.6);
+          sg.lineBetween(hx, hy, hx + Math.cos(ra) * 45, hy + Math.sin(ra) * 45);
+        }
+        this.tweens.add({ targets: sg, alpha: 0, scaleX: 1.8, scaleY: 1.8, duration: 500, onComplete: () => sg.destroy() });
+      } else if (cls === 'ninja') {
+        // Assassination — teleport behind + slash marks
+        const behindX = hx + Math.cos(a) * 30, behindY = hy + Math.sin(a) * 30;
+        // Dark flash at origin then arrival
+        const f1 = this.add.graphics().setDepth(99999);
+        f1.fillStyle(0x222222, 0.6); f1.fillCircle(this.knight.x, this.knight.y, 20);
+        this.tweens.add({ targets: f1, alpha: 0, duration: 200, onComplete: () => f1.destroy() });
+        // Slash marks
+        sg.lineStyle(3, 0xcc00cc, 0.8);
+        sg.lineBetween(hx - 20, hy - 20, hx + 20, hy + 20);
+        sg.lineBetween(hx + 20, hy - 20, hx - 20, hy + 20);
+        sg.lineStyle(2, 0xff44ff, 0.5);
+        sg.lineBetween(hx, hy - 25, hx, hy + 25);
+        this.tweens.add({ targets: sg, alpha: 0, duration: 350, onComplete: () => sg.destroy() });
+      }
+
+      for (const e of this.enemies) {
+        if (e.enemyData.isDead) continue;
+        if (Phaser.Math.Distance.Between(hx, hy, e.x, e.y) < range) this.damageEnemy(e, dmg, true);
+      }
+      this.cameras.main.shake(200, 0.005);
+    }
+
+    /* ── Damage Enemy ────────────────────────────────── */
+    damageEnemy(enemy, amount, isCrit) {
+      const ed = enemy.enemyData;
+      const d = Math.max(1, amount - Math.floor(ed.def * 0.3));
+      ed.currentHp -= d;
+      enemy.setTint(0xffffff); ed.hitFlashTimer = 150;
+      this.spawnDamageText(enemy.x + (Math.random() - 0.5) * 20, enemy.y - 20, d, isCrit ? '#ffdd00' : '#ffffff');
+      if (ed.currentHp <= 0) { ed.currentHp = 0; this.killEnemy(enemy); }
+    }
+
+    killEnemy(enemy) {
+      const ed = enemy.enemyData;
+      ed.isDead = true; ed.state = 'dead'; enemy.body.setVelocity(0, 0);
+      this.playerState.exp += ed.exp; this.playerState.gold += ed.gold;
+      if (ed.isBoss) { this.playerState.bossKeys += 1; this.spawnDamageText(enemy.x, enemy.y - 40, '\uD83D\uDD11 Boss Key!', '#ffd700'); }
+      this.spawnDamageText(enemy.x, enemy.y - 30, `+${ed.exp} XP`, '#44ff44');
+      this.spawnDamageText(enemy.x + 20, enemy.y - 20, `+${ed.gold}g`, '#ffdd44');
+
+      // Update kill quests
+      this.updateKillQuests(ed.type);
+
+      this.checkLevelUp();
+      this.spawnLootDrop(enemy.x, enemy.y, ed);
       this.tweens.add({
-        targets: this.cursorGfx,
-        alpha: 0, scaleX: 2, scaleY: 2,
-        duration: 500, ease: 'Quad.easeOut',
-        onComplete: () => {
-          if (this.cursorGfx) { this.cursorGfx.clear(); this.cursorGfx.setAlpha(1).setScale(1); }
-        },
+        targets: enemy, alpha: 0, scaleX: 0, scaleY: 0, duration: 500,
+        onComplete: () => { enemy.hpBg?.destroy(); enemy.hpFg?.destroy(); enemy.nameLabel?.destroy(); enemy.bossGlow?.destroy(); enemy.destroy(); },
+      });
+      if (!ed.isBoss) {
+        this.time.delayedCall(15000 + Math.random() * 10000, () => {
+          const biome = BIOMES.find(b => b.id === ed.biome);
+          if (!biome) return;
+          const templates = BIOME_ENEMIES[biome.id];
+          if (templates?.length) {
+            const tmpl = templates[Math.floor(Math.random() * templates.length)];
+            this.spawnEnemy(biome.x + 100 + Math.random() * (biome.w - 200), biome.y + 100 + Math.random() * (biome.h - 200), tmpl, biome.id);
+          }
+        });
+      }
+      this.syncPlayerState();
+    }
+
+    /* ── Quest Progress ──────────────────────────────── */
+    updateKillQuests(enemyType) {
+      for (const q of this.activeQuests) {
+        if (q.completed) continue;
+        if (q.type === 'kill' && q.target === enemyType) {
+          q.progress = Math.min((q.progress || 0) + 1, q.count);
+          if (q.progress >= q.count) {
+            q.completed = true;
+            this.playerState.gold += q.reward.gold;
+            this.playerState.exp += q.reward.exp;
+            this.spawnDamageText(this.knight.x, this.knight.y - 60, `Quest Complete: ${q.name}!`, '#ffd700');
+            this.spawnDamageText(this.knight.x, this.knight.y - 75, `+${q.reward.gold}g +${q.reward.exp}XP`, '#44ff44');
+            this.completedQuestIds.push(q.id);
+            this.checkLevelUp();
+          }
+        }
+      }
+    }
+
+    updateFetchQuests(itemType) {
+      for (const q of this.activeQuests) {
+        if (q.completed) continue;
+        if (q.type === 'fetch' && q.item === itemType) {
+          q.progress = Math.min((q.progress || 0) + 1, q.count);
+          if (q.progress >= q.count) {
+            q.completed = true;
+            this.playerState.gold += q.reward.gold;
+            this.playerState.exp += q.reward.exp;
+            this.spawnDamageText(this.knight.x, this.knight.y - 60, `Quest Complete: ${q.name}!`, '#ffd700');
+            this.spawnDamageText(this.knight.x, this.knight.y - 75, `+${q.reward.gold}g +${q.reward.exp}XP`, '#44ff44');
+            this.completedQuestIds.push(q.id);
+            this.checkLevelUp();
+          }
+        }
+      }
+    }
+
+    getAvailableQuests(cityId) {
+      const city = CITIES.find(c => c.id === cityId);
+      if (!city) return [];
+      const biomeId = city.biome;
+      const templates = QUEST_TEMPLATES[biomeId] || [];
+      return templates.filter(t =>
+        !this.completedQuestIds.includes(t.id) &&
+        !this.activeQuests.some(aq => aq.id === t.id)
+      );
+    }
+
+    acceptQuest(quest) {
+      this.activeQuests.push({ ...quest, progress: 0, completed: false });
+      this.spawnDamageText(this.knight.x, this.knight.y - 50, `Quest Accepted: ${quest.name}`, '#ffdd44');
+    }
+
+    /* ── Fetch Item Pickup ───────────────────────────── */
+    updateFetchPickup() {
+      if (!this.knight) return;
+      for (let i = this.fetchItems.length - 1; i >= 0; i--) {
+        const item = this.fetchItems[i];
+        if (Phaser.Math.Distance.Between(this.knight.x, this.knight.y, item.x, item.y) < 30) {
+          // Check if we have an active fetch quest for this item
+          const hasQuest = this.activeQuests.some(q => !q.completed && q.type === 'fetch' && q.item === item.fetchData.itemType);
+          if (hasQuest) {
+            this.updateFetchQuests(item.fetchData.itemType);
+            this.spawnDamageText(item.x, item.y - 10, `+1 ${item.fetchData.itemType}`, '#44ff44');
+            item.glowObj?.destroy();
+            item.destroy();
+            this.fetchItems.splice(i, 1);
+          }
+        }
+      }
+    }
+
+    /* ── Loot ────────────────────────────────────────── */
+    spawnLootDrop(x, y, enemyData) {
+      if (Math.random() >= (enemyData.isBoss ? 1.0 : 0.3)) return;
+      const loot = this.add.circle(x + (Math.random() - 0.5) * 30, y + (Math.random() - 0.5) * 20, 8, 0x44ff44).setDepth(99000).setInteractive();
+      loot.lootData = { type: enemyData.isBoss ? 'epic' : (Math.random() < 0.2 ? 'rare' : 'common'), lifetime: 30000 };
+      this.tweens.add({ targets: loot, scaleX: 1.3, scaleY: 1.3, yoyo: true, repeat: -1, duration: 500 });
+      loot.on('pointerdown', () => this.pickupLoot(loot));
+      this.lootDrops.push(loot);
+    }
+
+    pickupLoot(loot) {
+      const g = loot.lootData.type === 'epic' ? 50 : loot.lootData.type === 'rare' ? 20 : 5;
+      this.playerState.gold += g;
+      this.spawnDamageText(loot.x, loot.y - 10, `+${g}g ${loot.lootData.type}`, loot.lootData.type === 'epic' ? '#aa44ff' : '#44ff44');
+      loot.destroy();
+      this.lootDrops = this.lootDrops.filter(l => l !== loot);
+      this.syncPlayerState();
+    }
+
+    /* ── Level Up ────────────────────────────────────── */
+    checkLevelUp() {
+      while (this.playerState.exp >= this.playerState.expToNext) {
+        this.playerState.exp -= this.playerState.expToNext;
+        this.playerState.level += 1;
+        this.playerState.expToNext = Math.floor(this.playerState.expToNext * 1.35);
+        this.playerState.attack += 3; this.playerState.defense += 2; this.playerState.intelligence += 2;
+        this.playerState.maxHp += 15; this.playerState.maxMana += 8;
+        this.playerState.hp = this.playerState.maxHp; this.playerState.mana = this.playerState.maxMana;
+        this.playerState.statPoints += 3; this.playerState.skillPoints += 1;
+        this.spawnDamageText(this.knight.x, this.knight.y - 60, `LEVEL UP! Lv.${this.playerState.level}`, '#ffd700');
+        const lg = this.add.graphics().setDepth(99999);
+        lg.fillStyle(0xffd700, 0.3); lg.fillCircle(this.knight.x, this.knight.y, 10);
+        this.tweens.add({
+          targets: { r: 10 }, r: 150, duration: 600,
+          onUpdate: (tw) => { const r = tw.getValue(); lg.clear(); lg.fillStyle(0xffd700, 0.3 * (1 - r/150)); lg.fillCircle(this.knight.x, this.knight.y, r); },
+          onComplete: () => lg.destroy(),
+        });
+      }
+    }
+
+    /* ── Projectiles ─────────────────────────────────── */
+    updateProjectiles(delta) {
+      for (let i = this.projectiles.length - 1; i >= 0; i--) {
+        const p = this.projectiles[i];
+        p.projectileData.lifetime -= delta;
+        const td = p.projectileData;
+        td.trail.clear(); td.trail.lineStyle(td.trailW || 2, td.skill.color, 0.3);
+        td.trail.lineBetween(td.prevX, td.prevY, p.x, p.y);
+        td.prevX = p.x; td.prevY = p.y;
+        if (td.lifetime <= 0) { td.trail.destroy(); p.destroy(); this.projectiles.splice(i, 1); continue; }
+        for (const e of this.enemies) {
+          if (e.enemyData.isDead) continue;
+          if (Phaser.Math.Distance.Between(p.x, p.y, e.x, e.y) < 30) {
+            this.damageEnemy(e, td.damage, false);
+            td.trail.destroy(); p.destroy(); this.projectiles.splice(i, 1); break;
+          }
+        }
+      }
+    }
+
+    /* ── Cooldowns & Regen ───────────────────────────── */
+    updateCooldowns(delta) {
+      for (const k of ['Q','W','E','R']) if (this.skillCooldowns[k] > 0) this.skillCooldowns[k] = Math.max(0, this.skillCooldowns[k] - delta);
+      if (this.playerState.mana < this.playerState.maxMana) this.playerState.mana = Math.min(this.playerState.maxMana, this.playerState.mana + 0.01 * delta);
+      if (this.playerState.hp < this.playerState.maxHp && this.playerState.hp > 0) this.playerState.hp = Math.min(this.playerState.maxHp, this.playerState.hp + 0.002 * delta);
+    }
+
+    updateDepthSorting() {
+      if (this.knight) this.knight.setDepth(this.knight.y);
+      for (const e of this.enemies) if (!e.enemyData.isDead) e.setDepth(e.y);
+      for (const n of this.npcs) n.setDepth(n.y);
+    }
+
+    updateHPBars() {
+      for (const e of this.enemies) {
+        if (e.enemyData.isDead) continue;
+        const ed = e.enemyData, bw = ed.isBoss ? 60 : 40, bh = 4;
+        const bx = e.x - bw/2, by = e.y - 28, hp = ed.currentHp / ed.maxHp;
+        e.hpBg.clear(); e.hpBg.fillStyle(0x222222, 0.8); e.hpBg.fillRect(bx - 1, by - 1, bw + 2, bh + 2);
+        e.hpFg.clear(); e.hpFg.fillStyle(hp > 0.5 ? 0x44ff44 : hp > 0.25 ? 0xffaa00 : 0xff4444);
+        e.hpFg.fillRect(bx, by, bw * hp, bh);
+      }
+    }
+
+    updateLabels() {
+      if (this.knight && this.knightLabel) this.knightLabel.setPosition(this.knight.x, this.knight.y - 36);
+      if (this.knight && this.levelBadge) { this.levelBadge.setPosition(this.knight.x, this.knight.y - 48); this.levelBadge.setText(`Lv.${this.playerState.level}`); }
+      for (const e of this.enemies) { if (!e.enemyData.isDead && e.nameLabel) e.nameLabel.setPosition(e.x, e.y - 35); }
+    }
+
+    updateNPCIndicators() {
+      if (!this.knight) return;
+      for (const n of this.npcs) {
+        const d = Phaser.Math.Distance.Between(this.knight.x, this.knight.y, n.x, n.y);
+        n.indicator.setPosition(n.x, n.y - 44).setAlpha(d < INTERACT_RADIUS ? 1 : 0);
+      }
+    }
+
+    interactWithNearby() {
+      if (!this.knight) return;
+      for (const n of this.npcs) {
+        if (Phaser.Math.Distance.Between(this.knight.x, this.knight.y, n.x, n.y) < INTERACT_RADIUS) { this.openNPCDialogue(n); return; }
+      }
+      for (const c of this.chests) {
+        if (c.chestData.opened) continue;
+        if (Phaser.Math.Distance.Between(this.knight.x, this.knight.y, c.x, c.y) < INTERACT_RADIUS) { this.openChest(c); return; }
+      }
+    }
+
+    openNPCDialogue(npc) {
+      this.dialogueActive = true;
+      this.moveTarget = null;
+      this.knight.body.setVelocity(0, 0);
+      if (dispatchRef.current) {
+        dispatchRef.current({
+          type: 'OPEN_NPC_DIALOGUE', npcId: npc.npcData.id, npcRole: npc.npcData.role,
+          npcLabel: npc.npcData.label, cityId: npc.npcData.cityId, playerState: { ...this.playerState },
+        });
+      }
+    }
+
+    openChest(chest) {
+      const cd = chest.chestData;
+      if (cd.type === 'golden' && this.playerState.bossKeys < 1) { this.spawnDamageText(chest.x, chest.y - 20, 'Need Boss Key!', '#ff4444'); return; }
+      cd.opened = true;
+      if (cd.type === 'golden') this.playerState.bossKeys -= 1;
+      const gr = cd.type === 'golden' ? 100 + Math.floor(Math.random() * 200) : 10 + Math.floor(Math.random() * 30);
+      const er = cd.type === 'golden' ? 50 + Math.floor(Math.random() * 100) : 5 + Math.floor(Math.random() * 15);
+      this.playerState.gold += gr; this.playerState.exp += er;
+      this.spawnDamageText(chest.x, chest.y - 20, `+${gr}g`, '#ffd700');
+      this.spawnDamageText(chest.x, chest.y - 35, `+${er} XP`, '#44ff44');
+      this.checkLevelUp(); this.syncPlayerState();
+      chest.setAlpha(0.3); chest.label.setText('(Empty)');
+    }
+
+    spawnDamageText(x, y, text, color) {
+      const dt = this.add.text(x, y, String(text), {
+        fontSize: typeof text === 'number' ? '14px' : '11px',
+        fontFamily: 'Cinzel, serif', color, stroke: '#000000', strokeThickness: 3, fontStyle: 'bold',
+      }).setOrigin(0.5).setDepth(999999);
+      dt.dmgData = { lifetime: 1200 }; this.damageTexts.push(dt);
+      this.tweens.add({ targets: dt, y: y - 40, alpha: 0, duration: 1200, ease: 'Quad.easeOut', onComplete: () => dt.destroy() });
+    }
+
+    updateDamageTexts(delta) {
+      for (let i = this.damageTexts.length - 1; i >= 0; i--) {
+        this.damageTexts[i].dmgData.lifetime -= delta;
+        if (this.damageTexts[i].dmgData.lifetime <= 0) this.damageTexts.splice(i, 1);
+      }
+    }
+
+    updateLoot(delta) {
+      for (let i = this.lootDrops.length - 1; i >= 0; i--) {
+        const l = this.lootDrops[i];
+        l.lootData.lifetime -= delta;
+        if (this.knight && Phaser.Math.Distance.Between(this.knight.x, this.knight.y, l.x, l.y) < 30) { this.pickupLoot(l); continue; }
+        if (l.lootData.lifetime <= 0) { l.destroy(); this.lootDrops.splice(i, 1); }
+      }
+    }
+
+    checkPlayerDeath() {
+      if (this.playerState.hp <= 0 && dispatchRef.current) dispatchRef.current({ type: 'PLAYER_DIED', playerState: { ...this.playerState } });
+    }
+
+    syncPlayerState() {
+      if (onPlayerUpdate) onPlayerUpdate({
+        ...this.playerState,
+        skillCooldowns: { ...this.skillCooldowns },
+        activeQuests: this.activeQuests.filter(q => !q.completed),
+        completedQuestCount: this.completedQuestIds.length,
       });
     }
 
-    _triggerCombat(target) {
-      this.busy = true;
-      this.knight.setVelocity(0, 0);
-      this.isMoving = false;
-      this.moveTarget = null;
-      this.cameras.main.flash(400, 180, 40, 40);
-      this.cameras.main.shake(200, 0.01);
-      this.time.delayedCall(400, () => {
-        dispatchRef.current({ type: 'START_COMBAT', enemyId: target.enemyId, isBoss: target.isBoss });
-      });
-    }
-
-    _interactNPC(npc) {
-      this.busy = true;
-      this.knight.setVelocity(0, 0);
-      this.isMoving = false;
-      this.moveTarget = null;
-      this.time.delayedCall(100, () => {
-        dispatchRef.current({ type: 'OPEN_SHOP' });
-      });
-    }
-
-    _enterPortal(portal) {
-      this.busy = true;
-      this.knight.setVelocity(0, 0);
-      this.isMoving = false;
-      this.moveTarget = null;
-      this.cameras.main.fadeOut(600, 0, 0, 0);
-      this.time.delayedCall(650, () => {
-        dispatchRef.current({ type: 'TRAVEL_TO_CITY', cityId: portal.targetCity });
-      });
-    }
+    closeDialogue() { this.dialogueActive = false; }
+    healPlayer(amt) { this.playerState.hp = Math.min(this.playerState.maxHp, this.playerState.hp + amt); this.spawnDamageText(this.knight.x, this.knight.y - 40, `+${amt} HP`, '#44ff88'); this.syncPlayerState(); }
+    restoreMana(amt) { this.playerState.mana = Math.min(this.playerState.maxMana, this.playerState.mana + amt); this.spawnDamageText(this.knight.x, this.knight.y - 40, `+${amt} MP`, '#4488ff'); this.syncPlayerState(); }
   }
 
   return new Phaser.Game({
     type: Phaser.AUTO,
     parent: container,
-    width: container.clientWidth || window.innerWidth,
-    height: container.clientHeight || window.innerHeight,
-    physics: {
-      default: 'arcade',
-      arcade: { gravity: { y: 0 }, debug: false },
-    },
-    scene: GameScene,
-    scale: {
-      mode: Phaser.Scale.RESIZE,
-      autoCenter: Phaser.Scale.CENTER_BOTH,
-    },
-    backgroundColor: '#0a0a08',
+    width: container.clientWidth || 960,
+    height: container.clientHeight || 640,
     pixelArt: true,
-    render: {
-      antialias: false,
-      pixelArt: true,
-      roundPixels: true,
-    },
+    backgroundColor: '#0a0a0a',
+    physics: { default: 'arcade', arcade: { gravity: { y: 0 }, debug: false } },
+    scene: [ARPGScene],
+    scale: { mode: Phaser.Scale.RESIZE, autoCenter: Phaser.Scale.CENTER_BOTH },
+    input: { mouse: { preventDefaultWheel: false, preventDefaultDown: false } },
   });
 }
 
-// ── React component ───────────────────────────────────────
-const GameMap = ({ dispatch, player }) => {
+// ══════════════════════════════════════════════════════════
+// REACT WRAPPER COMPONENT
+// ══════════════════════════════════════════════════════════
+export default function GameMap({ dispatch, player }) {
   const containerRef = useRef(null);
-  const gameRef      = useRef(null);
-  const dispatchRef  = useRef(dispatch);
-  const playerRef    = useRef(player);
-  const [loading, setLoading] = useState(true);
+  const phaserRef = useRef(null);
+  const sceneRef = useRef(null);
+  const dispatchRef = useRef(dispatch);
+  const [playerState, setPlayerState] = useState(null);
+  const [dialogueData, setDialogueData] = useState(null);
+  const [questPanel, setQuestPanel] = useState(null); // { available, active, cityId }
 
-  useEffect(() => { dispatchRef.current = dispatch; }, [dispatch]);
-  useEffect(() => { playerRef.current = player; }, [player]);
+  dispatchRef.current = dispatch;
+
+  const gameDispatchRef = useRef((action) => {
+    if (action.type === 'OPEN_NPC_DIALOGUE') {
+      if (action.npcRole === 'questgiver') {
+        // Open quest panel instead
+        const scene = sceneRef.current;
+        if (scene) {
+          const available = scene.getAvailableQuests(action.cityId);
+          const active = scene.activeQuests.filter(q => !q.completed);
+          setQuestPanel({ available, active, cityId: action.cityId });
+          scene.dialogueActive = true;
+        }
+      } else {
+        setDialogueData(action);
+      }
+    } else if (action.type === 'PLAYER_DIED') {
+      dispatch({ type: 'GOTO_SCREEN', screen: 'game_over' });
+    } else {
+      dispatch(action);
+    }
+  });
 
   useEffect(() => {
-    if (!containerRef.current || gameRef.current) return;
-    let destroyed = false;
-
-    import('phaser').then((mod) => {
-      if (destroyed || !containerRef.current) return;
-      const Phaser = mod.default || mod;
-      gameRef.current = launchPhaser(
-        Phaser,
-        containerRef.current,
-        player?.name ?? 'Bohater',
-        dispatchRef,
-        playerRef,
-      );
-      setLoading(false);
-    }).catch((err) => {
-      console.error('Phaser failed to load:', err);
+    if (!containerRef.current || phaserRef.current) return;
+    import('phaser').then((PhaserModule) => {
+      const Phaser = PhaserModule.default || PhaserModule;
+      if (!containerRef.current || phaserRef.current) return;
+      const game = launchPhaser(Phaser, containerRef.current, player, gameDispatchRef, (s) => setPlayerState(s));
+      phaserRef.current = game;
+      game.events.on('ready', () => { sceneRef.current = game.scene.getScene('ARPGScene'); });
     });
+    return () => { if (phaserRef.current) { phaserRef.current.destroy(true); phaserRef.current = null; } };
+  }, []);
 
-    return () => {
-      destroyed = true;
-      gameRef.current?.destroy(true);
-      gameRef.current = null;
-    };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const handleCloseDialogue = () => { setDialogueData(null); sceneRef.current?.closeDialogue(); };
+  const handleCloseQuestPanel = () => { setQuestPanel(null); sceneRef.current?.closeDialogue(); };
+
+  const handleAcceptQuest = (quest) => {
+    sceneRef.current?.acceptQuest(quest);
+    // Refresh panel
+    const scene = sceneRef.current;
+    if (scene && questPanel) {
+      setQuestPanel({
+        ...questPanel,
+        available: scene.getAvailableQuests(questPanel.cityId),
+        active: scene.activeQuests.filter(q => !q.completed),
+      });
+    }
+  };
+
+  const handleHeal = () => {
+    if (sceneRef.current && playerState && playerState.gold >= 20) {
+      sceneRef.current.playerState.gold -= 20;
+      sceneRef.current.healPlayer(sceneRef.current.playerState.maxHp);
+      sceneRef.current.restoreMana(sceneRef.current.playerState.maxMana);
+      sceneRef.current.syncPlayerState();
+    }
+    handleCloseDialogue();
+  };
+
+  const classSkills = getClassSkills(player?.class || 'warrior');
+  const ps = playerState || {
+    hp: player?.hp ?? 100, maxHp: player?.maxHp ?? 100,
+    mana: player?.mana ?? 50, maxMana: player?.maxMana ?? 50,
+    level: player?.level ?? 1, exp: player?.exp ?? 0, expToNext: player?.expToNext ?? 100,
+    gold: player?.gold ?? 0, skillCooldowns: { Q: 0, W: 0, E: 0, R: 0 },
+    statPoints: 0, skillPoints: 0, bossKeys: 0, activeQuests: [], completedQuestCount: 0,
+  };
+  const hpPct = ps.maxHp > 0 ? (ps.hp / ps.maxHp) * 100 : 0;
+  const mpPct = ps.maxMana > 0 ? (ps.mana / ps.maxMana) * 100 : 0;
+  const expPct = ps.expToNext > 0 ? (ps.exp / ps.expToNext) * 100 : 0;
+  const activeQuests = ps.activeQuests || [];
 
   return (
-    <div style={{ width: '100%', height: '100vh', position: 'relative', overflow: 'hidden', background: '#0a0a08' }}>
-      {loading && (
-        <div style={{
-          position: 'absolute', inset: 0, zIndex: 200,
-          display: 'flex', flexDirection: 'column',
-          alignItems: 'center', justifyContent: 'center',
-          background: '#0a0a08', color: '#aa8844',
-          fontFamily: '"Cinzel", serif', fontSize: '16px', gap: 12,
-        }}>
-          <div style={{ fontSize: 40 }}>⚔️</div>
-          <div>Ładowanie świata…</div>
+    <div className="relative w-full h-screen bg-black overflow-hidden">
+      <div ref={containerRef} className="w-full h-full" />
+
+      {/* ── Health & Mana Orbs ─── */}
+      <div className="absolute bottom-4 left-4 flex items-end gap-4 z-50">
+        <div className="relative w-20 h-20">
+          <div className="absolute inset-0 rounded-full border-2 border-red-900 bg-gray-950 overflow-hidden">
+            <div className="absolute bottom-0 w-full transition-all duration-300" style={{ height: `${hpPct}%`, background: 'radial-gradient(circle at 30% 40%, #ff3333, #881111)' }} />
+          </div>
+          <div className="absolute inset-0 rounded-full border-2 border-red-700/50" />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="text-xs font-bold text-white drop-shadow-lg font-cinzel">{Math.floor(ps.hp)}/{ps.maxHp}</span>
+          </div>
         </div>
-      )}
-
-      <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
-
-      {/* CSS fog of war vignette */}
-      {!loading && (
-        <div style={{
-          position: 'absolute', inset: 0, zIndex: 10,
-          pointerEvents: 'none',
-          background: 'radial-gradient(ellipse 50% 50% at 50% 50%, transparent 0%, transparent 30%, rgba(0,0,0,0.4) 55%, rgba(0,0,0,0.75) 75%, rgba(0,0,0,0.95) 100%)',
-        }} />
-      )}
-
-      {/* Back to city button */}
-      <button
-        onClick={() => dispatch({ type: 'GOTO_SCREEN', screen: 'city' })}
-        style={{
-          position: 'absolute', top: 14, left: 14, zIndex: 100,
-          padding: '8px 18px',
-          background: 'rgba(10, 10, 8, 0.9)',
-          border: '1px solid rgba(127, 29, 29, 0.6)',
-          color: '#f59e0b',
-          fontFamily: '"Cinzel", serif', fontSize: '13px',
-          borderRadius: '4px', cursor: 'pointer',
-          letterSpacing: '0.05em', transition: 'border-color 0.2s',
-        }}
-        onMouseEnter={e => (e.currentTarget.style.borderColor = '#aa3333')}
-        onMouseLeave={e => (e.currentTarget.style.borderColor = 'rgba(127,29,29,0.6)')}
-      >
-        ← Wróć do Miasta
-      </button>
-
-      {/* Mini quest log */}
-      <div style={{
-        position: 'absolute', top: 14, right: 14, zIndex: 100,
-        background: 'rgba(10, 10, 8, 0.9)',
-        border: '1px solid rgba(127, 29, 29, 0.5)',
-        borderRadius: '4px', padding: '10px 14px',
-        color: '#94a3b8', fontSize: '11px',
-        fontFamily: '"Crimson Text", serif', lineHeight: '1.8',
-        minWidth: 200, maxWidth: 240,
-      }}>
-        <div style={{ color: '#f59e0b', marginBottom: 6, fontFamily: '"Cinzel", serif', fontSize: '12px', letterSpacing: '0.08em' }}>
-          📜 Cele
+        <div className="relative w-20 h-20">
+          <div className="absolute inset-0 rounded-full border-2 border-blue-900 bg-gray-950 overflow-hidden">
+            <div className="absolute bottom-0 w-full transition-all duration-300" style={{ height: `${mpPct}%`, background: 'radial-gradient(circle at 30% 40%, #3366ff, #112288)' }} />
+          </div>
+          <div className="absolute inset-0 rounded-full border-2 border-blue-700/50" />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="text-xs font-bold text-white drop-shadow-lg font-cinzel">{Math.floor(ps.mana)}/{ps.maxMana}</span>
+          </div>
         </div>
-        <div style={{ color: '#cbd5e1' }}>⚔️ Zabij potwory na mapie</div>
-        <div style={{ color: '#cbd5e1' }}>🏪 Odwiedź kupca Gorana</div>
-        <div style={{ color: '#886644' }}>🌀 Znajdź portale do nowych krain</div>
-        <div style={{ color: '#ff6644', marginTop: 4 }}>💀 Pokonaj bossa na południu</div>
       </div>
 
-      {/* Diablo-style bottom HUD */}
-      {!loading && player && (
-        <div style={{
-          position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 100,
-          height: 80,
-          background: 'linear-gradient(to top, rgba(10,10,8,0.95) 0%, rgba(10,10,8,0.85) 70%, transparent 100%)',
-          borderTop: '1px solid rgba(127,29,29,0.4)',
-          display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between',
-          padding: '0 20px 10px 20px',
-        }}>
-          {/* Health Orb */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 80 }}>
-            <div style={{
-              width: 60, height: 60, borderRadius: '50%',
-              background: 'radial-gradient(circle at 40% 40%, #cc2222, #660000 70%, #330000)',
-              border: '3px solid #8b1a1a',
-              boxShadow: '0 0 12px rgba(200,30,30,0.5), inset 0 0 10px rgba(0,0,0,0.5)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              position: 'relative', overflow: 'hidden',
-            }}>
-              <div style={{
-                position: 'absolute', bottom: 0, left: 0, right: 0,
-                height: `${Math.max(0, Math.min(100, (player.hp / Math.max(1, player.maxHp)) * 100))}%`,
-                background: 'radial-gradient(circle at 50% 80%, #ee3333, #aa1111)',
-                transition: 'height 0.5s ease',
-                borderRadius: '0 0 50% 50%',
-              }} />
-              <span style={{ position: 'relative', zIndex: 2, color: '#fff', fontSize: '13px', fontFamily: '"Cinzel", serif', fontWeight: 'bold', textShadow: '0 0 4px #000' }}>
-                {player.hp}
-              </span>
-            </div>
-            <span style={{ color: '#ff6666', fontSize: '10px', fontFamily: '"Cinzel", serif', marginTop: 2 }}>HP</span>
-          </div>
-
-          {/* Action bar */}
-          <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end', paddingBottom: 4 }}>
-            {['Q ⚔️', 'W ✨', 'E 🛡️', 'R 🔥'].map((skill, i) => (
-              <div key={i} style={{
-                width: 44, height: 44,
-                background: 'rgba(30,20,10,0.9)',
-                border: '1px solid rgba(127,29,29,0.6)',
-                borderRadius: '4px',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: '#aa8844', fontSize: '12px', fontFamily: '"Cinzel", serif',
-                cursor: 'default',
-                boxShadow: '0 0 4px rgba(0,0,0,0.5)',
-              }}>
-                {skill}
+      {/* ── Skill Bar (QWER) — class specific ─── */}
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 z-50">
+        {Object.entries(classSkills).map(([key, skill]) => {
+          const cd = ps.skillCooldowns?.[key] ?? 0;
+          const ready = cd <= 0;
+          return (
+            <div key={key} className="relative group">
+              <div className={`w-14 h-14 rounded-lg border-2 flex flex-col items-center justify-center cursor-pointer transition-all
+                ${ready ? 'border-amber-600 bg-gray-900/90 hover:border-amber-400' : 'border-gray-700 bg-gray-900/70'}`}>
+                {!ready && (
+                  <div className="absolute inset-0 bg-black/60 rounded-lg flex items-center justify-center">
+                    <span className="text-xs text-gray-400 font-mono">{(cd / 1000).toFixed(1)}s</span>
+                  </div>
+                )}
+                <span className="text-lg font-bold font-cinzel" style={{ color: `#${skill.color.toString(16).padStart(6, '0')}` }}>{key}</span>
+                <span className="text-[8px] text-gray-400 font-crimson">{skill.name}</span>
               </div>
-            ))}
-            <div style={{ width: 1, height: 36, background: 'rgba(127,29,29,0.4)', margin: '0 4px' }} />
-            {['🧪', '🍖'].map((pot, i) => (
-              <div key={`p${i}`} style={{
-                width: 36, height: 36,
-                background: 'rgba(30,20,10,0.9)',
-                border: '1px solid rgba(100,80,40,0.5)',
-                borderRadius: '4px',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: '16px', cursor: 'default',
-              }}>
-                {pot}
+              <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 hidden group-hover:block w-36 p-2 bg-gray-950 border border-amber-900 rounded text-xs z-[999]">
+                <div className="font-cinzel text-amber-400 font-bold">{skill.name}</div>
+                <div className="text-gray-400 font-crimson">{skill.desc}</div>
+                <div className="text-blue-400 mt-1">Mana: {skill.manaCost}</div>
+                <div className="text-gray-500">CD: {skill.cooldown / 1000}s</div>
               </div>
-            ))}
-          </div>
-
-          {/* Mana Orb */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 80 }}>
-            <div style={{
-              width: 60, height: 60, borderRadius: '50%',
-              background: 'radial-gradient(circle at 40% 40%, #2244cc, #001166 70%, #000833)',
-              border: '3px solid #1a1a8b',
-              boxShadow: '0 0 12px rgba(30,30,200,0.5), inset 0 0 10px rgba(0,0,0,0.5)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              position: 'relative', overflow: 'hidden',
-            }}>
-              <div style={{
-                position: 'absolute', bottom: 0, left: 0, right: 0,
-                height: `${Math.max(0, Math.min(100, (player.mana / Math.max(1, player.maxMana)) * 100))}%`,
-                background: 'radial-gradient(circle at 50% 80%, #3355ee, #1122aa)',
-                transition: 'height 0.5s ease',
-                borderRadius: '0 0 50% 50%',
-              }} />
-              <span style={{ position: 'relative', zIndex: 2, color: '#fff', fontSize: '13px', fontFamily: '"Cinzel", serif', fontWeight: 'bold', textShadow: '0 0 4px #000' }}>
-                {player.mana}
-              </span>
             </div>
-            <span style={{ color: '#6688ff', fontSize: '10px', fontFamily: '"Cinzel", serif', marginTop: 2 }}>MP</span>
+          );
+        })}
+      </div>
+
+      {/* ── Top Bar ─── */}
+      <div className="absolute top-2 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 bg-gray-950/80 border border-amber-900/50 rounded-lg px-4 py-2">
+        <span className="font-cinzel text-amber-400 font-bold text-sm">{player?.name || 'Hero'}</span>
+        <span className="font-cinzel text-purple-400 text-xs capitalize">{player?.class || 'warrior'}</span>
+        <span className="font-cinzel text-yellow-500 text-xs">Lv.{ps.level}</span>
+        <div className="w-32 h-2 bg-gray-800 rounded-full overflow-hidden">
+          <div className="h-full bg-gradient-to-r from-green-600 to-green-400 transition-all" style={{ width: `${expPct}%` }} />
+        </div>
+        <span className="text-xs text-gray-400 font-mono">{Math.floor(ps.exp)}/{ps.expToNext} XP</span>
+        <span className="text-yellow-400 text-xs font-cinzel">{'\uD83D\uDCB0'} {ps.gold}</span>
+        {ps.bossKeys > 0 && <span className="text-amber-400 text-xs font-cinzel">{'\uD83D\uDD11'} {ps.bossKeys}</span>}
+      </div>
+
+      {/* ── Right Side Buttons ─── */}
+      <div className="absolute top-16 right-3 flex flex-col gap-2 z-50">
+        <button onClick={() => dispatch({ type: 'OPEN_INVENTORY' })} className="w-10 h-10 rounded border border-amber-800 bg-gray-950/80 text-amber-400 hover:bg-gray-900 font-cinzel text-sm" title="Inventory">EQ</button>
+        <button onClick={() => dispatch({ type: 'OPEN_SKILL_TREE' })} className="w-10 h-10 rounded border border-green-800 bg-gray-950/80 text-green-400 hover:bg-gray-900 font-cinzel text-sm" title="Skill Tree">SK</button>
+        <button onClick={() => dispatch({ type: 'OPEN_QUEST_TRACKER' })} className="w-10 h-10 rounded border border-purple-800 bg-gray-950/80 text-purple-400 hover:bg-gray-900 text-sm" title="Quests">{'\uD83D\uDCDC'}</button>
+        <button onClick={() => dispatch({ type: 'GOTO_SCREEN', screen: 'city' })} className="w-10 h-10 rounded border border-gray-700 bg-gray-950/80 text-gray-400 hover:bg-gray-900 text-sm" title="City">{'\uD83C\uDFE0'}</button>
+      </div>
+
+      {/* ── Quest Tracker HUD (always visible) ─── */}
+      <div className="absolute top-32 right-3 w-52 z-40">
+        <div className="bg-gray-950/80 border border-amber-900/40 rounded-lg p-2">
+          <div className="font-cinzel text-amber-400 text-xs font-bold mb-1">{'\uD83D\uDCDC'} Active Quests ({activeQuests.length})</div>
+          {activeQuests.length === 0 ? (
+            <div className="text-gray-600 text-[10px] font-crimson italic">No active quests. Visit a Quest Board in any city.</div>
+          ) : (
+            <div className="space-y-1.5 max-h-36 overflow-y-auto">
+              {activeQuests.map((q, i) => (
+                <div key={q.id || i} className="border-l-2 border-amber-700 pl-2">
+                  <div className="text-[10px] text-gray-300 font-cinzel font-bold">{q.name}</div>
+                  <div className="flex items-center gap-1">
+                    <div className="flex-1 h-1 bg-gray-800 rounded-full overflow-hidden">
+                      <div className="h-full bg-amber-500 transition-all" style={{ width: `${q.count > 0 ? ((q.progress || 0) / q.count) * 100 : 0}%` }} />
+                    </div>
+                    <span className="text-[9px] text-gray-500 font-mono">{q.progress || 0}/{q.count}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {(ps.completedQuestCount || 0) > 0 && (
+            <div className="text-[9px] text-green-500 font-cinzel mt-1">{'\u2713'} {ps.completedQuestCount} completed</div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Minimap border ─── */}
+      <div className="absolute top-[10px] right-[10px] w-[170px] h-[170px] border-2 border-amber-900/60 rounded pointer-events-none z-30" />
+
+      {/* ── NPC Dialogue ─── */}
+      {dialogueData && (
+        <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/60">
+          <div className="max-w-md w-full bg-gray-950 border-2 border-amber-800 rounded-xl p-6 shadow-2xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-full bg-gray-800 border-2 border-amber-600 flex items-center justify-center text-2xl">
+                {dialogueData.npcRole === 'blacksmith' ? '\u2692\uFE0F' : '\uD83D\uDC9A'}
+              </div>
+              <div>
+                <div className="font-cinzel text-amber-400 font-bold">{dialogueData.npcLabel}</div>
+                <div className="text-xs text-gray-500 font-crimson capitalize">{dialogueData.npcRole} — {dialogueData.cityId}</div>
+              </div>
+            </div>
+            <div className="bg-gray-900 rounded-lg p-4 mb-4 border border-gray-800">
+              <p className="font-crimson text-gray-300">
+                {dialogueData.npcRole === 'blacksmith'
+                  ? "Welcome, traveler. I can repair your gear and trade fine weapons. What do you need?"
+                  : "Blessings upon you. I can restore your body and spirit. Shall I heal you?"}
+              </p>
+            </div>
+            <div className="flex flex-col gap-2">
+              {dialogueData.npcRole === 'healer' && (
+                <button onClick={handleHeal} className="w-full py-2 bg-green-900/50 border border-green-700 rounded text-green-400 font-cinzel text-sm hover:bg-green-800/50 transition-all">
+                  {'\uD83D\uDC9A'} Heal &amp; Restore (20g)
+                </button>
+              )}
+              {dialogueData.npcRole === 'blacksmith' && (
+                <button onClick={() => { dispatch({ type: 'OPEN_SHOP' }); handleCloseDialogue(); }} className="w-full py-2 bg-amber-900/50 border border-amber-700 rounded text-amber-400 font-cinzel text-sm hover:bg-amber-800/50 transition-all">
+                  {'\u2692\uFE0F'} Trade
+                </button>
+              )}
+              <button onClick={handleCloseDialogue} className="w-full py-2 bg-gray-800/50 border border-gray-700 rounded text-gray-400 font-cinzel text-sm hover:bg-gray-700/50 transition-all">
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Player info bar */}
-      {!loading && player && (
-        <div style={{
-          position: 'absolute', bottom: 82, left: '50%', transform: 'translateX(-50%)',
-          zIndex: 100, display: 'flex', gap: 16, alignItems: 'center',
-          background: 'rgba(10,10,8,0.85)',
-          border: '1px solid rgba(127,29,29,0.3)',
-          borderRadius: '4px', padding: '4px 16px',
-          fontFamily: '"Cinzel", serif', fontSize: '11px',
-        }}>
-          <span style={{ color: '#f59e0b', fontWeight: 'bold' }}>{player.name}</span>
-          <span style={{ color: '#666' }}>|</span>
-          <span style={{ color: '#aa88ff' }}>Poz. {player.level}</span>
-          <span style={{ color: '#666' }}>|</span>
-          <span style={{ color: '#ffcc44' }}>💰 {player.gold}</span>
+      {/* ── Quest Board Panel ─── */}
+      {questPanel && (
+        <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/60">
+          <div className="max-w-lg w-full bg-gray-950 border-2 border-amber-800 rounded-xl p-6 shadow-2xl max-h-[80vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-yellow-900/30 border-2 border-yellow-600 flex items-center justify-center text-xl">{'\u2757'}</div>
+                <div>
+                  <div className="font-cinzel text-amber-400 font-bold">Quest Board</div>
+                  <div className="text-xs text-gray-500 font-crimson capitalize">{questPanel.cityId}</div>
+                </div>
+              </div>
+              <button onClick={handleCloseQuestPanel} className="text-gray-500 hover:text-red-400 text-xl">{'\u2715'}</button>
+            </div>
+
+            {/* Available quests */}
+            {questPanel.available.length > 0 && (
+              <div className="mb-4">
+                <div className="font-cinzel text-yellow-400 text-xs font-bold mb-2">Available Quests</div>
+                <div className="space-y-2">
+                  {questPanel.available.map(q => (
+                    <div key={q.id} className="p-3 border border-gray-800 rounded-lg bg-gray-900/50">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="font-cinzel text-sm text-gray-200 font-bold">{q.name}</div>
+                          <div className="text-xs text-gray-400 font-crimson">{q.desc}</div>
+                          <div className="text-[10px] text-gray-500 mt-1">
+                            <span className="text-yellow-400">+{q.reward.gold}g</span>
+                            {' '}<span className="text-green-400">+{q.reward.exp} XP</span>
+                          </div>
+                        </div>
+                        <button onClick={() => handleAcceptQuest(q)}
+                          className="px-3 py-1.5 bg-amber-900/40 border border-amber-700 rounded text-amber-400 font-cinzel text-xs hover:bg-amber-800/50 transition-all shrink-0">
+                          Accept
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Active quests */}
+            {questPanel.active.length > 0 && (
+              <div>
+                <div className="font-cinzel text-blue-400 text-xs font-bold mb-2">Active Quests</div>
+                <div className="space-y-2">
+                  {questPanel.active.map(q => (
+                    <div key={q.id} className="p-3 border border-gray-800 rounded-lg bg-gray-900/30">
+                      <div className="font-cinzel text-sm text-gray-300">{q.name}</div>
+                      <div className="text-xs text-gray-500 font-crimson">{q.desc}</div>
+                      <div className="flex items-center gap-2 mt-1">
+                        <div className="flex-1 h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                          <div className="h-full bg-blue-500 transition-all" style={{ width: `${q.count > 0 ? ((q.progress || 0) / q.count) * 100 : 0}%` }} />
+                        </div>
+                        <span className="text-xs text-gray-400 font-mono">{q.progress || 0}/{q.count}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {questPanel.available.length === 0 && questPanel.active.length === 0 && (
+              <div className="text-center text-gray-500 font-crimson italic py-4">No quests available here. Try another city.</div>
+            )}
+          </div>
         </div>
       )}
+
+      {/* Controls hint */}
+      <div className="absolute bottom-2 right-4 text-[9px] text-gray-600 font-mono z-50 text-right">
+        RMB: Move | LMB: Attack | QWER: Skills (aimed at cursor) | F: Interact
+      </div>
     </div>
   );
-};
-
-export default GameMap;
+}
