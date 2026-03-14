@@ -357,7 +357,7 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
       this.isDashing = false; this.mouseWorldPos = { x: 0, y: 0 };
       this.dialogueActive = false; this.moveTarget = null; this.moveMarker = null;
       this.activeQuests = []; this.completedQuestIds = []; this.saveTimer = 0;
-      this.staticObjects = null; this.respawnTimer = 0; this.buildings = [];
+      this.staticObjects = null; this.respawnTimer = 0; this.buildings = []; this.decorations = []; this._cullTimer = 0;
       this._loadQuestState();
     }
 
@@ -529,135 +529,148 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
     }
 
     // ══════════════════════════════════════════════════
-    // GROUND — noise-based organic biomes with blending
+    // GROUND — smooth canvas-textured biome map (no grid)
     // ══════════════════════════════════════════════════
     renderGround(rng) {
-      const hasGroundSheet = this.textures.exists('ground_tiles');
-      const hasFloorSheet = this.textures.exists('floor_tiles');
-      const groundTotal = hasGroundSheet ? this.textures.get('ground_tiles').frameTotal - 1 : 0;
-
-      const BIOME_GROUND_FRAMES = {
-        forest:   [0, 1, 2, 21, 22],
-        desert:   [42, 43, 63, 64],
-        ice:      [84, 85, 105, 106],
-        volcanic: [126, 127, 147, 148],
-        swamp:    [168, 169, 189, 190],
-        mountain: [252, 253, 273, 274],
+      // --- Fast single-octave biome lookup for canvas (6× faster than full fbm) ---
+      const fastBiomeColor = (wx, wy) => {
+        const nx = wx / 1000, ny = wy / 1000;
+        let bestScore = -Infinity, secondScore = -Infinity;
+        let primary = BIOMES[0], secondary = BIOMES[1];
+        for (const b of BIOMES) {
+          const dx = wx - b.cx, dy = wy - b.cy;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          const n = noise2D(nx * 1.5 + b.nox, ny * 1.5 + b.noy);
+          const score = -(dist / b.radius) + n * 0.45;
+          if (score > bestScore) { secondScore = bestScore; secondary = primary; bestScore = score; primary = b; }
+          else if (score > secondScore) { secondScore = score; secondary = b; }
+        }
+        const diff = bestScore - secondScore;
+        const blend = diff < 0.4 ? 1 - diff / 0.4 : 0;
+        const gt = primary.groundTint;
+        let r = ((gt >> 16) & 0xff) * 0.7, g = ((gt >> 8) & 0xff) * 0.7, bl = (gt & 0xff) * 0.7;
+        if (blend > 0.05) {
+          const st = secondary.groundTint; const bw = blend * 0.6;
+          r = r * (1 - bw) + ((st >> 16) & 0xff) * 0.7 * bw;
+          g = g * (1 - bw) + ((st >> 8) & 0xff) * 0.7 * bw;
+          bl = bl * (1 - bw) + (st & 0xff) * 0.7 * bw;
+        }
+        const shade = noise2D(wx / 300, wy / 300) * 12 + noise2D(wx / 80, wy / 80) * 5;
+        return [
+          Math.max(0, Math.min(255, (r + shade) | 0)),
+          Math.max(0, Math.min(255, (g + shade) | 0)),
+          Math.max(0, Math.min(255, (bl + shade) | 0)),
+        ];
       };
+
+      // 1) Smooth canvas ground — one texture, no grid, organic blending
+      const RES = 8; // 8 world-px per texel → bilinear-filtered for smoothness
+      const texW = Math.ceil(WORLD_W / RES), texH = Math.ceil(WORLD_H / RES);
+      const canvasTex = this.textures.createCanvas('biome_ground', texW, texH);
+      const ctx = canvasTex.getContext();
+      const imgData = ctx.createImageData(texW, texH);
+      const pix = imgData.data;
+      for (let py = 0; py < texH; py++) {
+        const wy = py * RES;
+        for (let px = 0; px < texW; px++) {
+          const [r, g, b] = fastBiomeColor(px * RES, wy);
+          const idx = (py * texW + px) * 4;
+          pix[idx] = r; pix[idx + 1] = g; pix[idx + 2] = b; pix[idx + 3] = 255;
+        }
+      }
+      ctx.putImageData(imgData, 0, 0);
+      canvasTex.refresh();
+      // Override pixelArt NEAREST with LINEAR for smooth ground only
+      try {
+        const gl = this.sys.renderer.gl;
+        const glTex = canvasTex.source[0].glTexture;
+        if (gl && glTex) {
+          gl.bindTexture(gl.TEXTURE_2D, glTex);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        }
+      } catch (_) {}
+      this.add.image(WORLD_W / 2, WORLD_H / 2, 'biome_ground')
+        .setDisplaySize(WORLD_W, WORLD_H).setDepth(-1);
+
+      // 2) Sparse detail sprites for visual texture (tracked for frustum culling)
+      const hasGroundSheet = this.textures.exists('ground_tiles');
+      const groundTotal = hasGroundSheet ? this.textures.get('ground_tiles').frameTotal - 1 : 0;
       const BIOME_LEAF_FRAMES = {
         forest: [3, 4, 5, 24, 25], swamp: [3, 4, 5, 24, 25],
         desert: [44, 65], ice: [86, 107], volcanic: [128, 149], mountain: [254, 275],
       };
-
-      // 1) Noise-sampled biome ground — organic & blended
-      const step = TILE_SCALED * 2; // 96px
-      const cols = Math.ceil(WORLD_W / step), rows = Math.ceil(WORLD_H / step);
-      const g = this.add.graphics().setDepth(-1);
-
-      for (let col = 0; col < cols; col++) {
-        for (let row = 0; row < rows; row++) {
-          const wx = col * step + step / 2, wy = row * step + step / 2;
-          const { primary, secondary, blend } = getBiomeAt(wx, wy);
-
-          // Darken the ground tint slightly for the base
-          const gt = primary.groundTint;
-          const cr = ((gt >> 16) & 0xff), cg = ((gt >> 8) & 0xff), cb = (gt & 0xff);
-          g.fillStyle(((Math.floor(cr * 0.7)) << 16) | ((Math.floor(cg * 0.7)) << 8) | Math.floor(cb * 0.7), 1);
-          g.fillRect(col * step, row * step, step, step);
-
-          // Blend zone: overlay secondary biome color
-          if (blend > 0.05) {
-            const st = secondary.groundTint;
-            const sr = ((st >> 16) & 0xff), sg = ((st >> 8) & 0xff), sb = (st & 0xff);
-            g.fillStyle(((Math.floor(sr * 0.7)) << 16) | ((Math.floor(sg * 0.7)) << 8) | Math.floor(sb * 0.7), blend * 0.6);
-            g.fillRect(col * step, row * step, step, step);
-          }
-
-          // Noise-based shade variation for texture
-          const shade = fbm(wx / 400, wy / 400, 2);
-          if (shade > 0.1) {
-            g.fillStyle(0xffffff, shade * 0.05);
-            g.fillRect(col * step, row * step, step, step);
-          } else if (shade < -0.1) {
-            g.fillStyle(0x000000, Math.abs(shade) * 0.07);
-            g.fillRect(col * step, row * step, step, step);
-          }
-        }
-      }
-
-      // 2) Scattered ground detail tiles (~500 total)
-      if (hasGroundSheet && groundTotal > 0) {
-        const detailStep = TILE_SCALED * 3;
-        for (let tx = 0; tx < WORLD_W; tx += detailStep) {
-          for (let ty = 0; ty < WORLD_H; ty += detailStep) {
-            const seed = tx * 7 + ty * 13;
-            if (seededRandom(seed)() > 0.3) continue;
-            const { primary: biome } = getBiomeAt(tx, ty);
-            const frames = BIOME_GROUND_FRAMES[biome.id] || BIOME_GROUND_FRAMES.forest;
-            const fr = frames[Math.floor(seededRandom(tx * 17 + ty * 31)() * frames.length)];
-            if (fr < groundTotal) {
-              this.add.image(tx + TILE_SCALED, ty + TILE_SCALED, 'ground_tiles', fr)
-                .setScale(TILE_SCALE * (2 + seededRandom(tx * 3 + ty)() * 1.5))
-                .setDepth(0).setTint(biome.groundTint).setAlpha(0.3 + seededRandom(tx + ty * 3)() * 0.3);
-            }
-          }
-        }
-      }
-
-      // 3) Terrain details: grass tufts, bushes, fallen logs
       if (hasGroundSheet && groundTotal > 5) {
-        for (let i = 0; i < 500; i++) {
+        for (let i = 0; i < 250; i++) {
           const x = rng() * WORLD_W, y = rng() * WORLD_H;
           if (isInSafeZone(x, y)) continue;
           const { primary: biome } = getBiomeAt(x, y);
           const leafFrames = BIOME_LEAF_FRAMES[biome.id] || BIOME_LEAF_FRAMES.forest;
           const fr = leafFrames[Math.floor(rng() * leafFrames.length)];
           if (fr < groundTotal) {
-            this.add.image(x, y, 'ground_tiles', fr)
-              .setScale(TILE_SCALE * (1.2 + rng() * 1.0)).setDepth(0.05)
-              .setAlpha(0.25 + rng() * 0.3).setTint(biome.groundTint).setAngle(rng() * 360);
+            const spr = this.add.image(x, y, 'ground_tiles', fr)
+              .setScale(TILE_SCALE * (1.2 + rng())).setDepth(0.05)
+              .setAlpha(0.2 + rng() * 0.2).setTint(biome.groundTint).setAngle(rng() * 360);
+            this.decorations.push(spr);
           }
         }
       }
 
-      // 4) Safe zone indicator rings
+      // 3) Safe zone indicator rings
       for (const c of CITIES) {
         const ring = this.add.graphics().setDepth(0.3);
         ring.lineStyle(3, 0x44ff44, 0.15); ring.strokeCircle(c.x, c.y, SAFE_ZONE_RADIUS);
         ring.lineStyle(1, 0x44ff44, 0.08); ring.strokeCircle(c.x, c.y, SAFE_ZONE_RADIUS - 20);
       }
 
-      this.renderRoads();
+      this.renderRoads(rng);
     }
 
-    renderRoads() {
+    // ── Wandering bezier roads between nearby cities ──
+    renderRoads(rng) {
       const gfx = this.add.graphics().setDepth(0.5);
       for (let i = 0; i < CITIES.length; i++) {
         for (let j = i + 1; j < CITIES.length; j++) {
-          const dx = CITIES[j].x - CITIES[i].x, dy = CITIES[j].y - CITIES[i].y;
+          const c1 = CITIES[i], c2 = CITIES[j];
+          const dx = c2.x - c1.x, dy = c2.y - c1.y;
           const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < 2800) {
-            // Wide road with noise-based irregular edges (4-tile effective width)
-            const roadSteps = Math.floor(dist / 20);
-            for (let s = 0; s <= roadSteps; s++) {
-              const t = s / Math.max(roadSteps, 1);
-              const px = CITIES[i].x + dx * t;
-              const py = CITIES[i].y + dy * t;
-              const w = TILE_SCALED * 1.5 + fbm(px / 200, py / 200, 2) * TILE_SCALED * 0.6;
-              gfx.fillStyle(0x8a7755, 0.3 + fbm(px / 300 + 10, py / 300 + 10, 2) * 0.08);
-              gfx.fillCircle(px, py, w);
-            }
-            // Overlay road tile sprites
-            if (this.textures.exists('road')) {
-              const tileStep = TILE_SCALED * 1.2;
-              const tileSteps = Math.floor(dist / tileStep);
-              for (let s = 0; s <= tileSteps; s++) {
-                const t = s / Math.max(tileSteps, 1);
-                const rx = CITIES[i].x + dx * t + fbm((s + i * 100) * 0.3, j * 7.7, 2) * 12;
-                const ry = CITIES[i].y + dy * t + fbm(i * 5.5, (s + j * 100) * 0.3, 2) * 12;
-                this.add.image(rx, ry, 'road')
-                  .setScale(TILE_SCALE * 1.4).setDepth(0.6).setAlpha(0.25);
-              }
+          if (dist > 2800) continue;
+          // Perpendicular direction for wander offset
+          const nx = -dy / dist, ny = dx / dist;
+          const w1 = fbm(i * 3.7 + j * 5.1, 0, 2) * 250;
+          const w2 = fbm(j * 3.7 + i * 5.1, 10, 2) * 200;
+          // Cubic bezier control points (wander off the straight line)
+          const cp1x = c1.x * 0.6 + c2.x * 0.4 + nx * w1;
+          const cp1y = c1.y * 0.6 + c2.y * 0.4 + ny * w1;
+          const cp2x = c1.x * 0.4 + c2.x * 0.6 + nx * w2;
+          const cp2y = c1.y * 0.4 + c2.y * 0.6 + ny * w2;
+          const bez = (t) => {
+            const mt = 1 - t, mt2 = mt * mt, mt3 = mt2 * mt, t2 = t * t, t3 = t2 * t;
+            return {
+              x: mt3 * c1.x + 3 * mt2 * t * cp1x + 3 * mt * t2 * cp2x + t3 * c2.x,
+              y: mt3 * c1.y + 3 * mt2 * t * cp1y + 3 * mt * t2 * cp2y + t3 * c2.y,
+            };
+          };
+          // Stamp circles along bezier with noise-based variable width (~4 tiles)
+          const steps = Math.floor(dist / 16);
+          for (let s = 0; s <= steps; s++) {
+            const t = s / steps;
+            const { x: px, y: py } = bez(t);
+            const w = TILE_SCALED * 1.3 + fbm(px / 150, py / 150, 2) * TILE_SCALED * 0.5;
+            gfx.fillStyle(0x8a7755, 0.25 + noise2D(px / 200 + 5, py / 200 + 5) * 0.06);
+            gfx.fillCircle(px, py, w);
+          }
+          // Sparse road sprites along bezier
+          if (this.textures.exists('road')) {
+            const sprSteps = Math.floor(dist / (TILE_SCALED * 1.4));
+            for (let s = 0; s <= sprSteps; s++) {
+              const t = s / Math.max(sprSteps, 1);
+              const { x: rx, y: ry } = bez(t);
+              const spr = this.add.image(
+                rx + noise2D(s * 5.5, i * 7) * 10,
+                ry + noise2D(i * 3.3, s * 5.5) * 10, 'road'
+              ).setScale(TILE_SCALE * 1.2).setDepth(0.6).setAlpha(0.2).setAngle(rng() * 360);
+              this.decorations.push(spr);
             }
           }
         }
@@ -677,10 +690,9 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
           const tn = b.treePalette[Math.floor(rng() * b.treePalette.length)];
           if (this.textures.exists(`tree_${tn}`)) {
             const treeImg = this.add.image(tx, ty, `tree_${tn}`).setScale(SPRITE_SCALE * (0.8 + rng() * 0.4)).setDepth(ty + 40).setAlpha(0.9 + rng() * 0.1);
-            // Collision body at tree base
-            const col = this.staticObjects.create(tx, ty + 20, null).setVisible(false);
-            col.body.setSize(24, 16).setOffset(-12, -8);
-            col.body.immovable = true;
+            this.decorations.push(treeImg);
+            // Collision zone at tree trunk base only
+            this.staticObjects.add(this.add.zone(tx, ty + 20, 24, 16));
           }
         }
         // Rocks from craftpix-974061
@@ -691,10 +703,9 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
           const rk = `rock_${1 + Math.floor(rng() * 8)}`;
           if (this.textures.exists(rk)) {
             const rockImg = this.add.image(rx, ry, rk).setScale(SPRITE_SCALE * (0.6 + rng() * 0.5)).setDepth(ry + 10);
-            // Collision body at rock center
-            const col = this.staticObjects.create(rx, ry, null).setVisible(false);
-            col.body.setSize(20, 14).setOffset(-10, -7);
-            col.body.immovable = true;
+            this.decorations.push(rockImg);
+            // Collision zone at rock base
+            this.staticObjects.add(this.add.zone(rx, ry, 20, 14));
           }
         }
       }
@@ -753,18 +764,14 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
           for (let fx = city.x - hw; fx <= city.x + hw; fx += fenceStep) {
             this.add.image(fx, city.y - hh, 'exterior_tiles', fenceH).setScale(TILE_SCALE).setDepth(city.y - hh);
             this.add.image(fx, city.y + hh, 'exterior_tiles', fenceH).setScale(TILE_SCALE).setDepth(city.y + hh);
-            const colT = this.staticObjects.create(fx, city.y - hh, null).setVisible(false);
-            colT.body.setSize(TILE_SCALED, 12).setOffset(-TILE_SCALED / 2, -6); colT.body.immovable = true;
-            const colB = this.staticObjects.create(fx, city.y + hh, null).setVisible(false);
-            colB.body.setSize(TILE_SCALED, 12).setOffset(-TILE_SCALED / 2, -6); colB.body.immovable = true;
+            this.staticObjects.add(this.add.zone(fx, city.y - hh, TILE_SCALED, 12));
+            this.staticObjects.add(this.add.zone(fx, city.y + hh, TILE_SCALED, 12));
           }
           for (let fy = city.y - hh; fy <= city.y + hh; fy += fenceStep) {
             this.add.image(city.x - hw - 10, fy, 'exterior_tiles', fenceV).setScale(TILE_SCALE).setDepth(fy);
             this.add.image(city.x + hw + 10, fy, 'exterior_tiles', fenceV).setScale(TILE_SCALE).setDepth(fy);
-            const colL = this.staticObjects.create(city.x - hw - 10, fy, null).setVisible(false);
-            colL.body.setSize(12, TILE_SCALED).setOffset(-6, -TILE_SCALED / 2); colL.body.immovable = true;
-            const colR = this.staticObjects.create(city.x + hw + 10, fy, null).setVisible(false);
-            colR.body.setSize(12, TILE_SCALED).setOffset(-6, -TILE_SCALED / 2); colR.body.immovable = true;
+            this.staticObjects.add(this.add.zone(city.x - hw - 10, fy, 12, TILE_SCALED));
+            this.staticObjects.add(this.add.zone(city.x + hw + 10, fy, 12, TILE_SCALED));
           }
         }
 
@@ -795,12 +802,10 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
             if (rng() > 0.5) bldg.setFlipX(true);
             this.buildings.push(bldg);
 
-            // Collision at BOTTOM ONLY of house
+            // Collision zone at BOTTOM ONLY of house
             const bw = tmpl.w * TILE_SCALED;
             const colH = TILE_SCALED * 0.6;
-            const col = this.staticObjects.create(bp.x, bp.y - colH / 2, null).setVisible(false);
-            col.body.setSize(bw * 0.7, colH).setOffset(-bw * 0.35, -colH / 2);
-            col.body.immovable = true;
+            this.staticObjects.add(this.add.zone(bp.x, bp.y - colH / 2, bw * 0.7, colH));
           } else {
             // Fallback: graphics building (fixed depth, not Y-sorted)
             const fg = this.add.graphics().setDepth(bp.y);
@@ -810,9 +815,7 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
             fg.fillStyle(wc); fg.fillRect(bp.x - bw / 2, bp.y - bh, bw, bh);
             const rc = biome.id === 'volcanic' ? 0x881100 : biome.id === 'ice' ? 0x4466aa : 0x884422;
             fg.fillStyle(rc); fg.fillTriangle(bp.x - bw / 2 - 8, bp.y - bh, bp.x, bp.y - bh - 28, bp.x + bw / 2 + 8, bp.y - bh);
-            const col = this.staticObjects.create(bp.x, bp.y - TILE_SCALED * 0.3, null).setVisible(false);
-            col.body.setSize(bw * 0.7, TILE_SCALED * 0.6).setOffset(-bw * 0.35, -TILE_SCALED * 0.3);
-            col.body.immovable = true;
+            this.staticObjects.add(this.add.zone(bp.x, bp.y - TILE_SCALED * 0.3, bw * 0.7, TILE_SCALED * 0.6));
           }
 
           // Winding stone path from building to center
@@ -1105,6 +1108,9 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
       this.updateFetchPickup();
       this.checkPlayerDeath();
       this.syncPlayerState();
+      // Frustum culling every 200ms
+      this._cullTimer += delta;
+      if (this._cullTimer >= 200) { this._cullTimer = 0; this.updateFrustumCulling(); }
       this.saveTimer += delta;
       if (this.saveTimer > 10000) { this.saveTimer = 0; this._saveToLocalStorage(); }
       // Periodic mob respawn (every 30 seconds)
@@ -1473,6 +1479,30 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
       for (const e of this.enemies) if (!e.enemyData.isDead) e.setDepth(e.y);
       for (const n of this.npcs) n.setDepth(n.y);
       for (const b of this.buildings) b.setDepth(b.y);
+    }
+
+    // ── Frustum culling: hide off-screen decorations & enemies for performance ──
+    updateFrustumCulling() {
+      const cam = this.cameras.main;
+      const pad = 300;
+      const left = cam.worldView.x - pad;
+      const right = cam.worldView.x + cam.worldView.width + pad;
+      const top = cam.worldView.y - pad;
+      const bottom = cam.worldView.y + cam.worldView.height + pad;
+      for (let i = 0; i < this.decorations.length; i++) {
+        const obj = this.decorations[i];
+        if (!obj || !obj.active) continue;
+        obj.setVisible(obj.x >= left && obj.x <= right && obj.y >= top && obj.y <= bottom);
+      }
+      for (const e of this.enemies) {
+        if (e.enemyData?.isDead) continue;
+        const vis = e.x >= left && e.x <= right && e.y >= top && e.y <= bottom;
+        e.setVisible(vis);
+        if (e.hpBg) e.hpBg.setVisible(vis);
+        if (e.hpFg) e.hpFg.setVisible(vis);
+        if (e.nameLabel) e.nameLabel.setVisible(vis);
+        if (e.bossGlow) e.bossGlow.setVisible(vis);
+      }
     }
 
     updateHPBars() {
