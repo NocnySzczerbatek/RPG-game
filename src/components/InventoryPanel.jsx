@@ -212,18 +212,15 @@ const InventoryPanel = ({ player, dispatch, onClose }) => {
             <div className="grid grid-cols-2 gap-2">
               {Object.entries(skills).map(([key, skill]) => (
                 <div key={key} className="flex items-center gap-1.5 p-1.5 rounded" style={{
-                  backgroundImage: `url('${UI}Action_panel.png')`,
-                  backgroundSize: `${192 * 2}px ${96 * 2}px`,
-                  backgroundPosition: '0 0',
-                  imageRendering: 'pixelated',
+                  backgroundColor: 'rgba(30,22,10,0.8)',
+                  border: '1px solid #3a2a10',
                   boxShadow: 'inset 0 0 8px rgba(0,0,0,0.5)',
                 }}>
                   <div className="w-7 h-7 rounded flex items-center justify-center font-bold font-cinzel text-[11px]"
                     style={{
-                      backgroundImage: `url('${UI}Equipment.png')`,
-                      backgroundSize: `${160 * 3}px ${384 * 3}px`,
-                      backgroundPosition: '0 0',
-                      imageRendering: 'pixelated',
+                      backgroundColor: 'rgba(40,30,15,0.9)',
+                      border: '1px solid #4a3a18',
+                      borderRadius: 4,
                       color: `#${skill.color.toString(16).padStart(6, '0')}`,
                       textShadow: '0 0 4px rgba(0,0,0,0.8)',
                     }}>{key}</div>
@@ -244,14 +241,13 @@ const InventoryPanel = ({ player, dispatch, onClose }) => {
 
             {/* Central paperdoll area */}
             <div className="relative w-full flex-1 flex flex-col items-center justify-center py-2" style={{
-              backgroundImage: `url('${UI}character_panel.png')`,
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
-              imageRendering: 'pixelated',
+              backgroundColor: 'rgba(15,10,5,0.9)',
+              border: '2px solid #3a2a10',
               borderRadius: 8,
               minHeight: 360,
+              boxShadow: 'inset 0 0 40px rgba(0,0,0,0.6)',
             }}>
-              <div style={{ position: 'absolute', inset: 0, background: 'rgba(5,3,1,0.8)', borderRadius: 8 }} />
+              <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse at center, rgba(60,45,20,0.15) 0%, transparent 70%)', borderRadius: 8 }} />
 
               <div className="relative z-10 flex flex-col items-center gap-3">
                 {/* Row 1: Helmet */}
@@ -272,10 +268,8 @@ const InventoryPanel = ({ player, dispatch, onClose }) => {
                   {/* Large central portrait */}
                   <div className="relative" style={{
                     width: 96, height: 120, borderRadius: 8, overflow: 'hidden',
-                    backgroundImage: `url('${UI}character_panel.png')`,
-                    backgroundSize: `${192 * 2.5}px ${160 * 2.5}px`,
-                    backgroundPosition: 'center',
-                    imageRendering: 'pixelated',
+                    backgroundColor: 'rgba(25,18,8,0.9)',
+                    border: '2px solid #5a4a20',
                     boxShadow: '0 0 16px rgba(139,105,20,0.3), inset 0 0 20px rgba(0,0,0,0.6)',
                   }}>
                     <img src={getPortraitPath(pClass)} alt={pClass}
@@ -311,9 +305,8 @@ const InventoryPanel = ({ player, dispatch, onClose }) => {
 
             {/* Bottom: gold bar */}
             <div className="flex items-center justify-center gap-4 mt-2 py-1.5 w-full rounded" style={{
-              backgroundImage: `url('${UI}Action_panel.png')`,
-              backgroundSize: 'cover', backgroundPosition: 'center',
-              imageRendering: 'pixelated',
+              backgroundColor: 'rgba(30,22,10,0.85)',
+              border: '1px solid #3a2a10',
             }}>
               <span className="font-cinzel text-[11px] font-bold" style={{ color: '#ffd700', textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>
                 💰 {player.gold ?? 0} złota
@@ -337,10 +330,8 @@ const InventoryPanel = ({ player, dispatch, onClose }) => {
 
             {/* 6×4 backpack grid */}
             <div className="grid grid-cols-6 gap-1" style={{
-              backgroundImage: `url('${UI}Inventory.png')`,
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
-              imageRendering: 'pixelated',
+              backgroundColor: 'rgba(15,10,5,0.9)',
+              border: '2px solid #3a2a10',
               padding: 6, borderRadius: 6,
               boxShadow: 'inset 0 0 16px rgba(0,0,0,0.5)',
             }}>
@@ -365,15 +356,13 @@ const InventoryPanel = ({ player, dispatch, onClose }) => {
             {/* ─── SZCZEGÓŁY (Details) Panel ─── */}
             <SectionLabel text="SZCZEGÓŁY" />
             <div className="flex-1 rounded p-3" style={{
-              backgroundImage: `url('${UI}Settings.png')`,
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
-              imageRendering: 'pixelated',
+              backgroundColor: 'rgba(15,10,5,0.9)',
+              border: '2px solid #3a2a10',
               minHeight: 180,
               boxShadow: 'inset 0 0 20px rgba(0,0,0,0.5)',
               position: 'relative',
             }}>
-              <div style={{ position: 'absolute', inset: 0, background: 'rgba(5,3,1,0.82)', borderRadius: 6 }} />
+              <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse at center, rgba(40,30,15,0.15) 0%, transparent 70%)', borderRadius: 6 }} />
               <div className="relative z-10">
                 {selData ? (
                   <>

@@ -501,6 +501,20 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
       this.minimapCam.setBounds(0, 0, WORLD_W, WORLD_H);
       this.minimapCam.startFollow(this.knight);
       this.minimapCam.setBackgroundColor(0x111111);
+      // Exclude all decorations from minimap to prevent double-rendering 1000+ objects
+      for (const d of this.decorations) this.minimapCam.ignore(d);
+      for (const e of this.enemies) {
+        this.minimapCam.ignore(e);
+        if (e.hpBg) this.minimapCam.ignore(e.hpBg);
+        if (e.hpFg) this.minimapCam.ignore(e.hpFg);
+        if (e.nameLabel) this.minimapCam.ignore(e.nameLabel);
+      }
+      for (const n of this.npcs) {
+        this.minimapCam.ignore(n);
+        if (n.labelText) this.minimapCam.ignore(n.labelText);
+        if (n.indicator) this.minimapCam.ignore(n.indicator);
+        if (n.questMark) this.minimapCam.ignore(n.questMark);
+      }
       this.input.on('pointermove', (p) => { this.mouseWorldPos = this.cameras.main.getWorldPoint(p.x, p.y); });
       this.moveMarker = this.add.graphics().setDepth(99998);
     }
@@ -728,17 +742,23 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
         cg.fillStyle(0x665544, 0.35);
         cg.fillRoundedRect(city.x - TOWN_W / 2 + 30, city.y - TOWN_H / 2 + 30, TOWN_W - 60, TOWN_H - 60, 30);
 
-        // ── Stone floor tiles ──
+        // ── Stone floor texture (single RenderTexture per city instead of hundreds of sprites) ──
         if (this.textures.exists('floor_tiles')) {
           const totalFrames = this.textures.get('floor_tiles').frameTotal - 1;
+          const tileKey = `city_floor_${city.id}`;
           const cityStep = TILE_SCALED * 2;
-          for (let fx = city.x - TOWN_W / 2 + 20; fx < city.x + TOWN_W / 2 - 20; fx += cityStep) {
-            for (let fy = city.y - TOWN_H / 2 + 20; fy < city.y + TOWN_H / 2 - 20; fy += cityStep) {
-              const fr = Math.min(Math.floor(rng() * 4), totalFrames - 1);
-              this.add.image(fx + cityStep / 2, fy + cityStep / 2, 'floor_tiles', fr)
-                .setScale(TILE_SCALE * 2).setDepth(0.85).setAlpha(0.45);
+          const floorW = TOWN_W - 40, floorH = TOWN_H - 40;
+          const rt = this.make.renderTexture({ width: Math.ceil(floorW / TILE_SCALE), height: Math.ceil(floorH / TILE_SCALE), add: false });
+          const colsC = Math.ceil(floorW / cityStep), rowsC = Math.ceil(floorH / cityStep);
+          for (let fc = 0; fc < colsC; fc++) {
+            for (let fr = 0; fr < rowsC; fr++) {
+              const frame = Math.min(Math.floor(rng() * 4), totalFrames - 1);
+              rt.drawFrame('floor_tiles', frame, fc * (TILE_SIZE * 2), fr * (TILE_SIZE * 2));
             }
           }
+          rt.saveTexture(tileKey); rt.destroy();
+          this.add.image(city.x, city.y, tileKey)
+            .setScale(TILE_SCALE).setDepth(0.85).setAlpha(0.4);
         }
 
         // ── Winding stone paths (bezier curves from buildings to center) ──
@@ -937,6 +957,13 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
       }).setOrigin(0.5).setDepth(9992);
       if (template.isBoss) { enemy.setTint(0xff4444); enemy.bossGlow = this.add.graphics().setDepth(enemy.depth - 1); }
       enemy.setDepth(y); this.enemies.push(enemy);
+      // Exclude from minimap rendering
+      if (this.minimapCam) {
+        this.minimapCam.ignore(enemy);
+        if (enemy.hpBg) this.minimapCam.ignore(enemy.hpBg);
+        if (enemy.hpFg) this.minimapCam.ignore(enemy.hpFg);
+        if (enemy.nameLabel) this.minimapCam.ignore(enemy.nameLabel);
+      }
     }
 
     // ── NPCs ─────────────────────────────────────────
@@ -1072,7 +1099,7 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
           if (bc > 1 && !this.anims.exists('bird_anim')) {
             this.anims.create({ key: 'bird_anim', frames: this.anims.generateFrameNumbers('bird_fly', { start: 0, end: bc - 1 }), frameRate: 8, repeat: -1 });
           }
-          for (let i = 0; i < 5; i++) {
+          for (let i = 0; i < 3; i++) {
             const bx = 500 + Math.random() * (WORLD_W - 1000), by = 200 + Math.random() * (WORLD_H - 400);
             const bird = this.add.sprite(bx, by, 'bird_fly').setScale(1.5).setDepth(99990).setAlpha(0.7);
             if (this.anims.exists('bird_anim')) bird.play('bird_anim');
@@ -1080,12 +1107,13 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
           }
         } catch (_) {}
       }
-      // Dark particles
+      // Dark particles — limited to camera area
       if (this.textures.exists('dark_particle')) {
         this.add.particles(0, 0, 'dark_particle', {
-          x: { min: 0, max: WORLD_W }, y: { min: 0, max: WORLD_H },
-          lifespan: 6000, speed: { min: 5, max: 20 }, scale: { start: 0.3, end: 0 },
-          alpha: { start: 0.3, end: 0 }, frequency: 200, quantity: 1
+          follow: this.knight, followOffset: { x: 0, y: 0 },
+          lifespan: 4000, speed: { min: 5, max: 15 }, scale: { start: 0.2, end: 0 },
+          alpha: { start: 0.2, end: 0 }, frequency: 500, quantity: 1,
+          emitZone: { type: 'random', source: new Phaser.Geom.Rectangle(-500, -400, 1000, 800) },
         }).setDepth(99990);
       }
     }
@@ -1107,7 +1135,9 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
       this.updateLoot(delta);
       this.updateFetchPickup();
       this.checkPlayerDeath();
-      this.syncPlayerState();
+      // Throttle state sync to every 100ms instead of every frame
+      this._syncTimer = (this._syncTimer || 0) + delta;
+      if (this._syncTimer >= 100) { this._syncTimer = 0; this.syncPlayerState(); }
       // Frustum culling every 200ms
       this._cullTimer += delta;
       if (this._cullTimer >= 200) { this._cullTimer = 0; this.updateFrustumCulling(); }
@@ -1476,7 +1506,7 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
 
     updateDepthSorting() {
       if (this.knight) this.knight.setDepth(this.knight.y);
-      for (const e of this.enemies) if (!e.enemyData.isDead) e.setDepth(e.y);
+      for (const e of this.enemies) if (!e.enemyData.isDead && e.visible) e.setDepth(e.y);
       for (const n of this.npcs) n.setDepth(n.y);
       for (const b of this.buildings) b.setDepth(b.y);
     }
@@ -1507,7 +1537,7 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
 
     updateHPBars() {
       for (const e of this.enemies) {
-        if (e.enemyData.isDead) continue;
+        if (e.enemyData.isDead || !e.visible) continue;
         const ed = e.enemyData, bw = ed.isBoss ? 60 : 40, bh = 4;
         const bx = e.x - bw/2, by = e.y - 28, hp = ed.currentHp / ed.maxHp;
         e.hpBg.clear(); e.hpBg.fillStyle(0x222222, 0.8); e.hpBg.fillRect(bx-1, by-1, bw+2, bh+2);
@@ -1518,7 +1548,7 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
     updateLabels() {
       if (this.knight && this.knightLabel) this.knightLabel.setPosition(this.knight.x, this.knight.y - 36);
       if (this.knight && this.levelBadge) { this.levelBadge.setPosition(this.knight.x, this.knight.y - 48); this.levelBadge.setText(`Lv.${this.playerState.level}`); }
-      for (const e of this.enemies) if (!e.enemyData.isDead && e.nameLabel) e.nameLabel.setPosition(e.x, e.y - 35);
+      for (const e of this.enemies) if (!e.enemyData.isDead && e.visible && e.nameLabel) e.nameLabel.setPosition(e.x, e.y - 35);
     }
 
     updateNPCIndicators() {
