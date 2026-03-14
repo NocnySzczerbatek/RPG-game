@@ -1,17 +1,15 @@
 // ============================================================
 // COMPONENT: Real-Time ARPG World Map (Phaser 3)
-// Point-and-Click movement, QWER cursor-aimed skills,
-// NPC side quests (Kill/Fetch), LocalStorage save,
-// Per-class unique VFX, 5000×5000 world, 6 biomes
-// Full integration with CraftPix asset packs
+// Uses ALL 10 CraftPix asset packs — no generic placeholders
+// 5000×5000 world, 6 biomes, QWER skills, NPC quests
 // ============================================================
 import React, { useEffect, useRef, useState } from 'react';
 
 // ── World Constants ───────────────────────────────────────
 const WORLD_W = 5000;
 const WORLD_H = 5000;
-const TILE_SIZE = 32;
-const TILE_SCALE = 2.5;
+const TILE_SIZE = 16;
+const TILE_SCALE = 3;
 const TILE_SCALED = TILE_SIZE * TILE_SCALE;
 const PLAYER_SPEED = 220;
 const INTERACT_RADIUS = 80;
@@ -20,18 +18,20 @@ const SAVE_KEY = 'eldoria_arpg_save_v2';
 const SAFE_ZONE_RADIUS = 1200;
 const MOB_AGGRO_RANGE = 180;
 
-// ── Asset path helpers ────────────────────────────────────
+// ── Asset path helpers (all 10 packs) ─────────────────────
 const SP = 'assets/sprites/';
-const TREES_DIR = `${SP}craftpix-net-385863-free-top-down-trees-pixel-art/PNG/Assets_separately/Trees/`;
-const ROCKS_DIR = `${SP}craftpix-net-974061-free-rocks-and-stones-top-down-pixel-art/PNG/Objects_separately/`;
-const ORC_DIR = `${SP}craftpix-net-363992-free-top-down-orc-game-character-pixel-art/PNG/`;
-const SLIME_DIR = `${SP}craftpix-net-788364-free-slime-mobs-pixel-art-top-down-sprite-pack/PNG/`;
-const MONSTER_DIR = `${SP}craftpix-561178-free-rpg-monster-sprites-pixel-art/PNG/`;
-const CHAR_DIR = `${SP}craftpix-net-555940-free-base-4-direction-male-character-pixel-art/PNG/`;
-const HOME_DIR = `${SP}craftpix-net-654184-main-characters-home-free-top-down-pixel-art-asset/PNG/`;
-const HERO_DIR = `${SP}craftpix-891165-assassin-mage-viking-free-pixel-art-game-heroes/PNG/`;
+const TREES_DIR  = `${SP}craftpix-net-385863-free-top-down-trees-pixel-art/PNG/Assets_separately/Trees/`;
+const ROCKS_DIR  = `${SP}craftpix-net-974061-free-rocks-and-stones-top-down-pixel-art/PNG/Objects_separately/`;
+const ORC_DIR    = `${SP}craftpix-net-363992-free-top-down-orc-game-character-pixel-art/PNG/`;
+const SLIME_DIR  = `${SP}craftpix-net-788364-free-slime-mobs-pixel-art-top-down-sprite-pack/PNG/`;
+const MONSTER_DIR= `${SP}craftpix-561178-free-rpg-monster-sprites-pixel-art/PNG/`;
+const CHAR_DIR   = `${SP}craftpix-net-555940-free-base-4-direction-male-character-pixel-art/PNG/`;
+const HOME_DIR   = `${SP}craftpix-net-654184-main-characters-home-free-top-down-pixel-art-asset/PNG/`;
+const HERO_DIR   = `${SP}craftpix-891165-assassin-mage-viking-free-pixel-art-game-heroes/PNG/`;
+const VAMP_DIR   = `${SP}craftpix-net-208004-free-vampire-4-direction-pixel-character-sprite-pack/PNG/`;
+const UI_DIR     = `${SP}craftpix-net-255216-free-basic-pixel-art-ui-for-rpg/PNG/`;
 
-// ── Class → sprite folder mapping (craftpix-891165) ───────
+// ── Class → sprite folder mapping (pack #2: craftpix-891165) ──
 const CLASS_SPRITE_MAP = {
   warrior: {
     folder: 'Knight', portrait: 'knight.png', weapon: 'Longsword',
@@ -92,12 +92,12 @@ const CLASS_WEAPONS = { warrior: '⚔️ Longsword', mage: '🪄 Staff', ninja: 
 
 // ── Biome Definitions ─────────────────────────────────────
 const BIOMES = [
-  { id: 'forest',   name: 'Verdant Forest',   color: 0x2d5a1e, x: 0,    y: 0,    w: 2500, h: 2500, groundTint: 0x3a7a2a, floorKeys: ['floor_0','floor_1','floor_2'], treePalette: ['Tree1','Tree2','Tree3','Flower_tree1','Moss_tree1'] },
-  { id: 'desert',   name: 'Scorched Desert',  color: 0x8a7540, x: 2500, y: 0,    w: 2500, h: 2500, groundTint: 0xc4a84a, floorKeys: ['floor_3','floor_4','floor_5'], treePalette: ['Palm_tree1_1','Palm_tree2_1','Burned_tree1'] },
-  { id: 'ice',      name: 'Frozen Wastes',    color: 0x4a6a8a, x: 0,    y: 2500, w: 2500, h: 1250, groundTint: 0x8ab8d8, floorKeys: ['floor_6','floor_7','floor_0'], treePalette: ['Snow_tree1','Snow_tree2','Snow_christmass_tree1','Christmas_tree1'] },
-  { id: 'volcanic', name: 'Volcanic Caldera',  color: 0x5a1a0a, x: 2500, y: 2500, w: 2500, h: 1250, groundTint: 0x8a2a0a, floorKeys: ['floor_4','floor_5','floor_3'], treePalette: ['Burned_tree1','Burned_tree2','Burned_tree3','Broken_tree1'] },
-  { id: 'swamp',    name: 'Blighted Swamp',   color: 0x2a3a1a, x: 0,    y: 3750, w: 2500, h: 1250, groundTint: 0x3a4a2a, floorKeys: ['floor_2','floor_6','floor_1'], treePalette: ['Moss_tree1','Moss_tree2','Moss_tree3','Broken_tree4','Broken_tree5'] },
-  { id: 'mountain', name: 'Ashen Peaks',      color: 0x4a4a4a, x: 2500, y: 3750, w: 2500, h: 1250, groundTint: 0x6a6a6a, floorKeys: ['floor_7','floor_5','floor_3'], treePalette: ['Broken_tree6','Broken_tree7','Autumn_tree1','Autumn_tree2'] },
+  { id: 'forest',   name: 'Verdant Forest',   color: 0x2d5a1e, x: 0,    y: 0,    w: 2500, h: 2500, groundTint: 0x3a7a2a, treePalette: ['Tree1','Tree2','Tree3','Flower_tree1','Moss_tree1'] },
+  { id: 'desert',   name: 'Scorched Desert',  color: 0x8a7540, x: 2500, y: 0,    w: 2500, h: 2500, groundTint: 0xc4a84a, treePalette: ['Palm_tree1_1','Palm_tree2_1','Burned_tree1'] },
+  { id: 'ice',      name: 'Frozen Wastes',    color: 0x4a6a8a, x: 0,    y: 2500, w: 2500, h: 1250, groundTint: 0x8ab8d8, treePalette: ['Snow_tree1','Snow_tree2','Snow_christmass_tree1','Christmas_tree1'] },
+  { id: 'volcanic', name: 'Volcanic Caldera',  color: 0x5a1a0a, x: 2500, y: 2500, w: 2500, h: 1250, groundTint: 0x8a2a0a, treePalette: ['Burned_tree1','Burned_tree2','Burned_tree3','Broken_tree1'] },
+  { id: 'swamp',    name: 'Blighted Swamp',   color: 0x2a3a1a, x: 0,    y: 3750, w: 2500, h: 1250, groundTint: 0x3a4a2a, treePalette: ['Moss_tree1','Moss_tree2','Moss_tree3','Broken_tree4','Broken_tree5'] },
+  { id: 'mountain', name: 'Ashen Peaks',      color: 0x4a4a4a, x: 2500, y: 3750, w: 2500, h: 1250, groundTint: 0x6a6a6a, treePalette: ['Broken_tree6','Broken_tree7','Autumn_tree1','Autumn_tree2'] },
 ];
 
 // ── City data — one per biome ─────────────────────────────
@@ -116,9 +116,9 @@ function isInSafeZone(x, y) {
 
 // ── NPC archetypes per city ───────────────────────────────
 const CITY_NPCS = CITIES.flatMap(city => [
-  { id: `${city.id}_blacksmith`, cityId: city.id, x: city.x - 100, y: city.y + 50, label: 'Blacksmith', role: 'blacksmith', icon: '\u2692\uFE0F' },
-  { id: `${city.id}_healer`,    cityId: city.id, x: city.x + 100, y: city.y + 50, label: 'Healer',     role: 'healer',     icon: '\uD83D\uDC9A' },
-  { id: `${city.id}_quest`,     cityId: city.id, x: city.x,       y: city.y - 80, label: 'Quest Board', role: 'questgiver', icon: '\u2757' },
+  { id: `${city.id}_blacksmith`, cityId: city.id, x: city.x - 100, y: city.y + 50, label: 'Blacksmith', role: 'blacksmith', icon: '⚒️' },
+  { id: `${city.id}_healer`,    cityId: city.id, x: city.x + 100, y: city.y + 50, label: 'Healer',     role: 'healer',     icon: '💚' },
+  { id: `${city.id}_quest`,     cityId: city.id, x: city.x,       y: city.y - 80, label: 'Quest Board', role: 'questgiver', icon: '❗' },
 ]);
 
 // ── Enemy templates per biome ─────────────────────────────
@@ -136,6 +136,7 @@ const BIOME_ENEMIES = {
   ice:      [
     { type: 'slime3',   hp: 60,  atk: 15, def: 8,  exp: 30,  gold: 12, name: 'Frost Slime',   sprite: 'slime3', isBoss: false },
     { type: 'orc3',     hp: 100, atk: 30, def: 15, exp: 50,  gold: 22, name: 'Frost Orc',     sprite: 'orc3',   isBoss: false },
+    { type: 'vamp1',    hp: 85,  atk: 26, def: 12, exp: 42,  gold: 18, name: 'Ice Vampire',   sprite: 'vamp1',  isBoss: false },
   ],
   volcanic: [
     { type: 'demon',    hp: 150, atk: 40, def: 18, exp: 80,  gold: 40, name: 'Magma Demon',   sprite: 'demon',  isBoss: false },
@@ -144,10 +145,12 @@ const BIOME_ENEMIES = {
   swamp:    [
     { type: 'slime1_s', hp: 50,  atk: 10, def: 5,  exp: 20,  gold: 8,  name: 'Poison Slime',  sprite: 'slime1', isBoss: false },
     { type: 'jinn',     hp: 90,  atk: 24, def: 10, exp: 45,  gold: 20, name: 'Swamp Jinn',    sprite: 'jinn',   isBoss: false },
+    { type: 'vamp2',    hp: 95,  atk: 28, def: 11, exp: 48,  gold: 22, name: 'Swamp Vampire', sprite: 'vamp2',  isBoss: false },
   ],
   mountain: [
     { type: 'orc3_m',   hp: 130, atk: 35, def: 20, exp: 70,  gold: 35, name: 'Mountain Orc',  sprite: 'orc3',   isBoss: false },
     { type: 'dragon',   hp: 200, atk: 50, def: 25, exp: 120, gold: 60, name: 'Elder Dragon',  sprite: 'dragon', isBoss: false },
+    { type: 'vamp3',    hp: 160, atk: 42, def: 22, exp: 85,  gold: 45, name: 'Blood Lord',    sprite: 'vamp3',  isBoss: false },
   ],
 };
 
@@ -274,15 +277,27 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
       try { localStorage.setItem(SAVE_KEY, JSON.stringify({ playerState: { ...this.playerState }, activeQuests: this.activeQuests, completedQuestIds: this.completedQuestIds, timestamp: Date.now() })); } catch (_) {}
     }
 
-    // ── PRELOAD ──────────────────────────────────────
+    // ══════════════════════════════════════════════════
+    // PRELOAD — All 10 CraftPix Packs
+    // ══════════════════════════════════════════════════
     preload() {
-      // Floor textures
+      // ── Pack #8: craftpix-654184 (HOME) — spritesheets ──
+      // ground_grass_details.png  336×288  → 16px tiles = 21 cols × 18 rows
+      this.load.spritesheet('ground_tiles', `${HOME_DIR}ground_grass_details.png`, { frameWidth: 16, frameHeight: 16 });
+      // walls_floor.png  144×176  → 16px tiles = 9 cols × 11 rows
+      this.load.spritesheet('floor_tiles', `${HOME_DIR}walls_floor.png`, { frameWidth: 16, frameHeight: 16 });
+      // exterior.png  240×800  → 16px tiles = 15 cols × 50 rows
+      this.load.spritesheet('exterior_tiles', `${HOME_DIR}exterior.png`, { frameWidth: 16, frameHeight: 16 });
+      // house_details.png  160×272  → 16px tiles = 10 cols × 17 rows
+      this.load.spritesheet('house_tiles', `${HOME_DIR}house_details.png`, { frameWidth: 16, frameHeight: 16 });
+      // Interior.png  192×400  → 16px tiles = 12 cols × 25 rows
+      this.load.spritesheet('interior_tiles', `${HOME_DIR}Interior.png`, { frameWidth: 16, frameHeight: 16 });
+
+      // Custom floor tiles (loose 32×32 PNGs in sprites/)
       for (let i = 0; i < 8; i++) this.load.image(`floor_${i}`, `${SP}floor_${i}.png`);
       this.load.image('road', `${SP}road_tile.png`);
-      this.load.image('ground_grass', `${HOME_DIR}ground_grass_details.png`);
-      this.load.image('walls_floor', `${HOME_DIR}walls_floor.png`);
 
-      // Player class-specific frames from craftpix-891165
+      // ── Pack #2: craftpix-891165 (Heroes) — per class ──
       const cm = CLASS_SPRITE_MAP[playerClass] || CLASS_SPRITE_MAP.warrior;
       const heroBase = `${HERO_DIR}${cm.folder}/`;
       this.load.image('hero_portrait', `${heroBase}${cm.portrait}`);
@@ -294,13 +309,12 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
         }
       };
       ['idle','walk','run','attack','hurt','death'].forEach(a => loadAnim(a));
-      // Mage fire projectile sprites
       if (cm.fire) {
         for (let i = cm.fire.start; i < cm.fire.start + cm.fire.count; i++)
           this.load.image(`hero_fire_${i}`, `${heroBase}Fire/${cm.fire.prefix}${i}.png`);
       }
 
-      // Orc spritesheets (top-down 64×64)
+      // ── Pack #5: craftpix-363992 (Orcs) — 64×64 spritesheets ──
       ['orc1','orc2','orc3'].forEach(id => {
         const cap = id.charAt(0).toUpperCase() + id.slice(1);
         const dir = `${ORC_DIR}${cap}/With_shadow/`;
@@ -308,44 +322,63 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
           this.load.spritesheet(`${id}_${a}`, `${dir}${id}_${a}_with_shadow.png`, { frameWidth: 64, frameHeight: 64 }));
       });
 
-      // Slime spritesheets (top-down 32×32)
+      // ── Pack #9: craftpix-788364 (Slimes) — 32×32 spritesheets ──
       ['Slime1','Slime2','Slime3'].forEach(id => {
         const dir = `${SLIME_DIR}${id}/With_shadow/`; const lc = id.toLowerCase();
         ['Idle','Walk','Attack','Hurt','Death'].forEach(a =>
           this.load.spritesheet(`${lc}_${a.toLowerCase()}`, `${dir}${id}_${a}_with_shadow.png`, { frameWidth: 32, frameHeight: 32 }));
       });
 
-      // Monster individual frames
+      // ── Pack #1: craftpix-561178 (Monsters) — individual frames ──
       ['demon','dragon','jinn_animation','lizard','medusa','small_dragon'].forEach(id => {
         const dir = `${MONSTER_DIR}${id}/`; const key = id === 'jinn_animation' ? 'jinn' : id;
         ['Idle1','Idle2','Idle3','Walk1','Walk2','Attack1','Attack2','Hurt1','Death1'].forEach(f =>
           this.load.image(`${key}_${f.toLowerCase()}`, `${dir}${f}.png`));
       });
 
-      // Trees — collect unique names from all biomes
+      // ── Pack #3: craftpix-208004 (Vampires) — 64×64 spritesheets ──
+      ['Vampires1','Vampires2','Vampires3'].forEach((id, idx) => {
+        const dir = `${VAMP_DIR}${id}/With_shadow/`;
+        const lc = `vamp${idx + 1}`;
+        ['Idle','Walk','Attack','Hurt','Death','Run'].forEach(a =>
+          this.load.spritesheet(`${lc}_${a.toLowerCase()}`, `${dir}${id}_${a}_with_shadow.png`, { frameWidth: 64, frameHeight: 64 }));
+      });
+
+      // ── Pack #6: craftpix-385863 (Trees) — individual sprites ──
       const allTrees = new Set(); BIOMES.forEach(b => b.treePalette.forEach(t => allTrees.add(t)));
       allTrees.forEach(t => this.load.image(`tree_${t}`, `${TREES_DIR}${t}.png`));
-      // Rocks
-      for (let i = 1; i <= 7; i++) this.load.image(`rock_${i}`, `${ROCKS_DIR}Rock${i}_1.png`);
-      // Buildings
-      this.load.image('building_exterior', `${HOME_DIR}exterior.png`);
-      this.load.image('building_house',    `${HOME_DIR}house_details.png`);
-      // Props
+
+      // ── Pack #10: craftpix-974061 (Rocks) — individual sprites ──
+      for (let i = 1; i <= 8; i++) this.load.image(`rock_${i}`, `${ROCKS_DIR}Rock${i}_1.png`);
+
+      // ── Pack #4: craftpix-255216 (UI) — icon spritesheet ──
+      this.load.spritesheet('ui_icons', `${UI_DIR}Icons.png`, { frameWidth: 16, frameHeight: 16 });
+
+      // ── Pack #7: craftpix-555940 (Male Char) — fallback ──
+      this.load.spritesheet('male_idle', `${CHAR_DIR}Sword/With_shadow/Sword_Idle_with_shadow.png`, { frameWidth: 64, frameHeight: 64 });
+
+      // Props (loose sprites)
       this.load.image('chest_sprite',    `${SP}chest.png`);
       this.load.image('fountain_sprite', `${SP}fountain.png`);
       this.load.image('npc_sprite',      `${SP}npc_merchant.png`);
       this.load.image('shop_sprite',     `${SP}shop.png`);
       for (let i = 0; i < 5; i++) this.load.image(`torch_${i}`, `${SP}torch_${i}.png`);
       this.load.image('dark_particle', `${SP}dark_particle.png`);
+
+      // Animated environment from HOME pack
+      this.load.spritesheet('bird_fly', `${HOME_DIR}bird_fly_animation.png`, { frameWidth: 32, frameHeight: 32 });
+      this.load.spritesheet('smoke_anim', `${HOME_DIR}Smoke_animation.png`, { frameWidth: 32, frameHeight: 32 });
     }
 
-    // ── CREATE ───────────────────────────────────────
+    // ══════════════════════════════════════════════════
+    // CREATE
+    // ══════════════════════════════════════════════════
     create() {
       const rng = seededRandom(42);
       this.physics.world.setBounds(0, 0, WORLD_W, WORLD_H);
       this.cameras.main.setBounds(0, 0, WORLD_W, WORLD_H);
 
-      // Nuclear fallback — ensure world is NEVER black
+      // Nuclear fallback — ensure NEVER black
       this.add.rectangle(WORLD_W / 2, WORLD_H / 2, WORLD_W, WORLD_H, 0x2d4a1e).setDepth(-2);
 
       this.renderGround(rng);
@@ -370,41 +403,71 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
       this.moveMarker = this.add.graphics().setDepth(99998);
     }
 
-    // ── GROUND ───────────────────────────────────────
+    // ══════════════════════════════════════════════════
+    // GROUND — biome color base + scattered detail tiles (perf-safe)
+    // ══════════════════════════════════════════════════
     renderGround(rng) {
-      // Colored biome base
+      const hasGroundSheet = this.textures.exists('ground_tiles');
+      const hasFloorSheet = this.textures.exists('floor_tiles');
+      const groundTotal = hasGroundSheet ? this.textures.get('ground_tiles').frameTotal - 1 : 0;
+      const floorTotal = hasFloorSheet ? this.textures.get('floor_tiles').frameTotal - 1 : 0;
+
+      const BIOME_GROUND_FRAMES = {
+        forest:   [0, 1, 2, 21, 22],
+        desert:   [42, 43, 63, 64],
+        ice:      [84, 85, 105, 106],
+        volcanic: [126, 127, 147, 148],
+        swamp:    [168, 169, 189, 190],
+        mountain: [252, 253, 273, 274],
+      };
+
+      // 1) Solid biome rectangles (the real ground base — never black)
       const g = this.add.graphics().setDepth(-1);
       for (const b of BIOMES) {
-        const r = (b.groundTint >> 16) & 0xff, gr = (b.groundTint >> 8) & 0xff, bl = b.groundTint & 0xff;
-        g.fillStyle(((Math.floor(r * 0.7)) << 16) | ((Math.floor(gr * 0.7)) << 8) | Math.floor(bl * 0.7), 1);
+        const r = (b.groundTint >> 16) & 0xff, gr2 = (b.groundTint >> 8) & 0xff, bl = b.groundTint & 0xff;
+        g.fillStyle(((Math.floor(r * 0.7)) << 16) | ((Math.floor(gr2 * 0.7)) << 8) | Math.floor(bl * 0.7), 1);
         g.fillRect(b.x, b.y, b.w, b.h);
       }
-      // Floor tile overlay per biome
+
+      // 2) Scattered ground detail tiles — ~80 per biome (~480 total, NOT 10K)
       for (const b of BIOMES) {
-        const keys = b.floorKeys.filter(k => this.textures.exists(k)); if (!keys.length) continue;
-        for (let x = b.x; x < b.x + b.w; x += TILE_SCALED) {
-          for (let y = b.y; y < b.y + b.h; y += TILE_SCALED) {
-            this.add.image(x + TILE_SCALED / 2, y + TILE_SCALED / 2, keys[Math.floor(rng() * keys.length)])
-              .setScale(TILE_SCALE).setDepth(0).setTint(b.groundTint);
+        const gFrames = BIOME_GROUND_FRAMES[b.id] || [0, 1];
+        const detailCount = Math.floor((b.w * b.h) / (300 * 300)); // ~1 tile per 300×300 area
+        for (let i = 0; i < detailCount; i++) {
+          const tx = b.x + rng() * b.w, ty = b.y + rng() * b.h;
+          if (hasGroundSheet && groundTotal > 0) {
+            const frame = Math.min(gFrames[Math.floor(rng() * gFrames.length)], groundTotal - 1);
+            this.add.image(tx, ty, 'ground_tiles', frame)
+              .setScale(TILE_SCALE * (2 + rng() * 2)).setDepth(0).setTint(b.groundTint).setAlpha(0.35 + rng() * 0.3);
+          } else if (hasFloorSheet && floorTotal > 0) {
+            const frame = Math.min(Math.floor(rng() * 4), floorTotal - 1);
+            this.add.image(tx, ty, 'floor_tiles', frame)
+              .setScale(TILE_SCALE * 2).setDepth(0).setTint(b.groundTint).setAlpha(0.4);
+          } else {
+            const fk = `floor_${Math.floor(rng() * 8)}`;
+            if (this.textures.exists(fk))
+              this.add.image(tx, ty, fk).setScale(TILE_SCALE).setDepth(0).setTint(b.groundTint).setAlpha(0.4);
           }
         }
-      }
-      // Grass detail overlays
-      if (this.textures.exists('ground_grass')) {
-        for (const b of BIOMES) {
-          if (b.id !== 'forest' && b.id !== 'swamp') continue;
-          for (let i = 0; i < 20; i++) {
+
+        // Extra leaf/grass detail for forest & swamp
+        if ((b.id === 'forest' || b.id === 'swamp') && hasGroundSheet && groundTotal > 5) {
+          const leafFrames = [3, 4, 5, 24, 25];
+          for (let i = 0; i < 30; i++) {
             const gx = b.x + 200 + rng() * (b.w - 400), gy = b.y + 200 + rng() * (b.h - 400);
             if (isInSafeZone(gx, gy)) continue;
-            this.add.image(gx, gy, 'ground_grass').setScale(1.5 + rng() * 0.5).setDepth(0.05).setAlpha(0.5 + rng() * 0.3).setTint(b.groundTint);
+            const frame = Math.min(leafFrames[Math.floor(rng() * leafFrames.length)], groundTotal - 1);
+            this.add.image(gx, gy, 'ground_tiles', frame)
+              .setScale(TILE_SCALE * (1.5 + rng())).setDepth(0.05).setAlpha(0.3 + rng() * 0.25).setTint(b.groundTint);
           }
         }
       }
-      // Biome borders
-      for (const b of BIOMES) {
-        const border = this.add.graphics().setDepth(0.1);
-        border.lineStyle(2, 0x000000, 0.3); border.strokeRect(b.x, b.y, b.w, b.h);
-      }
+
+      // 3) Biome borders
+      const border = this.add.graphics().setDepth(0.1);
+      border.lineStyle(2, 0x000000, 0.3);
+      for (const b of BIOMES) { border.strokeRect(b.x, b.y, b.w, b.h); }
+
       this.renderRoads();
     }
 
@@ -417,10 +480,12 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
           if (Math.sqrt(dx * dx + dy * dy) < 2800) {
             gfx.lineBetween(CITIES[i].x, CITIES[i].y, CITIES[j].x, CITIES[j].y);
             if (this.textures.exists('road')) {
-              const steps = Math.floor(Math.sqrt(dx * dx + dy * dy) / TILE_SCALED);
+              const roadStep = TILE_SCALED * 2;
+              const steps = Math.floor(Math.sqrt(dx * dx + dy * dy) / roadStep);
               for (let s = 0; s <= steps; s++) {
-                const t = s / steps;
-                this.add.image(CITIES[i].x + dx * t, CITIES[i].y + dy * t, 'road').setScale(TILE_SCALE).setDepth(0.6).setAlpha(0.4);
+                const t = s / Math.max(steps, 1);
+                this.add.image(CITIES[i].x + dx * t, CITIES[i].y + dy * t, 'road')
+                  .setScale(TILE_SCALE).setDepth(0.6).setAlpha(0.35);
               }
             }
           }
@@ -428,9 +493,12 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
       }
     }
 
-    // ── DECORATIONS ──────────────────────────────────
+    // ══════════════════════════════════════════════════
+    // DECORATIONS — trees (pack #6), rocks (pack #10)
+    // ══════════════════════════════════════════════════
     renderBiomeDecorations(rng) {
       for (const b of BIOMES) {
+        // Trees from craftpix-385863
         for (let i = 0, n = 40 + Math.floor(rng() * 20); i < n; i++) {
           const tx = b.x + 80 + rng() * (b.w - 160), ty = b.y + 80 + rng() * (b.h - 160);
           if (isInSafeZone(tx, ty)) continue;
@@ -438,68 +506,156 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
           if (this.textures.exists(`tree_${tn}`))
             this.add.image(tx, ty, `tree_${tn}`).setScale(SPRITE_SCALE * (0.8 + rng() * 0.4)).setDepth(ty + 40).setAlpha(0.9 + rng() * 0.1);
         }
+        // Rocks from craftpix-974061
         for (let i = 0, n = 15 + Math.floor(rng() * 10); i < n; i++) {
           const rx = b.x + 60 + rng() * (b.w - 120), ry = b.y + 60 + rng() * (b.h - 120);
           if (isInSafeZone(rx, ry)) continue;
-          const rk = `rock_${1 + Math.floor(rng() * 7)}`;
+          const rk = `rock_${1 + Math.floor(rng() * 8)}`;
           if (this.textures.exists(rk))
             this.add.image(rx, ry, rk).setScale(SPRITE_SCALE * (0.6 + rng() * 0.5)).setDepth(ry + 10);
         }
       }
     }
 
-    // ── CITIES — real house sprites from CraftPix ────
+    // ══════════════════════════════════════════════════
+    // CITIES — buildings from exterior_tiles & house_tiles spritesheets (pack #8)
+    // ══════════════════════════════════════════════════
     renderCities(rng) {
       CITIES.forEach(city => {
         const biome = BIOMES.find(b => b.id === city.biome);
-        // Ground platform
+        // Ground platform (cobblestone from floor_tiles)
         const cg = this.add.graphics().setDepth(0.8);
         cg.fillStyle(0x554433, 0.6); cg.fillRoundedRect(city.x - 200, city.y - 180, 400, 360, 24);
         cg.fillStyle(0x665544, 0.35); cg.fillRoundedRect(city.x - 180, city.y - 160, 360, 320, 18);
 
-        const hasExterior = this.textures.exists('building_exterior');
-        const hasHouseDetail = this.textures.exists('building_house');
-        const hasShop = this.textures.exists('shop_sprite');
-        const angles = [0, Math.PI*0.5, Math.PI, Math.PI*1.5, Math.PI*0.25, Math.PI*1.25];
-        const count = 4 + Math.floor(rng() * 3);
-        for (let i = 0; i < count; i++) {
-          const angle = angles[i % angles.length] + (rng() - 0.5) * 0.3;
-          const rad = 80 + rng() * 50;
-          const bx = city.x + Math.cos(angle) * rad, by = city.y + Math.sin(angle) * rad - 10;
-          if (i === 0 && hasShop) {
-            this.add.image(bx, by, 'shop_sprite').setScale(SPRITE_SCALE * 0.8).setDepth(by + 30);
-          } else if (i % 2 === 0 && hasExterior) {
-            this.add.image(bx, by, 'building_exterior').setScale(SPRITE_SCALE * 0.7).setDepth(by + 30);
-          } else if (hasHouseDetail) {
-            this.add.image(bx, by, 'building_house').setScale(SPRITE_SCALE * 0.7).setDepth(by + 30);
-          } else {
-            // Fallback drawn building
-            const fg = this.add.graphics().setDepth(by + 30);
-            const bw = 60 + rng() * 40, bh = 50 + rng() * 30;
-            fg.fillStyle(0x000000, 0.3); fg.fillRect(bx-bw/2+4, by-bh/2+4, bw, bh);
-            const wc = biome.id === 'ice' ? 0x8899aa : biome.id === 'volcanic' ? 0x553322 : biome.id === 'desert' ? 0xaa9966 : 0x665544;
-            fg.fillStyle(wc); fg.fillRect(bx-bw/2, by-bh/2, bw, bh);
-            const rc = biome.id === 'volcanic' ? 0x881100 : biome.id === 'ice' ? 0x4466aa : 0x884422;
-            fg.fillStyle(rc); fg.fillTriangle(bx-bw/2-8, by-bh/2, bx, by-bh/2-28, bx+bw/2+8, by-bh/2);
+        // Lay floor_tiles on the city ground
+        if (this.textures.exists('floor_tiles')) {
+          const totalFrames = this.textures.get('floor_tiles').frameTotal - 1;
+          const cityStep = TILE_SCALED * 2;
+          for (let fx = city.x - 180; fx < city.x + 180; fx += cityStep) {
+            for (let fy = city.y - 160; fy < city.y + 160; fy += cityStep) {
+              const fr = Math.min(Math.floor(rng() * 4), totalFrames - 1);
+              this.add.image(fx + cityStep/2, fy + cityStep/2, 'floor_tiles', fr)
+                .setScale(TILE_SCALE * 2).setDepth(0.85).setAlpha(0.55);
+            }
           }
         }
+
+        // ── Compose buildings from exterior_tiles spritesheet ──
+        const hasExterior = this.textures.exists('exterior_tiles');
+        const hasHouse = this.textures.exists('house_tiles');
+        const hasInterior = this.textures.exists('interior_tiles');
+        const extTotal = hasExterior ? this.textures.get('exterior_tiles').frameTotal - 1 : 0;
+        const houseTotal = hasHouse ? this.textures.get('house_tiles').frameTotal - 1 : 0;
+
+        // Building positions around city center
+        const buildingPositions = [
+          { x: city.x - 120, y: city.y - 80 },
+          { x: city.x + 100, y: city.y - 60 },
+          { x: city.x - 80,  y: city.y + 80 },
+          { x: city.x + 120, y: city.y + 60 },
+          { x: city.x,       y: city.y - 120 },
+          { x: city.x - 140, y: city.y + 20 },
+        ];
+        const count = 4 + Math.floor(rng() * 3);
+        for (let i = 0; i < Math.min(count, buildingPositions.length); i++) {
+          const bp = buildingPositions[i];
+          if (hasExterior && extTotal > 10) {
+            // Compose a 3×4 tile building from exterior spritesheet
+            // Exterior tiles: rows of building parts (walls, roofs, windows, doors)
+            const wallBase = Math.floor(rng() * 4) * 15; // Different building "rows"
+            for (let tx = 0; tx < 3; tx++) {
+              for (let ty = 0; ty < 4; ty++) {
+                const frameIdx = Math.min(wallBase + ty * 15 + tx, extTotal - 1);
+                this.add.image(
+                  bp.x + (tx - 1) * TILE_SCALED,
+                  bp.y + (ty - 2) * TILE_SCALED,
+                  'exterior_tiles', frameIdx
+                ).setScale(TILE_SCALE).setDepth(bp.y + 100);
+              }
+            }
+          } else if (hasHouse && houseTotal > 5) {
+            // Compose from house_tiles: 2×3 tile building
+            for (let tx = 0; tx < 2; tx++) {
+              for (let ty = 0; ty < 3; ty++) {
+                const frameIdx = Math.min(ty * 10 + tx + Math.floor(rng() * 3), houseTotal - 1);
+                this.add.image(
+                  bp.x + (tx - 0.5) * TILE_SCALED,
+                  bp.y + (ty - 1) * TILE_SCALED,
+                  'house_tiles', frameIdx
+                ).setScale(TILE_SCALE).setDepth(bp.y + 100);
+              }
+            }
+          } else {
+            // Fallback: drawn building
+            const fg = this.add.graphics().setDepth(bp.y + 100);
+            const bw = 60 + rng() * 40, bh = 50 + rng() * 30;
+            fg.fillStyle(0x000000, 0.3); fg.fillRect(bp.x-bw/2+4, bp.y-bh/2+4, bw, bh);
+            const wc = biome.id === 'ice' ? 0x8899aa : biome.id === 'volcanic' ? 0x553322 : biome.id === 'desert' ? 0xaa9966 : 0x665544;
+            fg.fillStyle(wc); fg.fillRect(bp.x-bw/2, bp.y-bh/2, bw, bh);
+            const rc = biome.id === 'volcanic' ? 0x881100 : biome.id === 'ice' ? 0x4466aa : 0x884422;
+            fg.fillStyle(rc); fg.fillTriangle(bp.x-bw/2-8, bp.y-bh/2, bp.x, bp.y-bh/2-28, bp.x+bw/2+8, bp.y-bh/2);
+          }
+        }
+
+        // Shop building (uses shop.png from loose sprites)
+        if (this.textures.exists('shop_sprite'))
+          this.add.image(city.x + 60, city.y - 30, 'shop_sprite').setScale(SPRITE_SCALE * 0.8).setDepth(city.y);
+
+        // Interior props using interior_tiles (pack #8)
+        if (hasInterior) {
+          const intTotal = this.textures.get('interior_tiles').frameTotal - 1;
+          [0, 12, 24, 48, 96].forEach((fr, idx) => {
+            const safeFr = Math.min(fr, intTotal - 1);
+            const angle = (idx / 5) * Math.PI * 2;
+            this.add.image(
+              city.x + Math.cos(angle) * 50,
+              city.y + Math.sin(angle) * 40 - 20,
+              'interior_tiles', safeFr
+            ).setScale(TILE_SCALE * 0.8).setDepth(city.y + 50);
+          });
+        }
+
         // City label
-        this.add.text(city.x, city.y - 200, city.name, { fontFamily: 'Cinzel, serif', fontSize: '18px', color: '#ffd700', stroke: '#000000', strokeThickness: 4, align: 'center' }).setOrigin(0.5).setDepth(9999);
-        this.add.text(city.x, city.y - 182, city.subtitle, { fontFamily: 'Crimson Text, serif', fontSize: '11px', color: '#aaa', stroke: '#000', strokeThickness: 2 }).setOrigin(0.5).setDepth(9999);
-        // Torches
+        this.add.text(city.x, city.y - 200, city.name, {
+          fontFamily: 'Cinzel, serif', fontSize: '18px', color: '#ffd700',
+          stroke: '#000000', strokeThickness: 4, align: 'center'
+        }).setOrigin(0.5).setDepth(9999);
+        this.add.text(city.x, city.y - 182, city.subtitle, {
+          fontFamily: 'Crimson Text, serif', fontSize: '11px', color: '#aaa',
+          stroke: '#000', strokeThickness: 2
+        }).setOrigin(0.5).setDepth(9999);
+
+        // Torches (loose sprites)
         for (let t = 0; t < 4; t++) {
           const ta = (t / 4) * Math.PI * 2;
           const tk = `torch_${Math.floor(rng() * 5)}`;
           if (this.textures.exists(tk))
-            this.add.image(city.x + Math.cos(ta) * 160, city.y + Math.sin(ta) * 140, tk).setScale(SPRITE_SCALE).setDepth(city.y + Math.sin(ta) * 140 + 20);
+            this.add.image(city.x + Math.cos(ta) * 160, city.y + Math.sin(ta) * 140, tk)
+              .setScale(SPRITE_SCALE).setDepth(city.y + Math.sin(ta) * 140 + 20);
         }
+
         // Fountain
         if (this.textures.exists('fountain_sprite'))
           this.add.image(city.x, city.y - 30, 'fountain_sprite').setScale(SPRITE_SCALE).setDepth(city.y - 10);
+
+        // Animated smoke from chimney (pack #8)
+        if (this.textures.exists('smoke_anim')) {
+          try {
+            if (!this.anims.exists('smoke_puff')) {
+              const fc = this.textures.get('smoke_anim').frameTotal - 1;
+              if (fc > 1) this.anims.create({ key: 'smoke_puff', frames: this.anims.generateFrameNumbers('smoke_anim', { start: 0, end: fc - 1 }), frameRate: 6, repeat: -1 });
+            }
+            const sm = this.add.sprite(city.x - 100, city.y - 120, 'smoke_anim').setScale(1.5).setDepth(9998).setAlpha(0.5);
+            if (this.anims.exists('smoke_puff')) sm.play('smoke_puff');
+          } catch (_) {}
+        }
       });
     }
 
-    // ── ENEMIES ──────────────────────────────────────
+    // ══════════════════════════════════════════════════
+    // ENEMIES — 5 packs: orcs (#5), slimes (#9), monsters (#1), vampires (#3)
+    // ══════════════════════════════════════════════════
     spawnAllEnemies(rng) {
       for (const b of BIOMES) {
         const templates = BIOME_ENEMIES[b.id] || [];
@@ -518,10 +674,18 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
     }
 
     spawnEnemy(x, y, template, biomeId) {
+      // Safe zone double-check
+      if (isInSafeZone(x, y)) return;
+      const dist = CITIES.reduce((min, c) => Math.min(min, Math.hypot(c.x - x, c.y - y)), Infinity);
+      if (dist < 1000) return;
+
       const sk = template.sprite;
       const isTopDown = sk.startsWith('orc') || sk.startsWith('slime');
+      const isVamp = sk.startsWith('vamp');
       let enemy;
       if (isTopDown && this.textures.exists(`${sk}_idle`)) {
+        enemy = this.add.sprite(x, y, `${sk}_idle`, 0).setScale(SPRITE_SCALE);
+      } else if (isVamp && this.textures.exists(`${sk}_idle`)) {
         enemy = this.add.sprite(x, y, `${sk}_idle`, 0).setScale(SPRITE_SCALE);
       } else if (this.textures.exists(`${sk}_idle1`)) {
         enemy = this.add.sprite(x, y, `${sk}_idle1`).setScale(SPRITE_SCALE * 0.7);
@@ -598,13 +762,13 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
       const chest = this.add.image(x, y, 'chest_sprite').setScale(SPRITE_SCALE).setDepth(y).setInteractive();
       if (type === 'golden') chest.setTint(0xffdd00);
       chest.chestData = { type, opened: false };
-      chest.label = this.add.text(x, y - 24, type === 'golden' ? '\uD83D\uDD12 Boss Chest' : 'Chest', {
+      chest.label = this.add.text(x, y - 24, type === 'golden' ? '🔒 Boss Chest' : 'Chest', {
         fontSize: '8px', fontFamily: 'Cinzel, serif', color: type === 'golden' ? '#ffd700' : '#aaaaaa', stroke: '#000', strokeThickness: 2,
       }).setOrigin(0.5).setDepth(9999).setAlpha(0.7);
       this.chests.push(chest);
     }
 
-    // ── PLAYER ───────────────────────────────────────
+    // ── PLAYER (pack #2: craftpix-891165 heroes) ─────
     createPlayer() {
       const start = CITIES[0];
       this.playerState.hp = this.playerState.maxHp; this.playerState.mana = this.playerState.maxMana;
@@ -615,8 +779,10 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
       if (firstKey) {
         this.knight = this.add.image(start.x, start.y, firstKey).setScale(SPRITE_SCALE);
         this.physics.add.existing(this.knight);
-        // Apply golden tint for paladin to differentiate from warrior
         if (playerClass === 'paladin') this.knight.setTint(0xffd700);
+      } else if (this.textures.exists('male_idle')) {
+        // Fallback to pack #7 male character
+        this.knight = this.physics.add.sprite(start.x, start.y, 'male_idle', 0).setScale(SPRITE_SCALE);
       } else {
         this.knight = this.add.rectangle(start.x, start.y, 24, 32, 0x4488ff);
         this.physics.add.existing(this.knight);
@@ -629,7 +795,10 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
     purgeSpawnZone() {
       for (let i = this.enemies.length - 1; i >= 0; i--) {
         const e = this.enemies[i];
-        if (isInSafeZone(e.x, e.y)) { e.hpBg?.destroy(); e.hpFg?.destroy(); e.nameLabel?.destroy(); e.bossGlow?.destroy(); e.destroy(); this.enemies.splice(i, 1); }
+        if (isInSafeZone(e.x, e.y)) {
+          e.hpBg?.destroy(); e.hpFg?.destroy(); e.nameLabel?.destroy(); e.bossGlow?.destroy();
+          e.destroy(); this.enemies.splice(i, 1);
+        }
       }
     }
 
@@ -667,8 +836,28 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
     }
 
     createAtmosphere() {
+      // Animated birds from HOME pack
+      if (this.textures.exists('bird_fly')) {
+        try {
+          const bc = this.textures.get('bird_fly').frameTotal - 1;
+          if (bc > 1 && !this.anims.exists('bird_anim')) {
+            this.anims.create({ key: 'bird_anim', frames: this.anims.generateFrameNumbers('bird_fly', { start: 0, end: bc - 1 }), frameRate: 8, repeat: -1 });
+          }
+          for (let i = 0; i < 5; i++) {
+            const bx = 500 + Math.random() * (WORLD_W - 1000), by = 200 + Math.random() * (WORLD_H - 400);
+            const bird = this.add.sprite(bx, by, 'bird_fly').setScale(1.5).setDepth(99990).setAlpha(0.7);
+            if (this.anims.exists('bird_anim')) bird.play('bird_anim');
+            this.tweens.add({ targets: bird, x: bx + 800, y: by - 200, duration: 12000 + Math.random() * 8000, repeat: -1, yoyo: true, ease: 'Sine.easeInOut' });
+          }
+        } catch (_) {}
+      }
+      // Dark particles
       if (this.textures.exists('dark_particle')) {
-        this.add.particles(0, 0, 'dark_particle', { x: { min: 0, max: WORLD_W }, y: { min: 0, max: WORLD_H }, lifespan: 6000, speed: { min: 5, max: 20 }, scale: { start: 0.3, end: 0 }, alpha: { start: 0.3, end: 0 }, frequency: 200, quantity: 1 }).setDepth(99990);
+        this.add.particles(0, 0, 'dark_particle', {
+          x: { min: 0, max: WORLD_W }, y: { min: 0, max: WORLD_H },
+          lifespan: 6000, speed: { min: 5, max: 20 }, scale: { start: 0.3, end: 0 },
+          alpha: { start: 0.3, end: 0 }, frequency: 200, quantity: 1
+        }).setDepth(99990);
       }
     }
 
@@ -709,7 +898,6 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
         this.playerAnimFrame = (this.playerAnimFrame + 1) % keys.length;
         const k = keys[this.playerAnimFrame];
         if (this.textures.exists(k)) this.knight.setTexture(k);
-        // End attack anim
         if (this.playerAttacking && this.playerAnim === 'attack' && this.playerAnimFrame === keys.length - 1) {
           this.playerAttacking = false; this.setPlayerAnim('idle');
         }
@@ -745,7 +933,8 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
         if (ed.hitFlashTimer > 0) { ed.hitFlashTimer -= delta; if (ed.hitFlashTimer <= 0) e.clearTint(); }
         if (ed.attackCooldown > 0) ed.attackCooldown -= delta;
         const isTopDown = ed.sprite.startsWith('orc') || ed.sprite.startsWith('slime');
-        if (!isTopDown) {
+        const isVamp = ed.sprite.startsWith('vamp');
+        if (!isTopDown && !isVamp) {
           ed.animTimer = (ed.animTimer || 0) + delta;
           if (ed.animTimer > 400) { ed.animTimer = 0; ed.animFrame = ((ed.animFrame || 0) + 1) % 3; const k = `${ed.sprite}_idle${ed.animFrame + 1}`; if (this.textures.exists(k)) e.setTexture(k); }
         }
@@ -789,7 +978,6 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
       this.syncPlayerState();
     }
 
-    // ── Basic Attack ─────────────────────────────────
     performBasicAttack() {
       if (!this.knight) return;
       this.moveTarget = null;
@@ -805,7 +993,6 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
       this.tweens.add({ targets: sg, alpha: 0, duration: 200, onComplete: () => sg.destroy() });
     }
 
-    // ── SKILLS (QWER) ───────────────────────────────
     useSkill(key) {
       const skill = skills[key]; if (!skill || this.skillCooldowns[key] > 0) return;
       if (this.playerState.mana < skill.manaCost) { this.spawnDamageText(this.knight.x, this.knight.y - 40, 'No Mana!', '#4488ff'); return; }
@@ -831,8 +1018,6 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
       const trail = this.add.graphics().setDepth(99989);
       proj.projectileData = { damage: Math.floor((this.playerState.attack + this.playerState.intelligence) * skill.damage), lifetime: 2000, skill, trail, prevX: this.knight.x, prevY: this.knight.y, trailW: tw };
       this.projectiles.push(proj);
-      const vfx = this.add.graphics().setDepth(99991); vfx.lineStyle(2, skill.color, 0.6); vfx.strokeCircle(this.knight.x, this.knight.y, 18);
-      this.tweens.add({ targets: vfx, alpha: 0, duration: 300, onComplete: () => vfx.destroy() });
     }
 
     performDash(skill) {
@@ -843,8 +1028,6 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
       const ty = Phaser.Math.Clamp(this.knight.y + Math.sin(a) * dist, 20, WORLD_H - 20);
       const ox = this.knight.x, oy = this.knight.y;
       const dur = playerClass === 'ninja' ? 100 : playerClass === 'mage' ? 80 : 150;
-      const tg = this.add.graphics().setDepth(99988); tg.lineStyle(4, skill.color, 0.5); tg.lineBetween(ox, oy, tx, ty); tg.fillStyle(skill.color, 0.15); tg.fillCircle(tx, ty, 25);
-      this.tweens.add({ targets: tg, alpha: 0, duration: 500, onComplete: () => tg.destroy() });
       if (skill.damage > 0) {
         const dmg = Math.floor(this.playerState.attack * skill.damage);
         for (const e of this.enemies) {
@@ -872,8 +1055,6 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
       const a = Math.atan2(this.mouseWorldPos.y - this.knight.y, this.mouseWorldPos.x - this.knight.x);
       if (playerClass === 'mage') {
         const mx = this.mouseWorldPos.x, my = this.mouseWorldPos.y;
-        const ml = this.add.graphics().setDepth(99999); ml.lineStyle(3, 0xff4400, 0.6); ml.lineBetween(mx, my-200, mx, my);
-        this.tweens.add({ targets: ml, alpha: 0, duration: 300, onComplete: () => ml.destroy() });
         const sg = this.add.graphics().setDepth(99999);
         this.tweens.add({ targets: { r: 10 }, r: 60, duration: 350, onUpdate: (tw) => { const r = tw.getValue(); sg.clear(); sg.fillStyle(0xff4400, 0.5*(1-r/60)); sg.fillCircle(mx,my,r); }, onComplete: () => sg.destroy() });
         for (const e of this.enemies) { if (e.enemyData.isDead) continue; if (Phaser.Math.Distance.Between(mx,my,e.x,e.y) < 60) this.damageEnemy(e, dmg, true); }
@@ -881,13 +1062,11 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
       }
       const hx = this.knight.x + Math.cos(a) * 50, hy = this.knight.y + Math.sin(a) * 50;
       const sg = this.add.graphics().setDepth(99999); sg.fillStyle(skill.color, 0.5); sg.fillCircle(hx,hy,35);
-      sg.lineStyle(4, skill.color, 0.9); sg.beginPath(); sg.arc(hx,hy,40,a-0.8,a+0.8); sg.strokePath();
       this.tweens.add({ targets: sg, alpha: 0, scaleX: 1.5, scaleY: 1.5, duration: 400, onComplete: () => sg.destroy() });
       for (const e of this.enemies) { if (e.enemyData.isDead) continue; if (Phaser.Math.Distance.Between(hx,hy,e.x,e.y) < 90) this.damageEnemy(e, dmg, true); }
       this.cameras.main.shake(200, 0.005);
     }
 
-    // ── Damage & Kill ────────────────────────────────
     damageEnemy(enemy, amount, isCrit) {
       const ed = enemy.enemyData;
       const d = Math.max(1, amount - Math.floor(ed.def * 0.3));
@@ -899,7 +1078,7 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
     killEnemy(enemy) {
       const ed = enemy.enemyData; ed.isDead = true; ed.state = 'dead'; enemy.body.setVelocity(0,0);
       this.playerState.exp += ed.exp; this.playerState.gold += ed.gold;
-      if (ed.isBoss) { this.playerState.bossKeys += 1; this.spawnDamageText(enemy.x, enemy.y - 40, '\uD83D\uDD11 Boss Key!', '#ffd700'); }
+      if (ed.isBoss) { this.playerState.bossKeys += 1; this.spawnDamageText(enemy.x, enemy.y - 40, '🔑 Boss Key!', '#ffd700'); }
       this.spawnDamageText(enemy.x, enemy.y - 30, `+${ed.exp} XP`, '#44ff44');
       this.spawnDamageText(enemy.x + 20, enemy.y - 20, `+${ed.gold}g`, '#ffdd44');
       this.updateKillQuests(ed.type); this.checkLevelUp(); this.spawnLootDrop(enemy.x, enemy.y, ed);
@@ -913,7 +1092,7 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
           let rx, ry, safe = false;
           for (let tries = 0; tries < 20; tries++) {
             rx = biome.x + 100 + Math.random() * (biome.w - 200); ry = biome.y + 100 + Math.random() * (biome.h - 200);
-            if (!isInSafeZone(rx, ry)) { safe = true; break; }
+            if (!isInSafeZone(rx, ry) && CITIES.every(c => Math.hypot(c.x - rx, c.y - ry) >= 1000)) { safe = true; break; }
           }
           if (safe) this.spawnEnemy(rx, ry, tmpl, biome.id);
         });
@@ -921,7 +1100,6 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
       this.syncPlayerState();
     }
 
-    // ── Quest progress ───────────────────────────────
     updateKillQuests(enemyType) {
       for (const q of this.activeQuests) {
         if (q.completed) continue;
@@ -930,7 +1108,6 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
           if (q.progress >= q.count) {
             q.completed = true; this.playerState.gold += q.reward.gold; this.playerState.exp += q.reward.exp;
             this.spawnDamageText(this.knight.x, this.knight.y - 60, `Quest Complete: ${q.name}!`, '#ffd700');
-            this.spawnDamageText(this.knight.x, this.knight.y - 75, `+${q.reward.gold}g +${q.reward.exp}XP`, '#44ff44');
             this.completedQuestIds.push(q.id); this.checkLevelUp();
           }
         }
@@ -944,7 +1121,6 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
           if (q.progress >= q.count) {
             q.completed = true; this.playerState.gold += q.reward.gold; this.playerState.exp += q.reward.exp;
             this.spawnDamageText(this.knight.x, this.knight.y - 60, `Quest Complete: ${q.name}!`, '#ffd700');
-            this.spawnDamageText(this.knight.x, this.knight.y - 75, `+${q.reward.gold}g +${q.reward.exp}XP`, '#44ff44');
             this.completedQuestIds.push(q.id); this.checkLevelUp();
           }
         }
@@ -992,10 +1168,6 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
         this.playerState.hp = this.playerState.maxHp; this.playerState.mana = this.playerState.maxMana;
         this.playerState.statPoints += 3; this.playerState.skillPoints += 1;
         this.spawnDamageText(this.knight.x, this.knight.y - 60, `LEVEL UP! Lv.${this.playerState.level}`, '#ffd700');
-        const lg = this.add.graphics().setDepth(99999); lg.fillStyle(0xffd700, 0.3); lg.fillCircle(this.knight.x, this.knight.y, 10);
-        this.tweens.add({ targets: { r: 10 }, r: 150, duration: 600,
-          onUpdate: (tw) => { const r = tw.getValue(); lg.clear(); lg.fillStyle(0xffd700, 0.3*(1-r/150)); lg.fillCircle(this.knight.x, this.knight.y, r); },
-          onComplete: () => lg.destroy() });
       }
     }
 
@@ -1238,22 +1410,22 @@ export default function GameMap({ dispatch, player }) {
             <span className="text-[10px] text-gray-400 font-mono">{Math.floor(ps.exp)}/{ps.expToNext} XP</span>
           </div>
         </div>
-        <span className="text-yellow-400 text-xs font-cinzel">{'\uD83D\uDCB0'} {ps.gold}</span>
-        {ps.bossKeys > 0 && <span className="text-amber-400 text-xs font-cinzel">{'\uD83D\uDD11'} {ps.bossKeys}</span>}
+        <span className="text-yellow-400 text-xs font-cinzel">💰 {ps.gold}</span>
+        {ps.bossKeys > 0 && <span className="text-amber-400 text-xs font-cinzel">🔑 {ps.bossKeys}</span>}
       </div>
 
       {/* ── Right Side Buttons ─── */}
       <div className="absolute top-16 right-3 flex flex-col gap-2 z-50">
         <button onClick={() => dispatch({ type: 'OPEN_INVENTORY' })} className="w-10 h-10 rounded border border-amber-800 bg-gray-950/80 text-amber-400 hover:bg-gray-900 font-cinzel text-sm" title="Inventory">EQ</button>
         <button onClick={() => dispatch({ type: 'OPEN_SKILL_TREE' })} className="w-10 h-10 rounded border border-green-800 bg-gray-950/80 text-green-400 hover:bg-gray-900 font-cinzel text-sm" title="Skills">SK</button>
-        <button onClick={() => dispatch({ type: 'OPEN_QUEST_TRACKER' })} className="w-10 h-10 rounded border border-purple-800 bg-gray-950/80 text-purple-400 hover:bg-gray-900 text-sm" title="Quests">{'\uD83D\uDCDC'}</button>
-        <button onClick={() => dispatch({ type: 'GOTO_SCREEN', screen: 'city' })} className="w-10 h-10 rounded border border-gray-700 bg-gray-950/80 text-gray-400 hover:bg-gray-900 text-sm" title="City">{'\uD83C\uDFE0'}</button>
+        <button onClick={() => dispatch({ type: 'OPEN_QUEST_TRACKER' })} className="w-10 h-10 rounded border border-purple-800 bg-gray-950/80 text-purple-400 hover:bg-gray-900 text-sm" title="Quests">📜</button>
+        <button onClick={() => dispatch({ type: 'GOTO_SCREEN', screen: 'city' })} className="w-10 h-10 rounded border border-gray-700 bg-gray-950/80 text-gray-400 hover:bg-gray-900 text-sm" title="City">🏠</button>
       </div>
 
       {/* ── Quest Tracker HUD ─── */}
       <div className="absolute top-32 right-3 w-52 z-40">
         <div className="bg-gray-950/80 border border-amber-900/40 rounded-lg p-2">
-          <div className="font-cinzel text-amber-400 text-xs font-bold mb-1">{'\uD83D\uDCDC'} Active Quests ({activeQuests.length})</div>
+          <div className="font-cinzel text-amber-400 text-xs font-bold mb-1">📜 Active Quests ({activeQuests.length})</div>
           {activeQuests.length === 0 ? (
             <div className="text-gray-600 text-[10px] font-crimson italic">No active quests. Visit a Quest Board in any city.</div>
           ) : (
@@ -1269,7 +1441,7 @@ export default function GameMap({ dispatch, player }) {
               ))}
             </div>
           )}
-          {(ps.completedQuestCount || 0) > 0 && <div className="text-[9px] text-green-500 font-cinzel mt-1">{'\u2713'} {ps.completedQuestCount} completed</div>}
+          {(ps.completedQuestCount || 0) > 0 && <div className="text-[9px] text-green-500 font-cinzel mt-1">✓ {ps.completedQuestCount} completed</div>}
         </div>
       </div>
 
@@ -1282,33 +1454,27 @@ export default function GameMap({ dispatch, player }) {
           <div className="max-w-md w-full bg-gray-950 border-2 border-amber-800 rounded-xl p-6 shadow-2xl">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-12 h-12 rounded-full bg-gray-800 border-2 border-amber-600 flex items-center justify-center text-2xl">
-                {dialogueData.npcRole === 'blacksmith' ? '\u2692\uFE0F' : '\uD83D\uDC9A'}
+                {dialogueData.npcRole === 'blacksmith' ? '⚒️' : '💚'}
               </div>
               <div>
                 <div className="font-cinzel text-amber-400 font-bold">{dialogueData.npcLabel}</div>
                 <div className="text-xs text-gray-500 font-crimson capitalize">{dialogueData.npcRole} — {dialogueData.cityId}</div>
               </div>
             </div>
-            <div className="bg-gray-900 rounded-lg p-4 mb-4 border border-gray-800">
-              <p className="font-crimson text-gray-300">
-                {dialogueData.npcRole === 'blacksmith'
-                  ? "Welcome, traveler. I can repair your gear and trade fine weapons. What do you need?"
-                  : "Blessings upon you. I can restore your body and spirit. Shall I heal you?"}
-              </p>
-            </div>
-            <div className="flex flex-col gap-2">
-              {dialogueData.npcRole === 'healer' && (
-                <button onClick={handleHeal} className="w-full py-2 bg-green-900/50 border border-green-700 rounded text-green-400 font-cinzel text-sm hover:bg-green-800/50 transition-all">
-                  {'\uD83D\uDC9A'} Heal &amp; Restore (20g)
-                </button>
-              )}
-              {dialogueData.npcRole === 'blacksmith' && (
-                <button onClick={() => { dispatch({ type: 'OPEN_SHOP' }); handleCloseDialogue(); }} className="w-full py-2 bg-amber-900/50 border border-amber-700 rounded text-amber-400 font-cinzel text-sm hover:bg-amber-800/50 transition-all">
-                  {'\u2692\uFE0F'} Trade
-                </button>
-              )}
-              <button onClick={handleCloseDialogue} className="w-full py-2 bg-gray-800/50 border border-gray-700 rounded text-gray-400 font-cinzel text-sm hover:bg-gray-700/50 transition-all">Close</button>
-            </div>
+            {dialogueData.npcRole === 'healer' ? (
+              <div>
+                <p className="text-sm text-gray-300 font-crimson mb-4">I can mend your wounds and restore your spirit. It will cost 20 gold.</p>
+                <div className="flex gap-2">
+                  <button onClick={handleHeal} disabled={ps.gold < 20} className="btn-gothic px-4 py-2 disabled:opacity-50">Heal (20g)</button>
+                  <button onClick={handleCloseDialogue} className="px-4 py-2 bg-gray-800 border border-gray-700 text-gray-400 font-cinzel text-sm rounded hover:border-gray-600">Leave</button>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <p className="text-sm text-gray-300 font-crimson mb-4">Welcome! I can forge and repair your weapons and armor.</p>
+                <button onClick={handleCloseDialogue} className="px-4 py-2 bg-gray-800 border border-gray-700 text-gray-400 font-cinzel text-sm rounded hover:border-gray-600">Leave</button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1318,59 +1484,47 @@ export default function GameMap({ dispatch, player }) {
         <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/60">
           <div className="max-w-lg w-full bg-gray-950 border-2 border-amber-800 rounded-xl p-6 shadow-2xl max-h-[80vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-yellow-900/30 border-2 border-yellow-600 flex items-center justify-center text-xl">{'\u2757'}</div>
-                <div><div className="font-cinzel text-amber-400 font-bold">Quest Board</div><div className="text-xs text-gray-500 font-crimson capitalize">{questPanel.cityId}</div></div>
-              </div>
-              <button onClick={handleCloseQuestPanel} className="text-gray-500 hover:text-red-400 text-xl">{'\u2715'}</button>
+              <h3 className="font-cinzel text-amber-400 text-lg font-bold">📋 Quest Board</h3>
+              <button onClick={handleCloseQuestPanel} className="text-gray-500 hover:text-red-400 text-xl">✕</button>
             </div>
             {questPanel.available.length > 0 && (
               <div className="mb-4">
-                <div className="font-cinzel text-yellow-400 text-xs font-bold mb-2">Available Quests</div>
-                <div className="space-y-2">
-                  {questPanel.available.map(q => (
-                    <div key={q.id} className="p-3 border border-gray-800 rounded-lg bg-gray-900/50">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="font-cinzel text-sm text-gray-200 font-bold">{q.name}</div>
-                          <div className="text-xs text-gray-400 font-crimson">{q.desc}</div>
-                          <div className="text-[10px] text-gray-500 mt-1"><span className="text-yellow-400">+{q.reward.gold}g</span>{' '}<span className="text-green-400">+{q.reward.exp} XP</span></div>
-                        </div>
-                        <button onClick={() => handleAcceptQuest(q)} className="px-3 py-1.5 bg-amber-900/40 border border-amber-700 rounded text-amber-400 font-cinzel text-xs hover:bg-amber-800/50 transition-all shrink-0">Accept</button>
+                <h4 className="font-cinzel text-gray-400 text-sm mb-2">Available Quests</h4>
+                {questPanel.available.map(q => (
+                  <div key={q.id} className="p-3 mb-2 border border-gray-800 rounded-lg bg-gray-900/50">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <div className="font-cinzel text-amber-300 text-sm font-bold">{q.name}</div>
+                        <div className="text-xs text-gray-400 font-crimson">{q.desc}</div>
+                        <div className="text-[10px] text-green-400 mt-1">Reward: {q.reward.gold}g + {q.reward.exp} XP</div>
                       </div>
+                      <button onClick={() => handleAcceptQuest(q)} className="btn-gothic px-3 py-1 text-xs">Accept</button>
                     </div>
-                  ))}
-                </div>
+                  </div>
+                ))}
               </div>
             )}
             {questPanel.active.length > 0 && (
               <div>
-                <div className="font-cinzel text-blue-400 text-xs font-bold mb-2">Active Quests</div>
-                <div className="space-y-2">
-                  {questPanel.active.map(q => (
-                    <div key={q.id} className="p-3 border border-gray-800 rounded-lg bg-gray-900/30">
-                      <div className="font-cinzel text-sm text-gray-300">{q.name}</div>
-                      <div className="text-xs text-gray-500 font-crimson">{q.desc}</div>
-                      <div className="flex items-center gap-2 mt-1">
-                        <div className="flex-1 h-1.5 bg-gray-800 rounded-full overflow-hidden"><div className="h-full bg-blue-500 transition-all" style={{ width: `${q.count > 0 ? ((q.progress||0)/q.count)*100 : 0}%` }} /></div>
-                        <span className="text-xs text-gray-400 font-mono">{q.progress||0}/{q.count}</span>
-                      </div>
+                <h4 className="font-cinzel text-gray-400 text-sm mb-2">Active Quests</h4>
+                {questPanel.active.map(q => (
+                  <div key={q.id} className="p-3 mb-2 border border-amber-900/40 rounded-lg bg-amber-950/20">
+                    <div className="font-cinzel text-amber-300 text-xs font-bold">{q.name}</div>
+                    <div className="text-[10px] text-gray-400 font-crimson">{q.desc}</div>
+                    <div className="flex items-center gap-2 mt-1">
+                      <div className="flex-1 h-1.5 bg-gray-800 rounded-full overflow-hidden"><div className="h-full bg-amber-500" style={{ width: `${q.count > 0 ? ((q.progress||0)/q.count)*100 : 0}%` }} /></div>
+                      <span className="text-[10px] text-gray-500 font-mono">{q.progress||0}/{q.count}</span>
                     </div>
-                  ))}
-                </div>
+                  </div>
+                ))}
               </div>
             )}
             {questPanel.available.length === 0 && questPanel.active.length === 0 && (
-              <div className="text-center text-gray-500 font-crimson italic py-4">No quests available here. Try another city.</div>
+              <p className="text-gray-600 text-sm font-crimson italic text-center">No quests available in this city.</p>
             )}
           </div>
         </div>
       )}
-
-      {/* Controls hint */}
-      <div className="absolute bottom-2 right-4 text-[10px] text-gray-500 font-mono z-50 text-right font-semibold">
-        RMB: Move | LMB: Attack | QWER: Skills | F: Interact | M: Map
-      </div>
     </div>
   );
 }
