@@ -458,7 +458,7 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
           if (!tmpl) continue;
           const ex = biome.x + 100 + rng() * (biome.w - 200);
           const ey = biome.y + 100 + rng() * (biome.h - 200);
-          if (CITIES.some(c => Math.hypot(c.x - ex, c.y - ey) < 280)) continue;
+          if (CITIES.some(c => Math.hypot(c.x - ex, c.y - ey) < 500)) continue;
           this.spawnEnemy(ex, ey, tmpl, biome.id);
         }
         const boss = BIOME_BOSSES[biome.id];
@@ -487,7 +487,7 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
         ...template, currentHp: template.hp, maxHp: template.hp,
         biome: biomeId, originX: x, originY: y,
         state: 'wander', wanderTarget: null, wanderTimer: 0,
-        attackCooldown: 0, aggroRadius: template.isBoss ? 300 : 200,
+        attackCooldown: 0, aggroRadius: template.isBoss ? 300 : 150,
         attackRange: template.isBoss ? 80 : 50, hitFlashTimer: 0, isDead: false,
         animTimer: 0, animFrame: 0,
       };
@@ -656,6 +656,9 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
       this.input.keyboard.on('keydown-E', () => this.useSkill('E'));
       this.input.keyboard.on('keydown-R', () => this.useSkill('R'));
       this.input.keyboard.on('keydown-F', () => this.interactWithNearby());
+      this.input.keyboard.on('keydown-M', () => {
+        if (dispatchRef.current) dispatchRef.current({ type: 'TOGGLE_BIG_MAP', playerPos: { x: this.knight.x, y: this.knight.y } });
+      });
     }
 
     setMoveTarget(x, y) {
@@ -1184,7 +1187,13 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
           const templates = BIOME_ENEMIES[biome.id];
           if (templates?.length) {
             const tmpl = templates[Math.floor(Math.random() * templates.length)];
-            this.spawnEnemy(biome.x + 100 + Math.random() * (biome.w - 200), biome.y + 100 + Math.random() * (biome.h - 200), tmpl, biome.id);
+            let rx, ry, safe = false;
+            for (let tries = 0; tries < 20; tries++) {
+              rx = biome.x + 100 + Math.random() * (biome.w - 200);
+              ry = biome.y + 100 + Math.random() * (biome.h - 200);
+              if (!CITIES.some(c => Math.hypot(c.x - rx, c.y - ry) < 500)) { safe = true; break; }
+            }
+            if (safe) this.spawnEnemy(rx, ry, tmpl, biome.id);
           }
         });
       }
@@ -1447,7 +1456,7 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
     width: container.clientWidth || 960,
     height: container.clientHeight || 640,
     pixelArt: true,
-    backgroundColor: '#0a0a0a',
+    backgroundColor: '#1a2e12',
     physics: { default: 'arcade', arcade: { gravity: { y: 0 }, debug: false } },
     scene: [ARPGScene],
     scale: { mode: Phaser.Scale.RESIZE, autoCenter: Phaser.Scale.CENTER_BOTH },
@@ -1458,6 +1467,8 @@ function launchPhaser(Phaser, container, playerData, dispatchRef, onPlayerUpdate
 // ══════════════════════════════════════════════════════════
 // REACT WRAPPER COMPONENT
 // ══════════════════════════════════════════════════════════
+export { BIOMES, CITIES, CITY_NPCS, BIOME_BOSSES, WORLD_W, WORLD_H };
+
 export default function GameMap({ dispatch, player }) {
   const containerRef = useRef(null);
   const phaserRef = useRef(null);
@@ -1757,7 +1768,7 @@ export default function GameMap({ dispatch, player }) {
 
       {/* Controls hint */}
       <div className="absolute bottom-2 right-4 text-[9px] text-gray-600 font-mono z-50 text-right">
-        RMB: Move | LMB: Attack | QWER: Skills (aimed at cursor) | F: Interact
+        RMB: Move | LMB: Attack | QWER: Skills (aimed at cursor) | F: Interact | M: Map
       </div>
     </div>
   );

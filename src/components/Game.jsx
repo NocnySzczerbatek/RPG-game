@@ -26,6 +26,8 @@ import SkillTree from './SkillTree.jsx';
 import QuestTracker from './QuestTracker.jsx';
 import BountyBoard from './BountyBoard.jsx';
 import DialogueSystem from './DialogueSystem.jsx';
+import BigMap from './BigMap.jsx';
+import TutorialOverlay from './TutorialOverlay.jsx';
 
 // --- Game Over / Victory screens ---
 const GameOver = ({ player, dispatch }) => (
@@ -82,6 +84,9 @@ const Game = () => {
   const [user, setUser] = useState(null);
   const [activeCharacterId, setActiveCharacterId] = useState(null);
   const [offlineMode, setOfflineMode] = useState(false);
+  const [showBigMap, setShowBigMap] = useState(false);
+  const [bigMapPlayerPos, setBigMapPlayerPos] = useState(null);
+  const [showTutorial, setShowTutorial] = useState(false);
 
   // ── Game state ──
   const [state, dispatch] = useReducer(gameReducer, createInitialGameState());
@@ -176,13 +181,23 @@ const Game = () => {
 
   // ── Wrap dispatch to create cloud character after CREATE_CHARACTER ──
   const gameDispatch = useCallback((action) => {
+    // Intercept BigMap toggle — don't pass to reducer
+    if (action.type === 'TOGGLE_BIG_MAP') {
+      setBigMapPlayerPos(action.playerPos || null);
+      setShowBigMap(prev => !prev);
+      return;
+    }
+
     dispatch(action);
 
-    // After character creation, create cloud entry
-    if (action.type === 'CREATE_CHARACTER' && user && activeCharacterId === 'pending_creation') {
-      createCloudCharacter(user.id, action.name, action.playerClass).then((newChar) => {
-        if (newChar) setActiveCharacterId(newChar.id);
-      });
+    // After character creation, create cloud entry & show tutorial
+    if (action.type === 'CREATE_CHARACTER') {
+      setShowTutorial(true);
+      if (user && activeCharacterId === 'pending_creation') {
+        createCloudCharacter(user.id, action.name, action.playerClass).then((newChar) => {
+          if (newChar) setActiveCharacterId(newChar.id);
+        });
+      }
     }
   }, [user, activeCharacterId]);
 
@@ -295,6 +310,16 @@ const Game = () => {
           dispatch={d}
           player={s.player}
         />
+      )}
+
+      {/* Full-screen World Map overlay (M key) */}
+      {showBigMap && s.screen === 'world_map' && (
+        <BigMap playerPos={bigMapPlayerPos} onClose={() => setShowBigMap(false)} />
+      )}
+
+      {/* Tutorial overlay for new characters */}
+      {showTutorial && s.screen === 'world_map' && (
+        <TutorialOverlay onComplete={() => setShowTutorial(false)} />
       )}
 
       {s.screen === 'shop' && s.player && (
