@@ -1,239 +1,212 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 /* ═══════════════════════════════════════════════════════════════
-   CONSTANTS & DATA
+   CONSTANTS
    ═══════════════════════════════════════════════════════════════ */
-const UI = 'assets/sprites/craftpix-net-255216-free-basic-pixel-art-ui-for-rpg/PNG';
+/* Sprite sheets removed — they don't tile well as individual backgrounds.
+   Using CSS-only styling for a clean dark medieval look. */
+
+const FONT = "'Cinzel', 'Palatino Linotype', 'Book Antiqua', serif";
+const FONT_MONO = "'Fira Code', 'Consolas', monospace";
 
 const RARITY_COLORS = {
   common:    '#9d9d9d',
-  magic:     '#4488ff',
-  rare:      '#ffdd44',
-  legendary: '#ff8800',
+  magic:     '#6496ff',
+  rare:      '#ffe066',
+  legendary: '#ff9933',
+  mythic:    '#ff55ff',
+};
+
+const RARITY_BORDER = {
+  common:    '#5a5a5a',
+  magic:     '#4070cc',
+  rare:      '#c8a020',
+  legendary: '#cc6600',
+  mythic:    '#cc33cc',
 };
 
 const RARITY_GLOW = {
   common:    'none',
-  magic:     '0 0 6px rgba(68,136,255,0.4)',
-  rare:      '0 0 8px rgba(255,221,68,0.4)',
-  legendary: '0 0 12px rgba(255,136,0,0.5)',
+  magic:     '0 0 8px rgba(68,136,255,0.5)',
+  rare:      '0 0 10px rgba(255,221,68,0.5)',
+  legendary: '0 0 14px rgba(255,136,0,0.6)',
+  mythic:    '0 0 18px rgba(255,68,255,0.7)',
 };
 
-const RARITY_BG = {
-  common:    'rgba(60,60,60,0.15)',
-  magic:     'rgba(30,50,100,0.2)',
-  rare:      'rgba(80,70,20,0.2)',
-  legendary: 'rgba(100,50,0,0.25)',
-};
-
-const SLOT_NAMES = {
-  head:     'Head',
-  torso:    'Torso',
-  hands:    'Hands',
-  legs:     'Legs',
-  feet:     'Feet',
-  neck:     'Amulet',
-  ring1:    'Ring',
+const SLOT_LABELS = {
+  head:     'Helmet',
+  torso:    'Chest',
+  legs:     'Pants',
+  feet:     'Boots',
+  mainHand: 'Weapon 1',
+  offHand:  'Weapon 2',
+  hands:    'Belt',
+  neck:     'Amulet 1',
+  ring1:    'Amulet 2',
   ring2:    'Ring',
-  mainHand: 'Main Hand',
-  offHand:  'Off-Hand',
 };
 
 const SLOT_ICONS = {
-  head:     '🪖',
-  torso:    '🛡️',
-  hands:    '🧤',
-  legs:     '👖',
-  feet:     '👢',
-  neck:     '📿',
-  ring1:    '💍',
-  ring2:    '💍',
-  mainHand: '⚔️',
-  offHand:  '🛡️',
+  head:     '🪖',  torso: '🛡️', legs: '👖', feet: '👢',
+  mainHand: '⚔️', offHand: '🗡️', hands: '🎗️',
+  neck:     '📿',  ring1: '💎', ring2: '💍',
 };
 
-/* Which loot‐table "type" fits which equipment slots */
 const TYPE_TO_SLOTS = {
-  weapon:  ['mainHand'],
+  weapon:  ['mainHand', 'offHand'],
   armor:   ['torso', 'head', 'hands', 'legs', 'feet'],
   shield:  ['offHand'],
-  amulet:  ['neck'],
+  amulet:  ['neck', 'ring1'],
   ring:    ['ring1', 'ring2'],
   potion:  [],
 };
 
-/* ═══════════════════════════════════════════════════════════════
-   SHARED STYLES
-   ═══════════════════════════════════════════════════════════════ */
-const FONT = "'Cinzel', 'Palatino Linotype', 'Book Antiqua', serif";
-const FONT_MONO = "'Fira Code', 'Consolas', monospace";
-
-const styles = {
-  overlay: {
-    position: 'fixed', inset: 0, zIndex: 9000,
-    background: 'rgba(0,0,0,0.55)',
-    backdropFilter: 'blur(6px)',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    animation: 'invFadeIn 0.2s ease-out',
-  },
-  panel: {
-    width: 920, maxWidth: '96vw', height: 620, maxHeight: '90vh',
-    background: `linear-gradient(180deg, #4a3c28 0%, #3a2e1e 40%, #2c2218 100%)`,
-    border: '2px solid #8a6a38',
-    borderRadius: 6,
-    boxShadow: '0 0 60px rgba(0,0,0,0.9), inset 0 0 40px rgba(60,45,20,0.4), 0 0 30px rgba(100,70,20,0.3)',
-    display: 'flex', flexDirection: 'column',
-    overflow: 'hidden',
-    imageRendering: 'auto',
-  },
-  header: {
-    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-    padding: '10px 18px',
-    borderBottom: '1px solid #6a4a20',
-    background: 'linear-gradient(90deg, rgba(50,40,24,0.95), rgba(80,60,30,0.7), rgba(50,40,24,0.95))',
-  },
-  title: {
-    fontFamily: FONT, fontSize: 20, fontWeight: 700,
-    color: '#e8c860',
-    letterSpacing: 2,
-    textShadow: '0 0 10px rgba(220,180,60,0.5)',
-    textTransform: 'uppercase',
-  },
-  closeBtn: {
-    width: 32, height: 32, border: '1px solid #6a5030',
-    background: 'rgba(60,44,28,0.9)', borderRadius: 4,
-    color: '#dda855', fontSize: 18, cursor: 'pointer',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    transition: 'all 0.15s',
-  },
-  body: {
-    flex: 1, display: 'flex', padding: '10px 12px', gap: 12, overflow: 'hidden',
-  },
-  column: {
-    display: 'flex', flexDirection: 'column', gap: 6,
-  },
-  sectionLabel: {
-    fontFamily: FONT, fontSize: 11, fontWeight: 700,
-    color: '#c9a84c', letterSpacing: 2, textTransform: 'uppercase',
-    padding: '4px 0 2px', borderBottom: '1px solid rgba(100,70,30,0.6)',
-    marginBottom: 4,
-    textShadow: '0 0 4px rgba(200,160,60,0.2)',
-  },
-  footer: {
-    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-    padding: '8px 18px',
-    borderTop: '1px solid #6a4a20',
-    background: 'rgba(40,32,20,0.85)',
-  },
-};
+const BACKPACK_COLS = 10;
+const BACKPACK_ROWS = 4;
+const BACKPACK_TOTAL = BACKPACK_COLS * BACKPACK_ROWS;
 
 /* ═══════════════════════════════════════════════════════════════
-   SUB-COMPONENTS
+   FLOATING TOOLTIP — follows cursor
    ═══════════════════════════════════════════════════════════════ */
+function FloatingTooltip({ item, mousePos }) {
+  if (!item) return null;
 
-/* ── Stat Row ──────────────────────────────────────────────── */
-function StatRow({ label, value, bonus, color }) {
+  const rarity = item.rarity || 'common';
+  const lines = [];
+  if (item.dmg)  lines.push({ label: 'Damage', val: `+${item.dmg}`,  c: '#ff7755' });
+  if (item.def)  lines.push({ label: 'Armor',  val: `+${item.def}`,  c: '#6699dd' });
+  if (item.str)  lines.push({ label: 'STR',    val: `+${item.str}`,  c: '#dd9944' });
+  if (item.int)  lines.push({ label: 'INT',    val: `+${item.int}`,  c: '#aa77dd' });
+  if (item.dex)  lines.push({ label: 'DEX',    val: `+${item.dex}`,  c: '#77bb77' });
+  if (item.will) lines.push({ label: 'WILL',   val: `+${item.will}`, c: '#bbaa55' });
+  if (item.critChance) lines.push({ label: 'Crit', val: `+${(item.critChance * 100).toFixed(1)}%`, c: '#ff5555' });
+  if (item.heal) lines.push({ label: 'Heal', val: `${item.heal} HP`, c: '#55cc55' });
+  if (item.manaRestore) lines.push({ label: 'Mana', val: `+${item.manaRestore}`, c: '#5599ee' });
+
+  const rarityLabel = rarity.charAt(0).toUpperCase() + rarity.slice(1);
+  const typeLabel  = (item.type || 'misc').charAt(0).toUpperCase() + (item.type || 'misc').slice(1);
+
+  const x = Math.min(mousePos.x + 18, window.innerWidth  - 270);
+  const y = Math.min(mousePos.y + 18, window.innerHeight - 240);
+
   return (
     <div style={{
-      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-      padding: '3px 6px', borderRadius: 3,
-      background: 'rgba(255,255,255,0.06)',
+      position: 'fixed', left: x, top: y, zIndex: 99999, pointerEvents: 'none',
+      minWidth: 200, maxWidth: 260,
+      background: 'linear-gradient(180deg, rgba(22,18,12,0.97), rgba(10,8,5,0.97))',
+      border: `2px solid ${RARITY_BORDER[rarity]}`,
+      borderRadius: 6, padding: '10px 14px',
+      boxShadow: `${RARITY_GLOW[rarity]}, 0 6px 28px rgba(0,0,0,0.9)`,
+      fontFamily: FONT,
     }}>
-      <span style={{ fontFamily: FONT, fontSize: 12, color: '#c0b090', fontWeight: 600 }}>{label}</span>
-      <span style={{ fontFamily: FONT_MONO, fontSize: 13, color: color || '#e8dcc0', fontWeight: 700 }}>
-        {value}
-        {bonus > 0 && <span style={{ color: '#6e6', fontSize: 11, marginLeft: 3 }}>+{bonus}</span>}
-      </span>
+      <div style={{
+        fontSize: 15, fontWeight: 700, color: RARITY_COLORS[rarity],
+        textShadow: `0 0 8px ${RARITY_COLORS[rarity]}55`, marginBottom: 3,
+      }}>{item.name}</div>
+
+      <div style={{
+        fontSize: 10, color: '#8a7a5a', textTransform: 'uppercase', letterSpacing: 1.5,
+        paddingBottom: 6, marginBottom: 6, borderBottom: '1px solid rgba(80,60,30,0.5)',
+      }}>{rarityLabel} {typeLabel}</div>
+
+      {lines.map((l, i) => (
+        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
+          <span style={{ fontSize: 12, color: '#b0a080' }}>{l.label}</span>
+          <span style={{ fontSize: 12, color: l.c, fontWeight: 700, fontFamily: FONT_MONO }}>{l.val}</span>
+        </div>
+      ))}
+
+      <div style={{
+        marginTop: 8, paddingTop: 6, borderTop: '1px solid rgba(80,60,30,0.3)',
+        fontSize: 10, color: '#6a5a3a', fontStyle: 'italic',
+      }}>
+        {item.type === 'potion'
+          ? 'Right-click to consume'
+          : `Right-click to ${item._src === 'equip' ? 'unequip' : 'equip'}`}
+      </div>
     </div>
   );
 }
 
-/* ── Equipment Slot ────────────────────────────────────────── */
-function EquipSlot({ slotKey, item, onRightClick, onHover, onLeave, isHighlight, onDragStart, onDragOver, onDrop }) {
+/* ═══════════════════════════════════════════════════════════════
+   EQUIPMENT SLOT — pixel-art slot.png background
+   ═══════════════════════════════════════════════════════════════ */
+function EquipSlot({ slotKey, item, label, onRC, onHover, onLeave, onDragStart, onDrop, hl }) {
   const rarity = item?.rarity || 'common';
   return (
     <div
       draggable={!!item}
-      onDragStart={(e) => { if (item) onDragStart(e, { type: 'equip', slot: slotKey }, item); }}
+      onDragStart={(e) => item && onDragStart(e, { type: 'equip', slot: slotKey })}
       onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
       onDrop={(e) => { e.preventDefault(); onDrop(e, { type: 'equip', slot: slotKey }); }}
-      onContextMenu={(e) => { e.preventDefault(); if (item) onRightClick(slotKey); }}
-      onMouseEnter={() => item && onHover(item, 'equip')}
+      onContextMenu={(e) => { e.preventDefault(); if (item) onRC(slotKey); }}
+      onMouseEnter={(ev) => item && onHover(item, 'equip', ev)}
+      onMouseMove={(ev)  => item && onHover(item, 'equip', ev)}
       onMouseLeave={onLeave}
       style={{
-        width: 52, height: 52,
+        width: 60, height: 60,
         background: item
-          ? `linear-gradient(135deg, ${RARITY_BG[rarity]}, rgba(30,24,16,0.9))`
-          : 'rgba(30,24,16,0.7)',
-        border: `2px solid ${item ? RARITY_COLORS[rarity] + '88' : isHighlight ? '#8a7a4a' : '#4a3a20'}`,
+          ? 'linear-gradient(180deg, rgba(40,32,18,0.9), rgba(24,18,10,0.95))'
+          : 'linear-gradient(180deg, rgba(30,24,14,0.7), rgba(16,12,6,0.8))',
+        border: item ? `2px solid ${RARITY_BORDER[rarity]}` : hl ? '2px solid #8a7a44' : '2px solid #3a2a14',
         borderRadius: 4,
-        display: 'flex', flexDirection: 'column',
-        alignItems: 'center', justifyContent: 'center',
-        cursor: item ? 'pointer' : 'default',
-        boxShadow: item ? RARITY_GLOW[rarity] : 'inset 0 0 10px rgba(0,0,0,0.4)',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        cursor: item ? 'grab' : 'default',
+        boxShadow: item ? RARITY_GLOW[rarity] : 'none',
         transition: 'border-color 0.15s, box-shadow 0.15s',
         position: 'relative',
       }}
     >
-      {item ? (
-        <>
-          <span style={{ fontSize: 20, lineHeight: 1 }}>{SLOT_ICONS[slotKey]}</span>
-          <span style={{
-            fontSize: 8, fontFamily: FONT, color: RARITY_COLORS[rarity],
-            textAlign: 'center', lineHeight: 1, marginTop: 2,
-            maxWidth: 46, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            fontWeight: 600,
-          }}>{item.name}</span>
-        </>
-      ) : (
-        <>
-          <span style={{ fontSize: 16, opacity: 0.4 }}>{SLOT_ICONS[slotKey]}</span>
-          <span style={{
-            fontSize: 8, color: '#6a5a3a', fontFamily: FONT,
-            textAlign: 'center', marginTop: 1,
-          }}>{SLOT_NAMES[slotKey]}</span>
-        </>
-      )}
+      {item
+        ? <span style={{ fontSize: 24, lineHeight: 1, filter: 'drop-shadow(0 1px 3px #000)' }}>{SLOT_ICONS[slotKey]}</span>
+        : <span style={{ fontSize: 18, opacity: 0.3, filter: 'grayscale(1)' }}>{SLOT_ICONS[slotKey]}</span>}
+      <div style={{
+        position: 'absolute', bottom: -16, left: '50%', transform: 'translateX(-50%)',
+        fontSize: 10, fontFamily: FONT, whiteSpace: 'nowrap',
+        color: item ? RARITY_COLORS[rarity] : '#a89870',
+        textShadow: '0 0 4px #000, 0 1px 4px #000, 0 0 8px rgba(0,0,0,0.8)', fontWeight: item ? 700 : 600, letterSpacing: 0.5,
+      }}>{item ? item.name : label}</div>
     </div>
   );
 }
 
-/* ── Backpack Slot ─────────────────────────────────────────── */
-function BackpackSlot({ item, index, onRightClick, onHover, onLeave, onDragStart, onDragOver, onDrop }) {
+/* ═══════════════════════════════════════════════════════════════
+   BACKPACK SLOT
+   ═══════════════════════════════════════════════════════════════ */
+function BPSlot({ item, index, onRC, onHover, onLeave, onDragStart, onDrop }) {
   const rarity = item?.rarity || 'common';
   return (
     <div
       draggable={!!item}
-      onDragStart={(e) => { if (item) onDragStart(e, { type: 'backpack', index }, item); }}
+      onDragStart={(e) => item && onDragStart(e, { type: 'backpack', index })}
       onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
       onDrop={(e) => { e.preventDefault(); onDrop(e, { type: 'backpack', index }); }}
-      onContextMenu={(e) => { e.preventDefault(); if (item) onRightClick(index); }}
-      onMouseEnter={() => item && onHover(item, 'backpack')}
+      onContextMenu={(e) => { e.preventDefault(); if (item) onRC(index); }}
+      onMouseEnter={(ev) => item && onHover(item, 'backpack', ev)}
+      onMouseMove={(ev)  => item && onHover(item, 'backpack', ev)}
       onMouseLeave={onLeave}
       style={{
-        width: 48, height: 48,
+        width: 50, height: 50,
         background: item
-          ? `linear-gradient(135deg, ${RARITY_BG[rarity]}, rgba(24,18,12,0.95))`
-          : 'rgba(24,18,12,0.8)',
-        border: `1px solid ${item ? RARITY_COLORS[rarity] + '66' : '#3a2a14'}`,
+          ? 'linear-gradient(180deg, rgba(40,32,18,0.9), rgba(24,18,10,0.95))'
+          : 'linear-gradient(180deg, rgba(28,22,12,0.7), rgba(14,10,6,0.8))',
+        border: item ? `2px solid ${RARITY_BORDER[rarity]}` : '2px solid #2a1e10',
         borderRadius: 3,
-        display: 'flex', flexDirection: 'column',
-        alignItems: 'center', justifyContent: 'center',
-        cursor: item ? 'pointer' : 'default',
-        boxShadow: item ? RARITY_GLOW[rarity] : 'inset 0 0 8px rgba(0,0,0,0.3)',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        cursor: item ? 'grab' : 'default',
+        boxShadow: item ? RARITY_GLOW[rarity] : 'none',
         transition: 'all 0.12s',
       }}
     >
       {item && (
         <>
-          <span style={{ fontSize: 16, lineHeight: 1 }}>
+          <span style={{ fontSize: 18, lineHeight: 1, filter: 'drop-shadow(0 1px 3px #000)' }}>
             {item.type === 'weapon' ? '⚔️' : item.type === 'armor' ? '🛡️' : item.type === 'potion' ? '🧪' : item.type === 'ring' ? '💍' : item.type === 'amulet' ? '📿' : '❓'}
           </span>
           <span style={{
-            fontSize: 8, fontFamily: FONT, color: RARITY_COLORS[rarity],
-            textAlign: 'center', lineHeight: 1, marginTop: 1,
-            maxWidth: 42, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            fontWeight: 600,
+            fontSize: 9, fontFamily: FONT, color: RARITY_COLORS[rarity], fontWeight: 700,
+            textAlign: 'center', lineHeight: 1.1, marginTop: 2, textShadow: '0 0 4px #000, 0 1px 4px #000',
+            maxWidth: 46, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           }}>{item.name}</span>
         </>
       )}
@@ -241,83 +214,23 @@ function BackpackSlot({ item, index, onRightClick, onHover, onLeave, onDragStart
   );
 }
 
-/* ── Tooltip ───────────────────────────────────────────────── */
-function ItemTooltip({ item }) {
-  if (!item) return (
-    <div style={{
-      flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-      color: '#7a6a4a', fontFamily: FONT, fontSize: 12, fontStyle: 'italic',
-    }}>
-      Hover over an item to inspect
-    </div>
-  );
-
-  const rarity = item.rarity || 'common';
-  const lines = [];
-  if (item.dmg) lines.push({ label: 'Damage', value: `+${item.dmg}`, color: '#dd6644' });
-  if (item.def) lines.push({ label: 'Armor', value: `+${item.def}`, color: '#6688cc' });
-  if (item.str) lines.push({ label: 'Strength', value: `+${item.str}`, color: '#cc8844' });
-  if (item.int) lines.push({ label: 'Intelligence', value: `+${item.int}`, color: '#8866cc' });
-  if (item.dex) lines.push({ label: 'Dexterity', value: `+${item.dex}`, color: '#66aa66' });
-  if (item.will) lines.push({ label: 'Willpower', value: `+${item.will}`, color: '#aa8844' });
-  if (item.critChance) lines.push({ label: 'Crit Chance', value: `+${(item.critChance * 100).toFixed(1)}%`, color: '#ee5555' });
-  if (item.heal) lines.push({ label: 'Restores HP', value: `${item.heal}`, color: '#55cc55' });
-  if (item.manaRestore) lines.push({ label: 'Restores Mana', value: `${item.manaRestore}`, color: '#5588ee' });
-
-  const rarityLabel = rarity.charAt(0).toUpperCase() + rarity.slice(1);
-  const typeLabel = (item.type || 'misc').charAt(0).toUpperCase() + (item.type || 'misc').slice(1);
-
+/* ═══════════════════════════════════════════════════════════════
+   STAT ROW
+   ═══════════════════════════════════════════════════════════════ */
+function StatRow({ label, value, bonus, color, icon }) {
   return (
     <div style={{
-      background: 'linear-gradient(180deg, rgba(40,32,20,0.98), rgba(24,18,12,0.98))',
-      border: `1px solid ${RARITY_COLORS[rarity]}77`,
-      borderRadius: 4, padding: '10px 12px',
-      boxShadow: `${RARITY_GLOW[rarity]}, inset 0 0 20px rgba(0,0,0,0.3)`,
+      display: 'flex', alignItems: 'center', gap: 6,
+      padding: '4px 8px', borderRadius: 3,
+      background: 'rgba(255,255,255,0.04)',
+      borderBottom: '1px solid rgba(60,50,30,0.25)',
     }}>
-      {/* Name */}
-      <div style={{
-        fontFamily: FONT, fontSize: 14, fontWeight: 700,
-        color: RARITY_COLORS[rarity],
-        textShadow: `0 0 6px ${RARITY_COLORS[rarity]}44`,
-        marginBottom: 2,
-      }}>{item.name}</div>
-
-      {/* Type / Rarity */}
-      <div style={{
-        fontFamily: FONT, fontSize: 10, color: '#9a8a5a',
-        textTransform: 'uppercase', letterSpacing: 1,
-        paddingBottom: 6, marginBottom: 6,
-        borderBottom: '1px solid rgba(100,70,30,0.5)',
-      }}>{rarityLabel} {typeLabel}</div>
-
-      {/* Stats */}
-      {lines.map((l, i) => (
-        <div key={i} style={{
-          display: 'flex', justifyContent: 'space-between',
-          padding: '2px 0',
-        }}>
-          <span style={{ fontFamily: FONT, fontSize: 12, color: '#b0a080' }}>{l.label}</span>
-          <span style={{ fontFamily: FONT_MONO, fontSize: 12, color: l.color, fontWeight: 700 }}>{l.value}</span>
-        </div>
-      ))}
-
-      {/* Hint */}
-      {item.type !== 'potion' && (
-        <div style={{
-          marginTop: 8, paddingTop: 6,
-          borderTop: '1px solid rgba(100,70,30,0.3)',
-          fontFamily: FONT, fontSize: 10, color: '#7a6a44',
-          fontStyle: 'italic',
-        }}>Right-click to {item._source === 'equip' ? 'unequip' : 'equip'}</div>
-      )}
-      {item.type === 'potion' && (
-        <div style={{
-          marginTop: 8, paddingTop: 6,
-          borderTop: '1px solid rgba(100,70,30,0.3)',
-          fontFamily: FONT, fontSize: 10, color: '#7a6a44',
-          fontStyle: 'italic',
-        }}>Right-click to consume</div>
-      )}
+      {icon && <span style={{ fontSize: 14, opacity: 0.7 }}>{icon}</span>}
+      <span style={{ flex: 1, fontFamily: FONT, fontSize: 12, color: '#c0b090', fontWeight: 600 }}>{label}</span>
+      <span style={{ fontFamily: FONT_MONO, fontSize: 13, color: color || '#e8dcc0', fontWeight: 700 }}>
+        {value}
+        {bonus > 0 && <span style={{ color: '#66ee66', fontSize: 11, marginLeft: 3 }}>+{bonus}</span>}
+      </span>
     </div>
   );
 }
@@ -325,291 +238,270 @@ function ItemTooltip({ item }) {
 /* ═══════════════════════════════════════════════════════════════
    MAIN INVENTORY COMPONENT
    ═══════════════════════════════════════════════════════════════ */
-export default function Inventory({ isOpen, onClose, backpack, equipment, playerStats, onEquipItem, onUnequipItem, onConsumePotion, gold, classId, onSwapBackpack }) {
-  const [hoveredItem, setHoveredItem] = useState(null);
-  const [dragSource, setDragSource] = useState(null);
+export default function Inventory({
+  isOpen, onClose, backpack, equipment, playerStats,
+  onEquipItem, onUnequipItem, onConsumePotion,
+  gold, classId, onSwapBackpack,
+}) {
+  const [tip, setTip]       = useState(null);
+  const [mpos, setMpos]     = useState({ x: 0, y: 0 });
+  const [dragSrc, setDragSrc] = useState(null);
+
+  /* Track mouse for tooltip positioning */
+  useEffect(() => {
+    const mv = (e) => setMpos({ x: e.clientX, y: e.clientY });
+    window.addEventListener('mousemove', mv);
+    return () => window.removeEventListener('mousemove', mv);
+  }, []);
 
   if (!isOpen) return null;
 
-  /* Dynamic paperdoll based on class */
-  const CLASS_FOLDERS = { warrior: 'Knight', mage: 'Mage', rogue: 'Rogue' };
-  const heroFolder = CLASS_FOLDERS[classId] || 'Knight';
+  /* ── Hero sprite ─────────────────────────────────────────── */
+  const HERO_FOLDERS = { warrior: 'Knight', mage: 'Mage', rogue: 'Rogue' };
+  const heroFolder = HERO_FOLDERS[classId] || 'Knight';
   const heroSprite = `assets/sprites/craftpix-891165-assassin-mage-viking-free-pixel-art-game-heroes/PNG/${heroFolder}/Idle/idle1.png`;
 
-  /* Compute bonus stats from equipment */
-  const equipBonus = useMemo(() => {
-    const b = { dmg: 0, def: 0, str: 0, int: 0, dex: 0, will: 0, critChance: 0 };
-    for (const item of Object.values(equipment)) {
-      if (!item) continue;
-      if (item.dmg) b.dmg += item.dmg;
-      if (item.def) b.def += item.def;
-      if (item.str) b.str += item.str;
-      if (item.int) b.int += item.int;
-      if (item.dex) b.dex += item.dex;
-      if (item.will) b.will += item.will;
-      if (item.critChance) b.critChance += item.critChance;
-    }
-    return b;
-  }, [equipment]);
+  /* ── Equipment bonuses ───────────────────────────────────── */
+  const eb = { dmg: 0, def: 0, str: 0, int: 0, dex: 0, will: 0, critChance: 0 };
+  for (const it of Object.values(equipment)) {
+    if (!it) continue;
+    if (it.dmg) eb.dmg += it.dmg;
+    if (it.def) eb.def += it.def;
+    if (it.str) eb.str += it.str;
+    if (it.int) eb.int += it.int;
+    if (it.dex) eb.dex += it.dex;
+    if (it.will) eb.will += it.will;
+    if (it.critChance) eb.critChance += it.critChance;
+  }
 
-  const handleItemHover = (item, source) => {
-    setHoveredItem({ ...item, _source: source });
-  };
-  const handleItemLeave = () => setHoveredItem(null);
+  /* ── Hover ───────────────────────────────────────────────── */
+  const hoverIn  = (item, src, ev) => { if (ev) setMpos({ x: ev.clientX, y: ev.clientY }); setTip({ ...item, _src: src }); };
+  const hoverOut = () => setTip(null);
 
-  /* Drag and drop handlers */
-  const handleDragStart = (e, source, item) => {
-    setDragSource(source);
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', '');
-  };
-
-  const handleDrop = (e, target) => {
-    if (!dragSource) return;
-    const src = dragSource;
-    if (src.type === 'backpack' && target.type === 'equip') {
-      onEquipItem(src.index);
-    } else if (src.type === 'equip' && target.type === 'backpack') {
-      onUnequipItem(src.slot);
-    } else if (src.type === 'backpack' && target.type === 'backpack' && src.index !== target.index) {
-      if (onSwapBackpack) onSwapBackpack(src.index, target.index);
-    }
-    setDragSource(null);
-    setHoveredItem(null);
+  /* ── Drag / Drop ─────────────────────────────────────────── */
+  const dragStart = (e, src) => { setDragSrc(src); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', ''); };
+  const drop = (e, tgt) => {
+    if (!dragSrc) return;
+    if (dragSrc.type === 'backpack'  && tgt.type === 'equip')    onEquipItem(dragSrc.index);
+    else if (dragSrc.type === 'equip'    && tgt.type === 'backpack') onUnequipItem(dragSrc.slot);
+    else if (dragSrc.type === 'backpack' && tgt.type === 'backpack' && dragSrc.index !== tgt.index)
+      onSwapBackpack?.(dragSrc.index, tgt.index);
+    setDragSrc(null); setTip(null);
   };
 
-  const handleBackpackRightClick = (index) => {
-    const item = backpack[index];
-    if (!item) return;
-    if (item.type === 'potion') {
-      onConsumePotion(index);
-    } else {
-      onEquipItem(index);
-    }
-    setHoveredItem(null);
-  };
+  /* ── Right-click ─────────────────────────────────────────── */
+  const bpRC = (i) => { const it = backpack[i]; if (!it) return; it.type === 'potion' ? onConsumePotion(i) : onEquipItem(i); setTip(null); };
+  const eqRC = (s) => { onUnequipItem(s); setTip(null); };
 
-  const handleEquipRightClick = (slotKey) => {
-    onUnequipItem(slotKey);
-    setHoveredItem(null);
-  };
+  /* ── Highlight compatible slots ──────────────────────────── */
+  const hl = tip && tip._src === 'backpack' ? (TYPE_TO_SLOTS[tip.type] || []) : [];
 
-  /* Determine which equip slots to highlight when hovering a backpack item */
-  const highlightSlots = useMemo(() => {
-    if (!hoveredItem || hoveredItem._source !== 'backpack') return [];
-    return TYPE_TO_SLOTS[hoveredItem.type] || [];
-  }, [hoveredItem]);
-
-  const GRID_COLS = 5;
-  const GRID_ROWS = 8;
-  const totalSlots = GRID_COLS * GRID_ROWS;
-
+  /* ═══════════════════════════════════════════════════════════
+     RENDER
+     ═══════════════════════════════════════════════════════════ */
   return (
-    <div style={styles.overlay} onClick={onClose}>
-      <div style={styles.panel} onClick={(e) => e.stopPropagation()}>
-        {/* ── Header ────────────────────────────────────────── */}
-        <div style={styles.header}>
-          <div style={styles.title}>Inventory</div>
+    <>
+      {/* ── OVERLAY — absolute, z-index 100, transparent dark ─ */}
+      <div
+        onClick={onClose}
+        style={{
+          position: 'absolute', inset: 0, zIndex: 100,
+          background: 'rgba(0,0,0,0.7)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          animation: 'invFadeIn 0.25s ease-out',
+        }}
+      >
+        {/* ── MAIN WINDOW ──────────────────────────────────── */}
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            width: 1020, maxWidth: '98vw',
+            height: 660, maxHeight: '95vh',
+            background: 'linear-gradient(180deg, #1a140c 0%, #120e08 50%, #0e0a06 100%)',
+            border: '3px solid #5a4020',
+            borderRadius: 6,
+            boxShadow: '0 0 80px rgba(0,0,0,0.95), 0 0 30px rgba(80,50,10,0.3), inset 0 0 60px rgba(0,0,0,0.4)',
+            display: 'flex', flexDirection: 'column',
+            overflow: 'hidden', position: 'relative',
+          }}
+        >
+
+          {/* ══ HEADER ═══════════════════════════════════════ */}
           <div style={{
-            fontFamily: FONT_MONO, fontSize: 11, color: '#8a7a5a',
-            letterSpacing: 1,
-          }}>[I] or [ESC] to close</div>
-          <div
-            style={styles.closeBtn}
-            onClick={onClose}
-            onMouseEnter={(e) => { e.currentTarget.style.color = '#dd8844'; e.currentTarget.style.borderColor = '#5a4020'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = '#aa7744'; e.currentTarget.style.borderColor = '#3a2a10'; }}
-          >✕</div>
-        </div>
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            padding: '8px 16px',
+            background: 'linear-gradient(90deg, rgba(30,22,12,0.95), rgba(55,42,22,0.8), rgba(30,22,12,0.95))',
+            borderBottom: '2px solid #5a4020',
+            flexShrink: 0,
+          }}>
+            <div style={{
+              fontFamily: FONT, fontSize: 22, fontWeight: 700,
+              color: '#e8c860', letterSpacing: 3, textTransform: 'uppercase',
+              textShadow: '0 0 12px rgba(220,180,60,0.5), 0 2px 4px #000',
+            }}>⚔️ Inventory</div>
 
-        {/* ── Body ──────────────────────────────────────────── */}
-        <div style={styles.body}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <span style={{ fontFamily: FONT, fontSize: 15, color: '#ffd700', textShadow: '0 0 6px rgba(255,215,0,0.4)' }}>
+                💰 {(gold || 0).toLocaleString()}
+              </span>
+              <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: '#7a6a4a' }}>[I] / [ESC]</span>
+            </div>
 
-          {/* ─── LEFT: Attributes ─────────────────────────── */}
-          <div style={{ ...styles.column, width: 190, minWidth: 190 }}>
-            <div style={styles.sectionLabel}>Core Attributes</div>
-            <StatRow label="Strength" value={playerStats.str + equipBonus.str} bonus={equipBonus.str} />
-            <StatRow label="Intelligence" value={playerStats.int + equipBonus.int} bonus={equipBonus.int} />
-            <StatRow label="Dexterity" value={playerStats.dex + equipBonus.dex} bonus={equipBonus.dex} />
-            <StatRow label="Willpower" value={playerStats.will + equipBonus.will} bonus={equipBonus.will} />
-
-            <div style={{ ...styles.sectionLabel, marginTop: 8 }}>Offensive</div>
-            <StatRow label="Attack Power" value={playerStats.baseDmg + equipBonus.dmg} bonus={equipBonus.dmg} color="#dd6644" />
-            <StatRow label="Crit Chance" value={`${((playerStats.critChance + equipBonus.critChance) * 100).toFixed(1)}%`} bonus={equipBonus.critChance > 0 ? (equipBonus.critChance * 100).toFixed(1) : 0} color="#ee5555" />
-
-            <div style={{ ...styles.sectionLabel, marginTop: 8 }}>Defensive</div>
-            <StatRow label="Armor" value={playerStats.def + equipBonus.def} bonus={equipBonus.def} color="#6688cc" />
-            <StatRow label="Max Health" value={playerStats.maxHp} color="#cc4444" />
-            <StatRow label="Max Mana" value={playerStats.maxMana} color="#4466cc" />
-
-            <div style={{ ...styles.sectionLabel, marginTop: 8 }}>General</div>
-            <StatRow label="Level" value={playerStats.level} color="#c9a84c" />
-            <StatRow label="Experience" value={`${playerStats.xp} / ${playerStats.xpToLevel}`} color="#aa8833" />
+            {/* X button uses slot graphic */}
+            <div
+              onClick={onClose}
+              style={{
+                width: 36, height: 36,
+                background: 'linear-gradient(180deg, #3a2a14, #2a1c0c)',
+                border: '2px solid #5a4020',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: 'pointer', fontSize: 20, color: '#dda855', fontWeight: 700,
+                textShadow: '0 1px 3px #000', borderRadius: 4, transition: 'transform 0.1s',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.15)'; e.currentTarget.style.color = '#ff8844'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.color = '#dda855'; }}
+            >✕</div>
           </div>
 
-          {/* ─── CENTER: Paperdoll ────────────────────────── */}
-          <div style={{
-            ...styles.column, flex: 1,
-            alignItems: 'center', justifyContent: 'center',
-            position: 'relative',
-            minWidth: 220,
-          }}>
-            {/* Dark ornamental background */}
-            <div style={{
-              position: 'absolute', inset: 0,
-              background: 'radial-gradient(ellipse at center, rgba(50,40,24,0.5) 0%, transparent 70%)',
-              pointerEvents: 'none',
-            }} />
+          {/* ══ BODY — left stats | right (equip + backpack) ═ */}
+          <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
 
-            {/* Equipment layout */}
+            {/* ──── LEFT: STATS PANEL ──────────────────────── */}
             <div style={{
-              display: 'grid',
-              gridTemplateAreas: `
-                ".       head    .      "
-                "neck    torso   offHand"
-                "mainHand torso  ring1  "
-                "hands   legs    ring2  "
-                ".       feet    .      "
-              `,
-              gridTemplateColumns: '58px 110px 58px',
-              gridTemplateRows: 'repeat(5, 58px)',
-              gap: 4,
-              alignItems: 'center',
-              justifyItems: 'center',
+              width: 215, minWidth: 200, padding: '12px 10px',
+              borderRight: '2px solid #3a2a14',
+              background: 'rgba(14,10,6,0.55)',
+              display: 'flex', flexDirection: 'column', gap: 3,
+              overflowY: 'auto', flexShrink: 0,
             }}>
-              {/* Head */}
-              <div style={{ gridArea: 'head' }}>
-                <EquipSlot slotKey="head" item={equipment.head} onRightClick={handleEquipRightClick} onHover={handleItemHover} onLeave={handleItemLeave} isHighlight={highlightSlots.includes('head')} onDragStart={handleDragStart} onDragOver={() => {}} onDrop={handleDrop} />
-              </div>
-              {/* Neck */}
-              <div style={{ gridArea: 'neck' }}>
-                <EquipSlot slotKey="neck" item={equipment.neck} onRightClick={handleEquipRightClick} onHover={handleItemHover} onLeave={handleItemLeave} isHighlight={highlightSlots.includes('neck')} onDragStart={handleDragStart} onDragOver={() => {}} onDrop={handleDrop} />
-              </div>
-              {/* Torso — spans 2 rows visually, holds the hero sprite */}
+              <SectionTitle text="Vitals" />
+              <StatRow icon="❤️" label="HP"    value={playerStats.maxHp}                 color="#dd4444" />
+              <StatRow icon="💧" label="Mana"  value={playerStats.maxMana}               color="#4488dd" />
+              <StatRow icon="⭐" label="Level" value={playerStats.level}                 color="#e8c860" />
+
+              <SectionTitle text="Attributes" />
+              <StatRow icon="💪" label="STR"  value={(playerStats.str  || 0) + eb.str}  bonus={eb.str}  color="#dd9944" />
+              <StatRow icon="🧠" label="INT"  value={(playerStats.int  || 0) + eb.int}  bonus={eb.int}  color="#aa77dd" />
+              <StatRow icon="🏃" label="AGI"  value={(playerStats.dex  || 0) + eb.dex}  bonus={eb.dex}  color="#77bb77" />
+              <StatRow icon="🔮" label="END"  value={(playerStats.will || 0) + eb.will} bonus={eb.will} color="#bbaa55" />
+
+              <SectionTitle text="Combat" />
+              <StatRow icon="⚔️" label="Damage" value={(playerStats.baseDmg  || 0) + eb.dmg} bonus={eb.dmg} color="#ff7755" />
+              <StatRow icon="🛡️" label="Armor"  value={(playerStats.def      || 0) + eb.def} bonus={eb.def} color="#6699dd" />
+              <StatRow icon="💥" label="Crit"   value={`${(((playerStats.critChance || 0) + eb.critChance) * 100).toFixed(1)}%`} bonus={eb.critChance > 0 ? (eb.critChance * 100).toFixed(1) : 0} color="#ff5555" />
+
+              <SectionTitle text="Experience" />
+              <StatRow icon="📊" label="XP" value={`${playerStats.xp || 0} / ${playerStats.xpToLevel || 100}`} color="#aa8833" />
+            </div>
+
+            {/* ──── RIGHT AREA ─────────────────────────────── */}
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+
+              {/* ── TOP: PAPERDOLL + 9 EQUIPMENT SLOTS ─────── */}
               <div style={{
-                gridArea: 'torso',
-                width: 110, height: 120,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                flex: 1.2, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                padding: '8px 12px',
+                background: 'linear-gradient(180deg, rgba(22,16,8,0.8), rgba(14,10,6,0.9))',
+                borderBottom: '2px solid #3a2a14',
                 position: 'relative',
               }}>
-                {/* Hero frame */}
+                {/*
+                  D4-style layout: 5 columns × 3 rows
+                  Col: [Left-1] [Left-2] [HERO-center] [Right-1] [Right-2]
+                  Row 1:  _       Helmet    HERO         Amulet1    Amulet2
+                  Row 2:  Weap1   Chest     HERO         Weap2      Belt
+                  Row 3:  _       Pants     HERO         Boots      _
+                */}
                 <div style={{
-                  width: 100, height: 110,
-                  background: 'rgba(30,24,16,0.7)',
-                  border: '1px solid #4a3a20',
-                  borderRadius: 4,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  boxShadow: 'inset 0 0 20px rgba(0,0,0,0.5), 0 0 10px rgba(0,0,0,0.3)',
-                  overflow: 'hidden',
+                  display: 'grid',
+                  gridTemplateColumns: '68px 68px 140px 68px 68px',
+                  gridTemplateRows: 'repeat(3, 86px)',
+                  gap: 8, alignItems: 'center', justifyItems: 'center',
                 }}>
-                  <img
-                    src={heroSprite}
-                    alt="Hero"
-                    style={{
-                      width: 90, height: 90,
-                      imageRendering: 'pixelated',
-                      filter: 'drop-shadow(0 0 8px rgba(200,160,60,0.2))',
-                    }}
-                  />
+                  {/* Row 1 */}
+                  <div />
+                  <EquipSlot slotKey="head" item={equipment.head} label="Helmet" onRC={eqRC} onHover={hoverIn} onLeave={hoverOut} onDragStart={dragStart} onDrop={drop} hl={hl.includes('head')} />
+                  {/* HERO: spans all 3 rows */}
+                  <div style={{
+                    gridRow: '1 / 4', gridColumn: '3',
+                    width: 135, height: 220,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: 'radial-gradient(ellipse, rgba(40,30,16,0.6) 0%, transparent 70%)',
+                    borderRadius: 8, position: 'relative',
+                  }}>
+                    <img src={heroSprite} alt="Hero" style={{
+                      width: 128, height: 128, imageRendering: 'pixelated',
+                      filter: 'drop-shadow(0 0 16px rgba(200,160,60,0.35))',
+                    }} />
+                    <div style={{
+                      position: 'absolute', bottom: 6, left: '50%', transform: 'translateX(-50%)',
+                      fontFamily: FONT, fontSize: 13, color: '#dbb854', letterSpacing: 2, fontWeight: 700,
+                      textShadow: '0 0 8px rgba(220,180,60,0.5), 0 1px 4px #000', whiteSpace: 'nowrap', textTransform: 'uppercase',
+                    }}>{classId || 'Warrior'}</div>
+                  </div>
+                  <EquipSlot slotKey="neck"  item={equipment.neck}  label="Amulet 1" onRC={eqRC} onHover={hoverIn} onLeave={hoverOut} onDragStart={dragStart} onDrop={drop} hl={hl.includes('neck')} />
+                  <EquipSlot slotKey="ring1" item={equipment.ring1} label="Amulet 2" onRC={eqRC} onHover={hoverIn} onLeave={hoverOut} onDragStart={dragStart} onDrop={drop} hl={hl.includes('ring1')} />
+
+                  {/* Row 2 */}
+                  <EquipSlot slotKey="mainHand" item={equipment.mainHand} label="Weapon 1" onRC={eqRC} onHover={hoverIn} onLeave={hoverOut} onDragStart={dragStart} onDrop={drop} hl={hl.includes('mainHand')} />
+                  <EquipSlot slotKey="torso"    item={equipment.torso}    label="Chest"    onRC={eqRC} onHover={hoverIn} onLeave={hoverOut} onDragStart={dragStart} onDrop={drop} hl={hl.includes('torso')} />
+                  {/* hero col 3 */}
+                  <EquipSlot slotKey="offHand" item={equipment.offHand} label="Weapon 2" onRC={eqRC} onHover={hoverIn} onLeave={hoverOut} onDragStart={dragStart} onDrop={drop} hl={hl.includes('offHand')} />
+                  <EquipSlot slotKey="hands"   item={equipment.hands}   label="Belt"     onRC={eqRC} onHover={hoverIn} onLeave={hoverOut} onDragStart={dragStart} onDrop={drop} hl={hl.includes('hands')} />
+
+                  {/* Row 3 */}
+                  <div />
+                  <EquipSlot slotKey="legs" item={equipment.legs} label="Pants" onRC={eqRC} onHover={hoverIn} onLeave={hoverOut} onDragStart={dragStart} onDrop={drop} hl={hl.includes('legs')} />
+                  {/* hero col 3 */}
+                  <EquipSlot slotKey="feet" item={equipment.feet} label="Boots" onRC={eqRC} onHover={hoverIn} onLeave={hoverOut} onDragStart={dragStart} onDrop={drop} hl={hl.includes('feet')} />
+                  <div />
                 </div>
-                {/* Equip slot overlay for torso */}
-                <div style={{ position: 'absolute', bottom: -6, right: -6 }}>
-                  <EquipSlot slotKey="torso" item={equipment.torso} onRightClick={handleEquipRightClick} onHover={handleItemHover} onLeave={handleItemLeave} isHighlight={highlightSlots.includes('torso')} onDragStart={handleDragStart} onDragOver={() => {}} onDrop={handleDrop} />
+              </div>
+
+              {/* ── BOTTOM: BACKPACK GRID ──────────────────── */}
+              <div style={{
+                flex: 0.8, padding: '8px 12px',
+                background: 'rgba(14,10,6,0.55)',
+                display: 'flex', flexDirection: 'column', overflowY: 'auto',
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <span style={{ fontFamily: FONT, fontSize: 12, color: '#c9a84c', letterSpacing: 2, textTransform: 'uppercase', textShadow: '0 0 4px rgba(200,160,60,0.3)' }}>Backpack</span>
+                  <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: '#6a5a3a' }}>{backpack.filter(Boolean).length} / {BACKPACK_TOTAL}</span>
+                </div>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: `repeat(${BACKPACK_COLS}, 50px)`,
+                  gap: 3, justifyContent: 'center',
+                }}>
+                  {Array.from({ length: BACKPACK_TOTAL }, (_, i) => (
+                    <BPSlot
+                      key={i} index={i} item={backpack[i] || null}
+                      onRC={bpRC} onHover={hoverIn} onLeave={hoverOut}
+                      onDragStart={dragStart} onDrop={drop}
+                    />
+                  ))}
                 </div>
               </div>
-              {/* Off-hand */}
-              <div style={{ gridArea: 'offHand' }}>
-                <EquipSlot slotKey="offHand" item={equipment.offHand} onRightClick={handleEquipRightClick} onHover={handleItemHover} onLeave={handleItemLeave} isHighlight={highlightSlots.includes('offHand')} onDragStart={handleDragStart} onDragOver={() => {}} onDrop={handleDrop} />
-              </div>
-              {/* Main Hand */}
-              <div style={{ gridArea: 'mainHand' }}>
-                <EquipSlot slotKey="mainHand" item={equipment.mainHand} onRightClick={handleEquipRightClick} onHover={handleItemHover} onLeave={handleItemLeave} isHighlight={highlightSlots.includes('mainHand')} onDragStart={handleDragStart} onDragOver={() => {}} onDrop={handleDrop} />
-              </div>
-              {/* Ring 1 */}
-              <div style={{ gridArea: 'ring1' }}>
-                <EquipSlot slotKey="ring1" item={equipment.ring1} onRightClick={handleEquipRightClick} onHover={handleItemHover} onLeave={handleItemLeave} isHighlight={highlightSlots.includes('ring1')} onDragStart={handleDragStart} onDragOver={() => {}} onDrop={handleDrop} />
-              </div>
-              {/* Hands */}
-              <div style={{ gridArea: 'hands' }}>
-                <EquipSlot slotKey="hands" item={equipment.hands} onRightClick={handleEquipRightClick} onHover={handleItemHover} onLeave={handleItemLeave} isHighlight={highlightSlots.includes('hands')} onDragStart={handleDragStart} onDragOver={() => {}} onDrop={handleDrop} />
-              </div>
-              {/* Legs */}
-              <div style={{ gridArea: 'legs' }}>
-                <EquipSlot slotKey="legs" item={equipment.legs} onRightClick={handleEquipRightClick} onHover={handleItemHover} onLeave={handleItemLeave} isHighlight={highlightSlots.includes('legs')} onDragStart={handleDragStart} onDragOver={() => {}} onDrop={handleDrop} />
-              </div>
-              {/* Ring 2 */}
-              <div style={{ gridArea: 'ring2' }}>
-                <EquipSlot slotKey="ring2" item={equipment.ring2} onRightClick={handleEquipRightClick} onHover={handleItemHover} onLeave={handleItemLeave} isHighlight={highlightSlots.includes('ring2')} onDragStart={handleDragStart} onDragOver={() => {}} onDrop={handleDrop} />
-              </div>
-              {/* Feet */}
-              <div style={{ gridArea: 'feet' }}>
-                <EquipSlot slotKey="feet" item={equipment.feet} onRightClick={handleEquipRightClick} onHover={handleItemHover} onLeave={handleItemLeave} isHighlight={highlightSlots.includes('feet')} onDragStart={handleDragStart} onDragOver={() => {}} onDrop={handleDrop} />
-              </div>
             </div>
-          </div>
-
-          {/* ─── RIGHT: Backpack & Tooltip ────────────────── */}
-          <div style={{ ...styles.column, width: 280, minWidth: 260 }}>
-            <div style={styles.sectionLabel}>Backpack</div>
-
-            {/* Grid */}
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: `repeat(${GRID_COLS}, 48px)`,
-              gap: 3,
-              justifyContent: 'center',
-              padding: 6,
-              background: 'rgba(30,24,14,0.7)',
-              border: '1px solid #4a3a1c',
-              borderRadius: 4,
-            }}>
-              {Array.from({ length: totalSlots }, (_, i) => (
-                <BackpackSlot
-                  key={i}
-                  index={i}
-                  item={backpack[i] || null}
-                  onRightClick={handleBackpackRightClick}
-                  onHover={handleItemHover}
-                  onLeave={handleItemLeave}
-                  onDragStart={handleDragStart}
-                  onDragOver={() => {}}
-                  onDrop={handleDrop}
-                />
-              ))}
-            </div>
-
-            {/* Tooltip / Inspection area */}
-            <div style={{
-              ...styles.sectionLabel, marginTop: 8,
-            }}>Item Details</div>
-            <div style={{
-              flex: 1, minHeight: 100,
-              overflow: 'auto',
-            }}>
-              <ItemTooltip item={hoveredItem} />
-            </div>
-          </div>
-        </div>
-
-        {/* ── Footer ────────────────────────────────────────── */}
-        <div style={styles.footer}>
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-          }}>
-            <span style={{ fontSize: 16 }}>💰</span>
-            <span style={{
-              fontFamily: FONT, fontSize: 14, color: '#ffd700',
-              textShadow: '0 0 4px rgba(255,215,0,0.3)',
-            }}>{gold?.toLocaleString() || 0}</span>
-          </div>
-          <div style={{
-            fontFamily: FONT, fontSize: 10, color: '#6a5a3a',
-            letterSpacing: 1,
-          }}>
-            {backpack.filter(Boolean).length} / {totalSlots} slots used
           </div>
         </div>
       </div>
-    </div>
+
+      {/* ── FLOATING TOOLTIP (rendered outside overlay for z) ─ */}
+      <FloatingTooltip item={tip} mousePos={mpos} />
+    </>
+  );
+}
+
+/* ── Tiny helper ──────────────────────────────────────────── */
+function SectionTitle({ text }) {
+  return (
+    <div style={{
+      fontFamily: "'Cinzel', serif", fontSize: 12, color: '#dbb854',
+      letterSpacing: 2, textTransform: 'uppercase',
+      marginTop: 10, marginBottom: 4,
+      textShadow: '0 0 6px rgba(200,160,60,0.5), 0 1px 3px #000',
+      borderBottom: '1px solid rgba(200,160,60,0.15)', paddingBottom: 3,
+    }}>{text}</div>
   );
 }

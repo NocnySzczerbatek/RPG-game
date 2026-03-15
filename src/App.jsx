@@ -35,7 +35,7 @@ function generateShopStock(playerLevel = 1) {
     { name: 'Mana Potion',   type: 'potion', rarity: 'common', manaRestore: 20 + playerLevel * 3 },
   ];
   // Filter items within player level range (+/- 2 rarity tiers)
-  const rarityForLevel = playerLevel < 3 ? ['common', 'magic'] : playerLevel < 6 ? ['magic', 'rare'] : ['magic', 'rare', 'legendary'];
+  const rarityForLevel = playerLevel < 3 ? ['common', 'magic'] : playerLevel < 6 ? ['magic', 'rare'] : ['magic', 'rare', 'legendary', 'mythic'];
   const eligible = LOOT_TABLE.filter(i => rarityForLevel.includes(i.rarity) && i.type !== 'potion');
   const scaled = eligible.map(i => {
     const bonus = Math.max(0, playerLevel - 2);
@@ -78,7 +78,25 @@ export default function App() {
 
   /* ── Player / inventory state ────────────────────────────── */
   const [inventoryOpen, setInventoryOpen] = useState(false);
-  const [backpack, setBackpack] = useState(() => new Array(BACKPACK_SIZE).fill(null));
+  const [backpack, setBackpack] = useState(() => {
+    const bp = new Array(BACKPACK_SIZE).fill(null);
+    /* Starter items for testing */
+    bp[0] = { name: 'Rusty Sword',      type: 'weapon', rarity: 'common',    dmg: 5 };
+    bp[1] = { name: 'Enchanted Blade',  type: 'weapon', rarity: 'magic',     dmg: 14, str: 2 };
+    bp[2] = { name: 'Bloodfang',        type: 'weapon', rarity: 'rare',      dmg: 22, str: 5, critChance: 0.04 };
+    bp[3] = { name: 'Hellreaver',       type: 'weapon', rarity: 'legendary', dmg: 35, str: 8, critChance: 0.08 };
+    bp[4] = { name: 'Godsbane',          type: 'weapon', rarity: 'mythic',    dmg: 60, str: 12, critChance: 0.12 };
+    bp[5] = { name: 'Leather Vest',     type: 'armor',  rarity: 'common',    def: 3 };
+    bp[6] = { name: 'Shadow Plate',     type: 'armor',  rarity: 'rare',      def: 15, str: 4, dex: 2 };
+    bp[7] = { name: 'Veil of the Fallen God', type: 'armor', rarity: 'mythic', def: 45, str: 14, will: 10, dex: 6 };
+    bp[8] = { name: 'Bone Ring',        type: 'ring',   rarity: 'common',    str: 2 };
+    bp[9] = { name: 'Band of Agony',    type: 'ring',   rarity: 'rare',      critChance: 0.06, dex: 5 };
+    bp[10] = { name: 'Crown of the Godslayer', type: 'amulet', rarity: 'mythic', str: 12, int: 12, will: 10, def: 15, critChance: 0.08 };
+    bp[11] = { name: 'Health Potion',    type: 'potion', rarity: 'common',    heal: 30 };
+    bp[12] = { name: 'Greater Heal',    type: 'potion', rarity: 'magic',     heal: 60 };
+    bp[13] = { name: 'Mana Potion',     type: 'potion', rarity: 'common',    manaRestore: 20 };
+    return bp;
+  });
   const [equipment, setEquipment] = useState({ ...EMPTY_EQUIPMENT });
   const [playerState, setPlayerState] = useState({});
   const [chosenClass, setChosenClass] = useState(null);
@@ -379,7 +397,7 @@ export default function App() {
 
   /* Playing or Dead — game is always mounted underneath */
   return (
-    <div className="w-full h-screen bg-black overflow-hidden">
+    <div className="w-full h-screen bg-black overflow-hidden relative">
       <GameMap
         playerState={playerState}
         setPlayerState={setPlayerState}
@@ -393,7 +411,7 @@ export default function App() {
         onOpenTrade={onOpenTrade}
         onZoneChange={onZoneChange}
       />
-      {/* MiniMap now handled by Phaser camera — React MiniMap removed to avoid overlap */}
+      {/* Inventory overlay — absolute, z-index 100, on top of canvas */}
       <Inventory
         isOpen={inventoryOpen && screen === 'playing'}
         onClose={() => setInventoryOpen(false)}

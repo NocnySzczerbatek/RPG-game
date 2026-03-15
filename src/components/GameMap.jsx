@@ -152,34 +152,52 @@ const RARITIES = {
   magic:     { color: '#4488ff', weight: 25 },
   rare:      { color: '#ffdd44', weight: 12 },
   legendary: { color: '#ff8800', weight: 3  },
+  mythic:    { color: '#ff44ff', weight: 0  },   // boss-only, never from normal mobs
 };
+
+/* Weights used ONLY for normal mob drops (no legendary / mythic) */
+const MOB_WEIGHTS = {
+  common: 60,
+  magic:  28,
+  rare:   12,
+};
+
 const LOOT_TABLE = [
   /* ── Weapons ─────────────────────────────────────────────── */
-  { name: 'Rusty Sword',     type: 'weapon', rarity: 'common',    dmg: 5  },
-  { name: 'Iron Axe',        type: 'weapon', rarity: 'common',    dmg: 8  },
-  { name: 'Enchanted Blade', type: 'weapon', rarity: 'magic',     dmg: 14, str: 2 },
-  { name: 'Frostbite Dagger',type: 'weapon', rarity: 'magic',     dmg: 12, dex: 3 },
-  { name: 'Bloodfang',       type: 'weapon', rarity: 'rare',      dmg: 22, str: 5, critChance: 0.04 },
-  { name: 'Voidcleaver',     type: 'weapon', rarity: 'rare',      dmg: 20, int: 4, will: 3 },
-  { name: 'Hellreaver',      type: 'weapon', rarity: 'legendary', dmg: 35, str: 8, critChance: 0.08 },
+  { name: 'Rusty Sword',      type: 'weapon', rarity: 'common',    dmg: 5  },
+  { name: 'Iron Axe',         type: 'weapon', rarity: 'common',    dmg: 8  },
+  { name: 'Enchanted Blade',  type: 'weapon', rarity: 'magic',     dmg: 14, str: 2 },
+  { name: 'Frostbite Dagger', type: 'weapon', rarity: 'magic',     dmg: 12, dex: 3 },
+  { name: 'Bloodfang',        type: 'weapon', rarity: 'rare',      dmg: 22, str: 5, critChance: 0.04 },
+  { name: 'Voidcleaver',      type: 'weapon', rarity: 'rare',      dmg: 20, int: 4, will: 3 },
+  { name: 'Hellreaver',       type: 'weapon', rarity: 'legendary', dmg: 35, str: 8, critChance: 0.08 },
+  { name: 'Demonslayer',      type: 'weapon', rarity: 'legendary', dmg: 40, str: 6, dex: 4, critChance: 0.06 },
+  { name: 'Godsbane',         type: 'weapon', rarity: 'mythic',    dmg: 60, str: 12, critChance: 0.12 },
+  { name: 'Eternity\'s Edge', type: 'weapon', rarity: 'mythic',    dmg: 55, int: 10, will: 8, critChance: 0.10 },
   /* ── Armor ───────────────────────────────────────────────── */
-  { name: 'Leather Vest',    type: 'armor',  rarity: 'common',    def: 3  },
-  { name: 'Torn Leggings',   type: 'armor',  rarity: 'common',    def: 2  },
-  { name: 'Chainmail',       type: 'armor',  rarity: 'magic',     def: 8,  str: 2 },
-  { name: 'Wraithguard',     type: 'armor',  rarity: 'magic',     def: 6,  will: 3 },
-  { name: 'Shadow Plate',    type: 'armor',  rarity: 'rare',      def: 15, str: 4, dex: 2 },
-  { name: 'Demonhide Mantle',type: 'armor',  rarity: 'legendary', def: 24, str: 6, will: 5 },
+  { name: 'Leather Vest',     type: 'armor',  rarity: 'common',    def: 3  },
+  { name: 'Torn Leggings',    type: 'armor',  rarity: 'common',    def: 2  },
+  { name: 'Chainmail',        type: 'armor',  rarity: 'magic',     def: 8,  str: 2 },
+  { name: 'Wraithguard',      type: 'armor',  rarity: 'magic',     def: 6,  will: 3 },
+  { name: 'Shadow Plate',     type: 'armor',  rarity: 'rare',      def: 15, str: 4, dex: 2 },
+  { name: 'Demonhide Mantle', type: 'armor',  rarity: 'legendary', def: 24, str: 6, will: 5 },
+  { name: 'Titanguard',       type: 'armor',  rarity: 'legendary', def: 28, str: 8, dex: 3 },
+  { name: 'Veil of the Fallen God', type: 'armor', rarity: 'mythic', def: 45, str: 14, will: 10, dex: 6 },
   /* ── Potions ─────────────────────────────────────────────── */
   { name: 'Health Potion',   type: 'potion', rarity: 'common',    heal: 30 },
   { name: 'Greater Heal',    type: 'potion', rarity: 'magic',     heal: 60 },
   { name: 'Mana Potion',     type: 'potion', rarity: 'common',    manaRestore: 20 },
   { name: 'Greater Mana',    type: 'potion', rarity: 'magic',     manaRestore: 40 },
   /* ── Rings & Amulets ─────────────────────────────────────── */
-  { name: 'Bone Ring',       type: 'ring',   rarity: 'common',    str: 2 },
-  { name: 'Signet of Focus', type: 'ring',   rarity: 'magic',     int: 4, will: 2 },
-  { name: 'Band of Agony',   type: 'ring',   rarity: 'rare',      critChance: 0.06, dex: 5 },
-  { name: 'Tarnished Amulet',type: 'amulet', rarity: 'common',    will: 2 },
-  { name: 'Soulchain',       type: 'amulet', rarity: 'rare',      str: 4, int: 4, def: 5 },
+  { name: 'Bone Ring',        type: 'ring',   rarity: 'common',    str: 2 },
+  { name: 'Signet of Focus',  type: 'ring',   rarity: 'magic',     int: 4, will: 2 },
+  { name: 'Band of Agony',    type: 'ring',   rarity: 'rare',      critChance: 0.06, dex: 5 },
+  { name: 'Tarnished Amulet', type: 'amulet', rarity: 'common',    will: 2 },
+  { name: 'Soulchain',        type: 'amulet', rarity: 'rare',      str: 4, int: 4, def: 5 },
+  { name: 'Deathwhisper Ring',type: 'ring',   rarity: 'legendary', critChance: 0.10, str: 6, dex: 6 },
+  { name: 'Heart of Oblivion',type: 'amulet', rarity: 'legendary', str: 8, int: 8, def: 10, critChance: 0.05 },
+  { name: 'Worldbreaker Signet', type: 'ring', rarity: 'mythic',   str: 15, dex: 12, critChance: 0.15 },
+  { name: 'Crown of the Godslayer', type: 'amulet', rarity: 'mythic', str: 12, int: 12, will: 10, def: 15, critChance: 0.08 },
 ];
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1510,14 +1528,25 @@ class DarkForestScene extends Phaser.Scene {
       this._checkLevelUp();
       this._dropLoot(enemy.x, enemy.y, ed.type);
 
-      // Boss kill: guaranteed legendary + extra gold + victory text
+      // Boss kill: guaranteed legendary/mythic + extra gold + victory text
       if (ed.isBoss) {
         this.playerData.gold += 100;
         this._createLootLabel(enemy.x - 20, enemy.y - 10, '100 Gold', '#ffd700', { type: 'gold', amount: 100 });
-        const legendaries = LOOT_TABLE.filter(l => l.rarity === 'legendary');
-        if (legendaries.length > 0) {
-          const item = legendaries[Math.floor(Math.random() * legendaries.length)];
-          this._createLootLabel(enemy.x + 20, enemy.y + 20, item.name, RARITIES.legendary.color, { type: 'item', item });
+        // 40% mythic, 60% legendary
+        const isMythicDrop = Math.random() < 0.40;
+        const bossRarity = isMythicDrop ? 'mythic' : 'legendary';
+        const bossPool = LOOT_TABLE.filter(l => l.rarity === bossRarity);
+        if (bossPool.length > 0) {
+          const item = { ...bossPool[Math.floor(Math.random() * bossPool.length)] };
+          this._createLootLabel(enemy.x + 20, enemy.y + 20, item.name, RARITIES[item.rarity].color, { type: 'item', item });
+        }
+        // Second drop: 50% chance for another legendary
+        if (Math.random() < 0.50) {
+          const legendaries = LOOT_TABLE.filter(l => l.rarity === 'legendary');
+          if (legendaries.length > 0) {
+            const item2 = { ...legendaries[Math.floor(Math.random() * legendaries.length)] };
+            this._createLootLabel(enemy.x - 30, enemy.y + 35, item2.name, RARITIES.legendary.color, { type: 'item', item: item2 });
+          }
         }
         // Victory announcement
         const vic = this.add.text(this.cameras.main.width / 2, this.cameras.main.height / 2 - 60, 'BOSS SLAIN!', {
@@ -1548,18 +1577,18 @@ class DarkForestScene extends Phaser.Scene {
     const goldAmt = 5 + Math.floor(Math.random() * 15);
     this._createLootLabel(x + (Math.random() - 0.5) * 20, y + 10, `${goldAmt} Gold`, '#ffd700', { type: 'gold', amount: goldAmt });
 
-    // Random item (40% chance)
+    // Random item (40% chance) — mobs only drop common / magic / rare
     if (Math.random() < 0.40) {
-      const totalW = Object.values(RARITIES).reduce((s, r) => s + r.weight, 0);
+      const totalW = Object.values(MOB_WEIGHTS).reduce((s, w) => s + w, 0);
       let roll = Math.random() * totalW;
       let chosenRarity = 'common';
-      for (const [rarity, info] of Object.entries(RARITIES)) {
-        roll -= info.weight;
+      for (const [rarity, w] of Object.entries(MOB_WEIGHTS)) {
+        roll -= w;
         if (roll <= 0) { chosenRarity = rarity; break; }
       }
       const eligible = LOOT_TABLE.filter(l => l.rarity === chosenRarity);
       if (eligible.length > 0) {
-        const item = eligible[Math.floor(Math.random() * eligible.length)];
+        const item = { ...eligible[Math.floor(Math.random() * eligible.length)] };
         this._createLootLabel(x + (Math.random() - 0.5) * 30, y + 25, item.name, RARITIES[item.rarity].color, { type: 'item', item });
       }
     }
