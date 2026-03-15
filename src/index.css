@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -5,5 +7,38 @@
 body {
   background: #000;
   color: #ccc;
-  font-family: 'Segoe UI', sans-serif;
+  font-family: 'Cinzel', 'Segoe UI', sans-serif;
+}
+
+@keyframes invFadeIn {
+  from { opacity: 0; transform: scale(0.97); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* ── MainMenu animations ── */
+@keyframes vigFlicker {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 0.45; }
+}
+@keyframes emberRise {
+  0%   { transform: translateY(0) scale(1); opacity: 0.9; }
+  100% { transform: translateY(-120px) scale(0.3); opacity: 0; }
+}
+@keyframes heroGlow {
+  0%, 100% { box-shadow: 0 0 20px 4px currentColor; }
+  50%      { box-shadow: 0 0 40px 10px currentColor; }
+}
+
+/* ── DeathOverlay animations ── */
+@keyframes deathBgFade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes bloodPulse {
+  0%, 100% { opacity: 0.5; }
+  50%      { opacity: 0.75; }
+}
+@keyframes respawnBtnAppear {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
 }

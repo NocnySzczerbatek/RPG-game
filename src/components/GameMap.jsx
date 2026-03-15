@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import Phaser from 'phaser';
 import HUD from './HUD';
 
@@ -14,13 +14,50 @@ const GROUND_RES = 500;
 const PX_PER_TEXEL = WORLD_W / GROUND_RES;
 
 /* ── asset paths ───────────────────────────────────────────── */
-const HERO    = 'assets/sprites/craftpix-891165-assassin-mage-viking-free-pixel-art-game-heroes/PNG/Knight';
+const HERO_BASE = 'assets/sprites/craftpix-891165-assassin-mage-viking-free-pixel-art-game-heroes/PNG';
 const TREES   = 'assets/sprites/craftpix-net-385863-free-top-down-trees-pixel-art/PNG/Assets_separately/Trees_texture_shadow_dark';
 const ROCKS   = 'assets/sprites/craftpix-net-974061-free-rocks-and-stones-top-down-pixel-art/PNG/Objects_separately';
 const HOME    = 'assets/sprites/craftpix-net-654184-main-characters-home-free-top-down-pixel-art-asset/PNG';
 const ORCS    = 'assets/sprites/craftpix-net-363992-free-top-down-orc-game-character-pixel-art/PNG';
 const SLIMES  = 'assets/sprites/craftpix-net-788364-free-slime-mobs-pixel-art-top-down-sprite-pack/PNG';
 const MONSTERS = 'assets/sprites/craftpix-561178-free-rpg-monster-sprites-pixel-art/PNG';
+
+/* ── hero class animation defs ─────────────────────────────── */
+const HERO_CLASSES = {
+  warrior: {
+    folder: 'Knight',
+    anims: [
+      { name: 'idle', count: 12, start: 1 },
+      { name: 'run',  count: 8,  start: 1 },
+      { name: 'walk', count: 6,  start: 1, folder: 'Walk' },
+      { name: 'attack', count: 5, start: 0, folder: 'Attack' },
+      { name: 'death', count: 10, start: 1, folder: 'Death' },
+      { name: 'hurt',  count: 4,  start: 1, folder: 'Hurt' },
+    ],
+  },
+  mage: {
+    folder: 'Mage',
+    anims: [
+      { name: 'idle', count: 14, start: 1 },
+      { name: 'run',  count: 8,  start: 1 },
+      { name: 'walk', count: 6,  start: 1, folder: 'Walk' },
+      { name: 'attack', count: 7, start: 1, folder: 'Attack' },
+      { name: 'death', count: 10, start: 1, folder: 'Death' },
+      { name: 'hurt',  count: 4,  start: 1, folder: 'Hurt' },
+    ],
+  },
+  rogue: {
+    folder: 'Rogue',
+    anims: [
+      { name: 'idle', count: 17, start: 1 },
+      { name: 'run',  count: 8,  start: 1 },
+      { name: 'walk', count: 6,  start: 1, folder: 'Walk' },
+      { name: 'attack', count: 7, start: 1, folder: 'Attack', filePrefix: 'Attack' },
+      { name: 'death', count: 10, start: 1, folder: 'Death' },
+      { name: 'hurt',  count: 4,  start: 1, folder: 'Hurt' },
+    ],
+  },
+};
 
 /* ── tree & rock defs ──────────────────────────────────────── */
 const TREE_DEFS = [
@@ -88,16 +125,32 @@ const RARITIES = {
   legendary: { color: '#ff8800', weight: 3  },
 };
 const LOOT_TABLE = [
+  /* ── Weapons ─────────────────────────────────────────────── */
   { name: 'Rusty Sword',     type: 'weapon', rarity: 'common',    dmg: 5  },
   { name: 'Iron Axe',        type: 'weapon', rarity: 'common',    dmg: 8  },
-  { name: 'Enchanted Blade', type: 'weapon', rarity: 'magic',     dmg: 14 },
-  { name: 'Bloodfang',       type: 'weapon', rarity: 'rare',      dmg: 22 },
-  { name: 'Hellreaver',      type: 'weapon', rarity: 'legendary', dmg: 35 },
+  { name: 'Enchanted Blade', type: 'weapon', rarity: 'magic',     dmg: 14, str: 2 },
+  { name: 'Frostbite Dagger',type: 'weapon', rarity: 'magic',     dmg: 12, dex: 3 },
+  { name: 'Bloodfang',       type: 'weapon', rarity: 'rare',      dmg: 22, str: 5, critChance: 0.04 },
+  { name: 'Voidcleaver',     type: 'weapon', rarity: 'rare',      dmg: 20, int: 4, will: 3 },
+  { name: 'Hellreaver',      type: 'weapon', rarity: 'legendary', dmg: 35, str: 8, critChance: 0.08 },
+  /* ── Armor ───────────────────────────────────────────────── */
   { name: 'Leather Vest',    type: 'armor',  rarity: 'common',    def: 3  },
-  { name: 'Chainmail',       type: 'armor',  rarity: 'magic',     def: 8  },
-  { name: 'Shadow Plate',    type: 'armor',  rarity: 'rare',      def: 15 },
+  { name: 'Torn Leggings',   type: 'armor',  rarity: 'common',    def: 2  },
+  { name: 'Chainmail',       type: 'armor',  rarity: 'magic',     def: 8,  str: 2 },
+  { name: 'Wraithguard',     type: 'armor',  rarity: 'magic',     def: 6,  will: 3 },
+  { name: 'Shadow Plate',    type: 'armor',  rarity: 'rare',      def: 15, str: 4, dex: 2 },
+  { name: 'Demonhide Mantle',type: 'armor',  rarity: 'legendary', def: 24, str: 6, will: 5 },
+  /* ── Potions ─────────────────────────────────────────────── */
   { name: 'Health Potion',   type: 'potion', rarity: 'common',    heal: 30 },
+  { name: 'Greater Heal',    type: 'potion', rarity: 'magic',     heal: 60 },
   { name: 'Mana Potion',     type: 'potion', rarity: 'common',    manaRestore: 20 },
+  { name: 'Greater Mana',    type: 'potion', rarity: 'magic',     manaRestore: 40 },
+  /* ── Rings & Amulets ─────────────────────────────────────── */
+  { name: 'Bone Ring',       type: 'ring',   rarity: 'common',    str: 2 },
+  { name: 'Signet of Focus', type: 'ring',   rarity: 'magic',     int: 4, will: 2 },
+  { name: 'Band of Agony',   type: 'ring',   rarity: 'rare',      critChance: 0.06, dex: 5 },
+  { name: 'Tarnished Amulet',type: 'amulet', rarity: 'common',    will: 2 },
+  { name: 'Soulchain',       type: 'amulet', rarity: 'rare',      str: 4, int: 4, def: 5 },
 ];
 
 /* ═══════════════════════════════════════════════════════════════
@@ -178,23 +231,25 @@ class DarkForestScene extends Phaser.Scene {
 
   init(data) {
     this._syncFn = data.syncFn;
+    this._addToBackpack = data.addToBackpack;
+    this._sceneRef = data.sceneRef;
+    this._chosenClass = data.chosenClass;
+    this._savedData = data.savedData;
+    this._onPlayerDeath = data.onPlayerDeath;
+    if (this._sceneRef) this._sceneRef.current = this;
   }
 
   /* ── PRELOAD ───────────────────────────────────────────────── */
   preload() {
-    // Knight frames
-    const heroAnims = [
-      { name: 'idle', count: 12, start: 1 },
-      { name: 'run',  count: 8,  start: 1 },
-      { name: 'walk', count: 6,  start: 1, folder: 'Walk' },
-      { name: 'attack', count: 5, start: 0, folder: 'Attack' },
-      { name: 'death', count: 10, start: 1, folder: 'Death' },
-      { name: 'hurt',  count: 4,  start: 1, folder: 'Hurt' },
-    ];
-    for (const a of heroAnims) {
+    // Load hero frames for the chosen class
+    const classId = this._chosenClass?.id || 'warrior';
+    const heroDef = HERO_CLASSES[classId] || HERO_CLASSES.warrior;
+    const heroPath = `${HERO_BASE}/${heroDef.folder}`;
+    for (const a of heroDef.anims) {
       const folder = a.folder || a.name.charAt(0).toUpperCase() + a.name.slice(1);
+      const prefix = a.filePrefix || a.name;
       for (let i = a.start; i < a.start + a.count; i++)
-        this.load.image(`knight_${a.name}_${i}`, `${HERO}/${folder}/${a.name}${i}.png`);
+        this.load.image(`hero_${a.name}_${i}`, `${heroPath}/${folder}/${prefix}${i}.png`);
     }
 
     // Trees & Rocks
@@ -281,14 +336,21 @@ class DarkForestScene extends Phaser.Scene {
       if (pointer.leftButtonDown()) this._playerAttack();
     });
 
-    /* --- Player state --- */
+    /* --- Player state (from class + save) --- */
+    const cls = this._chosenClass || {};
+    const sv = this._savedData || {};
     this.playerData = {
-      hp: 100, maxHp: 100, mana: 50, maxMana: 50,
-      xp: 0, xpToLevel: 100, level: 1, gold: 0,
-      baseDmg: 12, critChance: 0.15,
+      hp: sv.hp ?? cls.hp ?? 100,
+      maxHp: cls.hp ?? 100,
+      mana: sv.mana ?? cls.mana ?? 50,
+      maxMana: cls.mana ?? 50,
+      xp: sv.xp ?? 0, xpToLevel: sv.xpToLevel ?? 100,
+      level: sv.level ?? 1, gold: sv.gold ?? 0,
+      baseDmg: cls.baseDmg ?? 12, critChance: (cls.critChance ?? 15) / 100,
       isAttacking: false, whirlwinding: false,
       skills: { q: 0, w: 0, e: 0, r: 0, eActive: false },
     };
+    this._isDead = false;
 
     /* --- Timers --- */
     this._atkCooldown = 0;
@@ -404,8 +466,8 @@ class DarkForestScene extends Phaser.Scene {
     this.playerData.isAttacking = true;
     this._atkCooldown = 500;
 
-    this.knight.play('knight_attack', true);
-    this.knight.once('animationcomplete-knight_attack', () => {
+    this.knight.play('hero_attack', true);
+    this.knight.once('animationcomplete-hero_attack', () => {
       this.playerData.isAttacking = false;
     });
 
@@ -413,11 +475,13 @@ class DarkForestScene extends Phaser.Scene {
     const atkX = this.knight.x + (facingRight ? 50 : -50);
     const atkY = this.knight.y;
 
+    const equipDmg = this.playerData._equipBonusDmg || 0;
+    const equipCrit = this.playerData._equipBonusCrit || 0;
     for (const e of this.enemies) {
       if (e.enemyData.isDead) continue;
       if (Math.hypot(e.x - atkX, e.y - atkY) < 100) {
-        const isCrit = Math.random() < this.playerData.critChance;
-        const dmg = Math.floor(this.playerData.baseDmg * (isCrit ? 2.2 : 1) * (0.85 + Math.random() * 0.3));
+        const isCrit = Math.random() < (this.playerData.critChance + equipCrit);
+        const dmg = Math.floor((this.playerData.baseDmg + equipDmg) * (isCrit ? 2.2 : 1) * (0.85 + Math.random() * 0.3));
         this._damageEnemy(e, dmg, isCrit);
       }
     }
@@ -558,7 +622,11 @@ class DarkForestScene extends Phaser.Scene {
 
   _pickupLoot(label) {
     if (!label.active) return;
-    if (label.lootData.type === 'gold') this.playerData.gold += label.lootData.amount;
+    if (label.lootData.type === 'gold') {
+      this.playerData.gold += label.lootData.amount;
+    } else if (label.lootData.type === 'item' && this._addToBackpack) {
+      this._addToBackpack(label.lootData.item);
+    }
     this.tweens.add({
       targets: label, y: label.y - 30, alpha: 0, scale: 0.5, duration: 300,
       onComplete: () => { label.destroy(); this.lootDrops = this.lootDrops.filter(l => l !== label); },
@@ -624,7 +692,17 @@ class DarkForestScene extends Phaser.Scene {
             const atkAnim = `${ed.animKey}_attack`;
             if (this.anims.exists(atkAnim)) e.play(atkAnim, true);
             if (dist < ed.atkRange + 30) {
-              this.playerData.hp = Math.max(0, this.playerData.hp - ed.dmg);
+              const equipDef = this.playerData._equipBonusDef || 0;
+              const reducedDmg = Math.max(1, ed.dmg - Math.floor(equipDef * 0.3));
+              this.playerData.hp = Math.max(0, this.playerData.hp - reducedDmg);
+              if (this.playerData.hp <= 0 && !this._isDead) {
+                this._isDead = true;
+                this.knight.body.setVelocity(0, 0);
+                if (this.anims.exists('hero_death')) this.knight.play('hero_death', true);
+                this._syncState();
+                if (this._onPlayerDeath) this._onPlayerDeath();
+                return;
+              }
               this.cameras.main.shake(80, 0.004);
               this.knight.setTint(0xff4444);
               this.time.delayedCall(150, () => this.knight.clearTint());
@@ -794,23 +872,35 @@ class DarkForestScene extends Phaser.Scene {
 
   /* ── PLAYER ─────────────────────────────────────────────── */
   _createPlayer() {
-    this.knight = this.physics.add.sprite(WORLD_W / 2, WORLD_H / 2, 'knight_idle_1');
+    const sv = this._savedData || {};
+    const startX = sv.x ?? WORLD_W / 2;
+    const startY = sv.y ?? WORLD_H / 2;
+    this.knight = this.physics.add.sprite(startX, startY, 'hero_idle_1');
     this.knight.setScale(SPRITE_SCALE).setCollideWorldBounds(true).setDepth(WORLD_H / 2);
     this.knight.body.setSize(22, 14).setOffset(53, 106);
 
-    this.anims.create({ key: 'knight_idle', frames: Array.from({ length: 12 }, (_, i) => ({ key: `knight_idle_${i + 1}` })), frameRate: 8, repeat: -1 });
-    this.anims.create({ key: 'knight_run', frames: Array.from({ length: 8 }, (_, i) => ({ key: `knight_run_${i + 1}` })), frameRate: 10, repeat: -1 });
-    this.anims.create({ key: 'knight_attack', frames: Array.from({ length: 5 }, (_, i) => ({ key: `knight_attack_${i}` })), frameRate: 14, repeat: 0 });
-    this.anims.create({ key: 'knight_hurt', frames: Array.from({ length: 4 }, (_, i) => ({ key: `knight_hurt_${i + 1}` })), frameRate: 10, repeat: 0 });
+    // Build animations from class definition
+    const classId = this._chosenClass?.id || 'warrior';
+    const heroDef = HERO_CLASSES[classId] || HERO_CLASSES.warrior;
+    const rates = { idle: 8, run: 10, attack: 14, hurt: 10, death: 10 };
+    for (const a of heroDef.anims) {
+      const isLoop = (a.name === 'idle' || a.name === 'run');
+      this.anims.create({
+        key: `hero_${a.name}`,
+        frames: Array.from({ length: a.count }, (_, i) => ({ key: `hero_${a.name}_${i + a.start}` })),
+        frameRate: rates[a.name] || 8,
+        repeat: isLoop ? -1 : 0,
+      });
+    }
 
-    this.knight.play('knight_idle');
+    this.knight.play('hero_idle');
     this.playerFacing = 'right';
   }
 
   /* ── ATMOSPHERE ─────────────────────────────────────────── */
   _createAtmosphere() {
     if (this.add.particles) {
-      this.add.particles(0, 0, 'knight_idle_1', {
+      this.add.particles(0, 0, 'hero_idle_1', {
         alpha: { start: 0.06, end: 0 }, scale: { start: 0.03, end: 0.01 },
         tint: 0x888866, speed: { min: 5, max: 20 }, lifespan: 4000,
         frequency: 500, quantity: 1, blendMode: 'ADD', follow: this.knight,
@@ -861,6 +951,7 @@ class DarkForestScene extends Phaser.Scene {
         mana: Math.ceil(pd.mana), maxMana: pd.maxMana,
         xp: pd.xp, xpToLevel: pd.xpToLevel,
         level: pd.level, gold: pd.gold,
+        baseDmg: pd.baseDmg, critChance: pd.critChance,
         skills: { ...pd.skills },
       });
     }
@@ -868,7 +959,7 @@ class DarkForestScene extends Phaser.Scene {
 
   /* ── UPDATE ─────────────────────────────────────────────── */
   update(time, delta) {
-    if (!this.knight) return;
+    if (!this.knight || this._isDead) return;
 
     // Hit-stop freeze
     if (this._hitStopTimer > 0) { this._hitStopTimer -= delta; return; }
@@ -886,11 +977,11 @@ class DarkForestScene extends Phaser.Scene {
       if (vx && vy) { vx *= 0.707; vy *= 0.707; }
       this.knight.body.setVelocity(vx * PLAYER_SPEED, vy * PLAYER_SPEED);
       if (vx !== 0 || vy !== 0) {
-        if (this.knight.anims.currentAnim?.key !== 'knight_run') this.knight.play('knight_run', true);
+        if (this.knight.anims.currentAnim?.key !== 'hero_run') this.knight.play('hero_run', true);
         if (vx > 0) { this.knight.setFlipX(false); this.playerFacing = 'right'; }
         if (vx < 0) { this.knight.setFlipX(true); this.playerFacing = 'left'; }
       } else if (!pd.isAttacking) {
-        if (this.knight.anims.currentAnim?.key !== 'knight_idle') this.knight.play('knight_idle', true);
+        if (this.knight.anims.currentAnim?.key !== 'hero_idle') this.knight.play('hero_idle', true);
       }
     } else if (pd.whirlwinding) {
       const k = this.keys, c = this.cursors;
@@ -933,19 +1024,18 @@ class DarkForestScene extends Phaser.Scene {
 /* ═══════════════════════════════════════════════════════════════
    REACT COMPONENT
    ═══════════════════════════════════════════════════════════════ */
-export default function GameMap() {
+export default function GameMap({ playerState, setPlayerState, sceneRef, addToBackpack, inventoryOpen, setInventoryOpen, chosenClass, savedData, onPlayerDeath }) {
   const containerRef = useRef(null);
   const gameRef = useRef(null);
-  const [playerState, setPlayerState] = useState({});
 
   const syncFn = useCallback((state) => {
     setPlayerState(prev => {
       if (prev.hp === state.hp && prev.mana === state.mana &&
           prev.xp === state.xp && prev.level === state.level &&
-          prev.gold === state.gold) return prev;
+          prev.gold === state.gold && prev.baseDmg === state.baseDmg) return prev;
       return state;
     });
-  }, []);
+  }, [setPlayerState]);
 
   useEffect(() => {
     if (gameRef.current) return;
@@ -960,14 +1050,14 @@ export default function GameMap() {
       scene: [DarkForestScene],
       scale: { mode: Phaser.Scale.RESIZE, autoCenter: Phaser.Scale.CENTER_BOTH },
     });
-    gameRef.current.scene.start('DarkForest', { syncFn });
+    gameRef.current.scene.start('DarkForest', { syncFn, addToBackpack, sceneRef, chosenClass, savedData, onPlayerDeath });
     return () => { if (gameRef.current) { gameRef.current.destroy(true); gameRef.current = null; } };
-  }, [syncFn]);
+  }, [syncFn, addToBackpack, sceneRef, chosenClass, savedData, onPlayerDeath]);
 
   return (
     <div className="relative w-full h-full">
       <div ref={containerRef} className="w-full h-full" />
-      <HUD playerState={playerState} />
+      <HUD playerState={playerState} inventoryOpen={inventoryOpen} onToggleInventory={() => setInventoryOpen(prev => !prev)} />
     </div>
   );
 }
