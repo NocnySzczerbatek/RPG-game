@@ -273,6 +273,9 @@ class DarkForestScene extends Phaser.Scene {
 
   /* ── PRELOAD ───────────────────────────────────────────────── */
   preload() {
+    this.load.on('loaderror', (file) => {
+      console.error('[PRELOAD ERROR] Failed to load:', file.key, file.url);
+    });
     this._preloadHero();
 
     // Trees & Rocks
@@ -1712,9 +1715,11 @@ class DarkForestScene extends Phaser.Scene {
     const sv = this._savedData || {};
     const startX = sv.x ?? WORLD_W / 2;
     const startY = sv.y ?? WORLD_H / 2;
+    console.log('[_createPlayer] pos:', startX, startY, 'texture exists:', this.textures.exists('hero_idle_1'));
     this.knight = this.physics.add.sprite(startX, startY, 'hero_idle_1');
-    this.knight.setScale(SPRITE_SCALE).setCollideWorldBounds(true).setDepth(WORLD_H / 2);
+    this.knight.setScale(SPRITE_SCALE).setCollideWorldBounds(true).setDepth(startY);
     this.knight.body.setSize(22, 14).setOffset(53, 106);
+    console.log('[_createPlayer] knight created, visible:', this.knight.visible, 'alpha:', this.knight.alpha, 'texture:', this.knight.texture?.key, 'frame w:', this.knight.width, 'h:', this.knight.height);
 
     // Build animations from class definition
     const classId = this._chosenClass?.id || 'warrior';
@@ -1732,6 +1737,10 @@ class DarkForestScene extends Phaser.Scene {
 
     this.knight.play('hero_idle');
     this.playerFacing = 'right';
+
+    // Debug: bright red marker at player position (on top of everything)
+    this._debugDot = this.add.circle(startX, startY, 15, 0xff0000).setDepth(99999);
+    console.log('[_createPlayer] debug dot placed at', startX, startY);
   }
 
   /* ── ATMOSPHERE ─────────────────────────────────────────── */
@@ -1806,9 +1815,13 @@ class DarkForestScene extends Phaser.Scene {
   update(time, delta) {
     if (!this.knight || this._isDead) return;
     if (!this._firstUpdateLogged) {
-      console.log('[DarkForest] first update tick — knight exists, input active');
+      console.log('[DarkForest] first update tick — knight at', this.knight.x, this.knight.y, 'visible:', this.knight.visible, 'alpha:', this.knight.alpha);
+      console.log('[DarkForest] keys defined:', !!this.keys, 'cursors defined:', !!this.cursors);
       this._firstUpdateLogged = true;
     }
+
+    // Debug dot follows knight
+    if (this._debugDot) this._debugDot.setPosition(this.knight.x, this.knight.y);
 
     // Hit-stop freeze
     if (this._hitStopTimer > 0) { this._hitStopTimer -= delta; return; }
@@ -2388,9 +2401,15 @@ export default function GameMap({ playerState, setPlayerState, sceneRef, addToBa
     });
   }, [setPlayerState]);
 
+  // Store callbacks in refs so the useEffect doesn't re-run on every render
+  const dataRef = useRef({ syncFn, addToBackpack, sceneRef, chosenClass, savedData, onPlayerDeath, onOpenTrade, onZoneChange });
+  dataRef.current = { syncFn, addToBackpack, sceneRef, chosenClass, savedData, onPlayerDeath, onOpenTrade, onZoneChange };
+
   useEffect(() => {
     if (gameRef.current) return;
-    console.log('[GameMap] Creating Phaser game, chosenClass:', chosenClass?.id);
+    const d = dataRef.current;
+    console.log('[GameMap] Creating Phaser game, chosenClass:', d.chosenClass?.id);
+    const sceneData = { ...d };
     gameRef.current = new Phaser.Game({
       type: Phaser.AUTO,
       parent: containerRef.current,
@@ -2401,19 +2420,31 @@ export default function GameMap({ playerState, setPlayerState, sceneRef, addToBa
       physics: { default: 'arcade', arcade: { gravity: { y: 0 }, debug: false } },
       scene: [],
       scale: { mode: Phaser.Scale.RESIZE, autoCenter: Phaser.Scale.CENTER_BOTH },
+      input: { keyboard: { target: window }, mouse: { target: containerRef.current } },
+      callbacks: {
+        postBoot: (game) => {
+          console.log('[GameMap] postBoot — adding scenes');
+          game.scene.add('DarkForest', DarkForestScene, true, sceneData);
+          game.scene.add('ForsakenCrypt', ForsakenCryptScene, false);
+          console.log('[GameMap] DarkForest started with data');
+        },
+      },
     });
-    const sceneData = { syncFn, addToBackpack, sceneRef, chosenClass, savedData, onPlayerDeath, onOpenTrade, onZoneChange };
-    gameRef.current.scene.add('DarkForest', DarkForestScene, false);
-    gameRef.current.scene.add('ForsakenCrypt', ForsakenCryptScene, false);
-    gameRef.current.scene.start('DarkForest', sceneData);
-    console.log('[GameMap] Scene start queued with data');
+    // Focus the canvas so Phaser captures keyboard input
+    setTimeout(() => {
+      const canvas = containerRef.current?.querySelector('canvas');
+      if (canvas) { canvas.setAttribute('tabindex', '0'); canvas.focus(); }
+    }, 200);
     return () => { if (gameRef.current) { gameRef.current.destroy(true); gameRef.current = null; } };
-  }, [syncFn, addToBackpack, sceneRef, chosenClass, savedData, onPlayerDeath, onOpenTrade, onZoneChange]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="relative w-full h-full">
       <div ref={containerRef} className="w-full h-full" />
-      <HUD playerState={playerState} classId={chosenClass?.id} inventoryOpen={inventoryOpen} onToggleInventory={() => setInventoryOpen(prev => !prev)} />
+      <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 10 }}>
+        <HUD playerState={playerState} classId={chosenClass?.id} inventoryOpen={inventoryOpen} onToggleInventory={() => setInventoryOpen(prev => !prev)} />
+      </div>
     </div>
   );
 }
