@@ -9,8 +9,8 @@ const WORLD_W = 4000;
 const WORLD_H = 4000;
 const TILE = 16;
 const PLAYER_SPEED = 210;
-const SPRITE_SCALE = 2.5;
-const GROUND_RES = 500;
+const SPRITE_SCALE = 1.6;
+const GROUND_RES = 800;
 const PX_PER_TEXEL = WORLD_W / GROUND_RES;
 
 /* ── asset paths ───────────────────────────────────────────── */
@@ -341,7 +341,13 @@ class DarkForestScene extends Phaser.Scene {
 
   /* ── CREATE ────────────────────────────────────────────────── */
   create() {
-    console.log('[DarkForest] create() START');
+    // === ON-SCREEN DEBUG PANEL ===
+    const _dbgLines = [];
+    const _dbg = (msg) => { _dbgLines.push(msg); console.log('[DarkForest]', msg); };
+    _dbg('create() START');
+    _dbg('chosenClass: ' + (this._chosenClass?.id || 'NULL'));
+    _dbg('syncFn: ' + (!!this._syncFn));
+
     try {
     this._currentZone = 'forest';
     this._transitioning = false;
@@ -361,35 +367,41 @@ class DarkForestScene extends Phaser.Scene {
     this._createGroundTexture(noise, pathPoints);
     this.staticObjects = this.physics.add.staticGroup();
     this.decorations = [];
-    console.log('[DarkForest] ground done');
+    _dbg('ground OK');
 
-    try { this._createBuildings(rng); } catch(e) { console.error('[DarkForest] _createBuildings FAILED:', e); }
-    try { this._scatterTrees(noise, rng); } catch(e) { console.error('[DarkForest] _scatterTrees FAILED:', e); }
-    try { this._scatterRocks(noise, rng); } catch(e) { console.error('[DarkForest] _scatterRocks FAILED:', e); }
-    console.log('[DarkForest] world objects done');
+    try { this._createBuildings(rng); _dbg('buildings OK'); } catch(e) { _dbg('buildings FAIL: ' + e.message); }
+    try { this._scatterTrees(noise, rng); _dbg('trees OK: ' + this.decorations.length); } catch(e) { _dbg('trees FAIL: ' + e.message); }
+    try { this._scatterRocks(noise, rng); _dbg('rocks OK'); } catch(e) { _dbg('rocks FAIL: ' + e.message); }
 
     /* --- Player --- */
-    this._createPlayer();
-    console.log('[DarkForest] player created at', this.knight?.x, this.knight?.y, 'visible:', this.knight?.visible);
+    try {
+      this._createPlayer();
+      _dbg('player OK at ' + this.knight?.x + ',' + this.knight?.y + ' vis=' + this.knight?.visible + ' alpha=' + this.knight?.alpha + ' tex=' + this.knight?.texture?.key);
+    } catch(e) { _dbg('player FAIL: ' + e.message); }
 
     /* --- Enemies --- */
     this.enemies = [];
-    try { this._createEnemyAnims(); } catch(e) { console.error('[DarkForest] _createEnemyAnims FAILED:', e); }
-    try { this._spawnEnemies(rng); } catch(e) { console.error('[DarkForest] _spawnEnemies FAILED:', e); }
-    console.log('[DarkForest] enemies spawned:', this.enemies.length);
+    try { this._createEnemyAnims(); _dbg('enemyAnims OK'); } catch(e) { _dbg('enemyAnims FAIL: ' + e.message); }
+    try { this._spawnEnemies(rng); _dbg('enemies OK: ' + this.enemies.length); } catch(e) { _dbg('enemies FAIL: ' + e.message); }
 
     /* --- Loot on ground --- */
     this.lootDrops = [];
 
     /* --- Physics --- */
-    this.physics.add.collider(this.knight, this.staticObjects);
+    if (this.knight) this.physics.add.collider(this.knight, this.staticObjects);
 
     /* --- Camera --- */
     const cam = this.cameras.main;
     cam.setBounds(0, 0, WORLD_W, WORLD_H);
-    cam.startFollow(this.knight, true, 0.09, 0.09);
+    if (this.knight) {
+      cam.startFollow(this.knight, true, 0.09, 0.09);
+      _dbg('camera following knight');
+    } else {
+      cam.scrollX = WORLD_W / 2 - cam.width / 2;
+      cam.scrollY = WORLD_H / 2 - cam.height / 2;
+      _dbg('camera CENTERED (no knight!)');
+    }
     cam.setBackgroundColor('#0a0a08');
-    console.log('[DarkForest] camera following knight, cam scroll:', cam.scrollX, cam.scrollY);
 
     /* --- Input --- */
     this.keys = this.input.keyboard.addKeys('W,A,S,D,E,F,Q,R,SPACE');
@@ -399,9 +411,9 @@ class DarkForestScene extends Phaser.Scene {
       else if (pointer.rightButtonDown()) this._updateWSkill();
     });
     try { this.input.mouse.disableContextMenu(); } catch (_) {
-      try { this.game.input.mouse.disableContextMenu(); } catch (_2) { /* no mouse manager */ }
+      try { this.game.input.mouse.disableContextMenu(); } catch (_2) {}
     }
-    console.log('[DarkForest] input setup done');
+    _dbg('input OK, keys=' + !!this.keys);
 
     /* --- Player state (from class + save) --- */
     const cls = this._chosenClass || {};
@@ -438,36 +450,42 @@ class DarkForestScene extends Phaser.Scene {
     this._wCooldown = 0;
     this._rCooldown = 0;
     this._furyActive = false;
-    this.npc = this.physics.add.sprite(NPC_POS.x, NPC_POS.y, 'npc_blacksmith');
-    this.npc.setScale(2.2).setDepth(NPC_POS.y).setImmovable(true);
-    this.npc.body.setImmovable(true);
-    this.physics.add.collider(this.knight, this.npc);
-    this._npcLabel = this.add.text(NPC_POS.x, NPC_POS.y - 55, '[E] Trade', {
-      fontSize: '11px', fontFamily: "'Cinzel', serif", color: '#c8a96e',
-      stroke: '#000', strokeThickness: 2,
-    }).setOrigin(0.5).setDepth(10001).setVisible(false);
 
-    /* --- Dungeon portal --- */
-    this.portal = this.physics.add.sprite(FOREST_PORTAL_POS.x, FOREST_PORTAL_POS.y, 'portal_purple');
-    this.portal.setScale(2.5).setDepth(FOREST_PORTAL_POS.y);
-    this.portal.body.setImmovable(true);
-    this._portalLabel = this.add.text(FOREST_PORTAL_POS.x, FOREST_PORTAL_POS.y - 55, '[E] Enter Crypt', {
-      fontSize: '11px', fontFamily: "'Cinzel', serif", color: '#aa88ff',
-      stroke: '#000', strokeThickness: 2,
-    }).setOrigin(0.5).setDepth(10001).setVisible(false);
+    try {
+      this.npc = this.physics.add.sprite(NPC_POS.x, NPC_POS.y, 'npc_blacksmith');
+      this.npc.setScale(2.2).setDepth(NPC_POS.y).setImmovable(true);
+      this.npc.body.setImmovable(true);
+      if (this.knight) this.physics.add.collider(this.knight, this.npc);
+      this._npcLabel = this.add.text(NPC_POS.x, NPC_POS.y - 55, '[E] Trade', {
+        fontSize: '11px', fontFamily: "'Cinzel', serif", color: '#c8a96e',
+        stroke: '#000', strokeThickness: 2,
+      }).setOrigin(0.5).setDepth(10001).setVisible(false);
+      _dbg('npc OK');
+    } catch(e) { _dbg('npc FAIL: ' + e.message); }
 
-    /* --- Atmosphere --- */
-    try { this._createAtmosphere(); } catch(e) { console.error('[DarkForest] _createAtmosphere FAILED:', e); }
+    try {
+      this.portal = this.physics.add.sprite(FOREST_PORTAL_POS.x, FOREST_PORTAL_POS.y, 'portal_purple');
+      this.portal.setScale(2.5).setDepth(FOREST_PORTAL_POS.y);
+      this.portal.body.setImmovable(true);
+      this._portalLabel = this.add.text(FOREST_PORTAL_POS.x, FOREST_PORTAL_POS.y - 55, '[E] Enter Crypt', {
+        fontSize: '11px', fontFamily: "'Cinzel', serif", color: '#aa88ff',
+        stroke: '#000', strokeThickness: 2,
+      }).setOrigin(0.5).setDepth(10001).setVisible(false);
+      _dbg('portal OK');
+    } catch(e) { _dbg('portal FAIL: ' + e.message); }
+
+    try { this._createAtmosphere(); } catch(e) { _dbg('atmo FAIL: ' + e.message); }
     this._syncState();
     if (this._onZoneChange) this._onZoneChange('forest');
     this.cameras.main.fadeIn(800);
 
-    /* --- Phaser minimap camera --- */
-    try { this._createMinimap(); } catch(e) { console.error('[DarkForest] _createMinimap FAILED:', e); }
-    console.log('[DarkForest] create() COMPLETE — player at', this.knight?.x, this.knight?.y);
+    try { this._createMinimap(); _dbg('minimap OK'); } catch(e) { _dbg('minimap FAIL: ' + e.message); }
+    _dbg('create() COMPLETE');
     } catch (fatalErr) {
-      console.error('[DarkForest] create() FATAL ERROR:', fatalErr);
+      _dbg('FATAL: ' + fatalErr.message);
+      console.error('[DarkForest] create() FATAL:', fatalErr);
     }
+
   }
 
   /* ── ENEMY ANIMATIONS ──────────────────────────────────── */
@@ -1619,31 +1637,23 @@ class DarkForestScene extends Phaser.Scene {
       const idx = (y * GROUND_RES + x) * 4;
       let r, g, b;
       if (pathSet.has(y * GROUND_RES + x)) {
-        const v = 0.5 + n2 * 0.15; r = Math.floor(55 * v); g = Math.floor(42 * v); b = Math.floor(30 * v);
+        const v = 0.7 + n2 * 0.2; r = Math.floor(90 * v); g = Math.floor(70 * v); b = Math.floor(45 * v);
       } else if (n1 > 0.15) {
-        const v = 0.7 + n1 * 0.3; r = Math.floor(22 * v); g = Math.floor(38 * v); b = Math.floor(18 * v);
+        const v = 0.75 + n1 * 0.25; r = Math.floor(35 * v); g = Math.floor(65 * v); b = Math.floor(30 * v);
       } else if (n1 > -0.1) {
-        const v = 0.7 + n2 * 0.25; r = Math.floor(18 * v); g = Math.floor(30 * v); b = Math.floor(22 * v);
+        const v = 0.75 + n2 * 0.2; r = Math.floor(30 * v); g = Math.floor(55 * v); b = Math.floor(35 * v);
       } else {
-        const v = 0.6 + n1 * 0.2; r = Math.floor(28 * v); g = Math.floor(24 * v); b = Math.floor(18 * v);
+        const v = 0.7 + n1 * 0.15; r = Math.floor(45 * v); g = Math.floor(42 * v); b = Math.floor(30 * v);
       }
       d[idx] = r; d[idx + 1] = g; d[idx + 2] = b; d[idx + 3] = 255;
     }
     ctx.putImageData(imgData, 0, 0);
     const tex = this.textures.createCanvas('biome_ground', GROUND_RES, GROUND_RES);
     tex.context.drawImage(canvas, 0, 0); tex.refresh();
+    // Apply linear filtering for smooth ground when zoomed
+    try { tex.setFilter(1); } catch (_) {}
     const groundImg = this.add.image(WORLD_W / 2, WORLD_H / 2, 'biome_ground');
     groundImg.setDisplaySize(WORLD_W, WORLD_H).setDepth(-1000);
-    if (groundImg.texture?.source?.[0]) {
-      const glTex = groundImg.texture.source[0].glTexture;
-      const renderer = this.game.renderer;
-      if (renderer?.gl && glTex) {
-        const gl = renderer.gl;
-        renderer.setTexture2D(glTex, 0);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-      }
-    }
   }
 
   /* ── PATH / EXCLUSION ───────────────────────────────────── */
@@ -1734,11 +1744,9 @@ class DarkForestScene extends Phaser.Scene {
     const sv = this._savedData || {};
     const startX = sv.x ?? WORLD_W / 2;
     const startY = sv.y ?? WORLD_H / 2;
-    console.log('[_createPlayer] pos:', startX, startY, 'texture exists:', this.textures.exists('hero_idle_1'));
     this.knight = this.physics.add.sprite(startX, startY, 'hero_idle_1');
     this.knight.setScale(SPRITE_SCALE).setCollideWorldBounds(true).setDepth(startY);
     this.knight.body.setSize(22, 14).setOffset(53, 106);
-    console.log('[_createPlayer] knight created, visible:', this.knight.visible, 'alpha:', this.knight.alpha, 'texture:', this.knight.texture?.key, 'frame w:', this.knight.width, 'h:', this.knight.height);
 
     // Build animations from class definition
     const classId = this._chosenClass?.id || 'warrior';
@@ -1756,10 +1764,6 @@ class DarkForestScene extends Phaser.Scene {
 
     this.knight.play('hero_idle');
     this.playerFacing = 'right';
-
-    // Debug: bright red marker at player position (on top of everything)
-    this._debugDot = this.add.circle(startX, startY, 15, 0xff0000).setDepth(99999);
-    console.log('[_createPlayer] debug dot placed at', startX, startY);
   }
 
   /* ── ATMOSPHERE ─────────────────────────────────────────── */
@@ -1833,14 +1837,6 @@ class DarkForestScene extends Phaser.Scene {
   /* ── UPDATE ─────────────────────────────────────────────── */
   update(time, delta) {
     if (!this.knight || this._isDead) return;
-    if (!this._firstUpdateLogged) {
-      console.log('[DarkForest] first update tick — knight at', this.knight.x, this.knight.y, 'visible:', this.knight.visible, 'alpha:', this.knight.alpha);
-      console.log('[DarkForest] keys defined:', !!this.keys, 'cursors defined:', !!this.cursors);
-      this._firstUpdateLogged = true;
-    }
-
-    // Debug dot follows knight
-    if (this._debugDot) this._debugDot.setPosition(this.knight.x, this.knight.y);
 
     // Hit-stop freeze
     if (this._hitStopTimer > 0) { this._hitStopTimer -= delta; return; }
