@@ -27,15 +27,24 @@ const EMPTY_EQUIPMENT = {
 const BACKPACK_SIZE = 40;
 const SAVE_KEY = 'godslayer_save';
 
-/* ── Shop stock generation ────────────────────────────────── */
-function generateShopStock() {
+/* ── Shop stock generation (level-scaled) ────────────────── */
+function generateShopStock(playerLevel = 1) {
   const potions = [
-    { name: 'Health Potion', type: 'potion', rarity: 'common', heal: 30 },
-    { name: 'Greater Heal',  type: 'potion', rarity: 'magic',  heal: 60 },
-    { name: 'Mana Potion',   type: 'potion', rarity: 'common', manaRestore: 20 },
+    { name: 'Health Potion', type: 'potion', rarity: 'common', heal: 30 + playerLevel * 5 },
+    { name: 'Greater Heal',  type: 'potion', rarity: 'magic',  heal: 60 + playerLevel * 8 },
+    { name: 'Mana Potion',   type: 'potion', rarity: 'common', manaRestore: 20 + playerLevel * 3 },
   ];
-  const eligible = LOOT_TABLE.filter(i => i.rarity === 'magic' || i.rarity === 'rare');
-  const shuffled = [...eligible].sort(() => Math.random() - 0.5);
+  // Filter items within player level range (+/- 2 rarity tiers)
+  const rarityForLevel = playerLevel < 3 ? ['common', 'magic'] : playerLevel < 6 ? ['magic', 'rare'] : ['magic', 'rare', 'legendary'];
+  const eligible = LOOT_TABLE.filter(i => rarityForLevel.includes(i.rarity) && i.type !== 'potion');
+  const scaled = eligible.map(i => {
+    const bonus = Math.max(0, playerLevel - 2);
+    const copy = { ...i };
+    if (copy.dmg) copy.dmg = copy.dmg + Math.floor(bonus * 1.5);
+    if (copy.def) copy.def = copy.def + Math.floor(bonus * 1.2);
+    return copy;
+  });
+  const shuffled = [...scaled].sort(() => Math.random() - 0.5);
   return [...potions, ...shuffled.slice(0, 3)];
 }
 
@@ -170,6 +179,17 @@ export default function App() {
     });
   }, []);
 
+  /* ── Swap backpack items (for drag & drop) ─────────────── */
+  const handleSwapBackpack = useCallback((fromIdx, toIdx) => {
+    setBackpack(prev => {
+      const next = [...prev];
+      const tmp = next[fromIdx];
+      next[fromIdx] = next[toIdx];
+      next[toIdx] = tmp;
+      return next;
+    });
+  }, []);
+
   /* ── Push equipment bonuses into Phaser ────────────────── */
   useEffect(() => {
     const scene = sceneRef.current;
@@ -264,7 +284,7 @@ export default function App() {
     const lvl = playerState.level || 1;
     if (lvl > prevLevelRef.current) {
       prevLevelRef.current = lvl;
-      setShopStock(generateShopStock());
+      setShopStock(generateShopStock(lvl));
     }
   }, [playerState.level]);
 
@@ -306,6 +326,8 @@ export default function App() {
       scene.playerData.gold = Math.max(0, scene.playerData.gold - penalty);
       scene.playerData.hp = scene.playerData.maxHp;
       scene.playerData.mana = scene.playerData.maxMana;
+      // Mercy invulnerability — 2 seconds
+      scene._mercyTimer = 2000;
       // Teleport to Eldergrove (center of map, near buildings)
       if (scene.knight) {
         scene.knight.setPosition(2000, 2000);
@@ -382,6 +404,8 @@ export default function App() {
         onUnequipItem={handleUnequipItem}
         onConsumePotion={handleConsumePotion}
         gold={playerState.gold || 0}
+        classId={chosenClass?.id}
+        onSwapBackpack={handleSwapBackpack}
       />
       {screen === 'dead' && (
         <DeathOverlay gold={playerState.gold || 0} onRespawn={handleRespawn} />

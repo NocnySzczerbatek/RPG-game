@@ -1,6 +1,28 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 const UI = 'assets/sprites/craftpix-net-255216-free-basic-pixel-art-ui-for-rpg/PNG';
+
+/* ── Skill tooltip descriptions ────────────────────────────── */
+const SKILL_TOOLTIPS = {
+  warrior: {
+    q: { name: 'Cleave', desc: 'Powerful cone slash dealing 160% DMG.', cost: '10 Mana', cd: '2s' },
+    w: { name: 'Shield Bash', desc: 'Bash enemies, stunning for 1.5s and dealing 120% DMG.', cost: '10 Mana', cd: '3s' },
+    e: { name: 'Whirlwind', desc: 'Spin dealing 60% DMG/hit while held. Drains mana.', cost: 'Mana/sec', cd: 'Hold' },
+    r: { name: 'Battle Fury', desc: '+60% DMG for 6 seconds. Red aura.', cost: '30 Mana', cd: '15s' },
+  },
+  mage: {
+    q: { name: 'Ice Shard', desc: 'Projectile toward cursor dealing 140% DMG. Briefly freezes.', cost: '12 Mana', cd: '1.2s' },
+    w: { name: 'Arcane Pulse', desc: 'Expanding AoE ring, 90% DMG + knockback.', cost: '14 Mana', cd: '3.5s' },
+    e: { name: 'Frost Nova', desc: 'Freezes nearby enemies for 2s, 80% DMG.', cost: '25 Mana', cd: '5s' },
+    r: { name: 'Meteor Storm', desc: '3 meteors at cursor, each dealing 250% DMG.', cost: '35 Mana', cd: '18s' },
+  },
+  rogue: {
+    q: { name: 'Dagger Slash', desc: 'Double-hit dealing 70% DMG each, +15% crit.', cost: '8 Mana', cd: '0.8s' },
+    w: { name: 'Smoke Bomb', desc: 'Become invisible for 2.5s. Enemies lose aggro.', cost: '12 Mana', cd: '5s' },
+    e: { name: 'Shadow Dash', desc: 'Teleport 200px toward cursor, damaging enemies in path.', cost: '15 Mana', cd: '3s' },
+    r: { name: 'Assassinate', desc: 'Teleport to nearest enemy, guaranteed crit, 400% DMG.', cost: '25 Mana', cd: '12s' },
+  },
+};
 
 /* ── Orb component (Health / Mana) ─────────────────────────── */
 function Orb({ current, max, color, side }) {
@@ -62,15 +84,42 @@ function Orb({ current, max, color, side }) {
 }
 
 /* ── Skill Slot ────────────────────────────────────────────── */
-function SkillSlot({ hotkey, name, cooldown, active }) {
+function SkillSlot({ hotkey, name, cooldown, active, tooltip }) {
+  const [showTip, setShowTip] = useState(false);
   return (
     <div style={{
       width: 52, height: 52,
       position: 'relative',
       margin: '0 3px',
       imageRendering: 'pixelated',
-    }}>
-      {/* Slot frame from UI pack — Equipment.png row 0 col 0 = 32x32 slot */}
+      pointerEvents: 'auto',
+    }}
+      onMouseEnter={() => setShowTip(true)}
+      onMouseLeave={() => setShowTip(false)}
+    >
+      {/* Tooltip popup */}
+      {showTip && tooltip && (
+        <div style={{
+          position: 'absolute',
+          bottom: 62, left: '50%', transform: 'translateX(-50%)',
+          width: 180,
+          background: 'linear-gradient(180deg, rgba(20,16,10,0.97), rgba(8,6,4,0.97))',
+          border: '1px solid #4a3a18',
+          borderRadius: 4,
+          padding: '8px 10px',
+          zIndex: 200,
+          pointerEvents: 'none',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.8)',
+        }}>
+          <div style={{ fontFamily: "'Cinzel', serif", fontSize: 12, fontWeight: 700, color: '#c9a84c', marginBottom: 4 }}>{tooltip.name}</div>
+          <div style={{ fontFamily: 'sans-serif', fontSize: 10, color: '#aaa', lineHeight: '1.4', marginBottom: 6 }}>{tooltip.desc}</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, fontFamily: 'monospace' }}>
+            <span style={{ color: '#4488ff' }}>{tooltip.cost}</span>
+            <span style={{ color: '#888' }}>CD: {tooltip.cd}</span>
+          </div>
+        </div>
+      )}
+      {/* Slot frame */}
       <div style={{
         width: '100%', height: '100%',
         background: active ? 'rgba(255,200,60,0.15)' : 'rgba(10,8,5,0.9)',
@@ -144,6 +193,7 @@ export default function HUD({ playerState, classId, inventoryOpen, onToggleInven
 
   const xpPct = Math.max(0, Math.min(100, (xp / xpToLevel) * 100));
   const sn = SKILL_NAMES[classId] || SKILL_NAMES.warrior;
+  const st = SKILL_TOOLTIPS[classId] || SKILL_TOOLTIPS.warrior;
 
   return (
     <div style={{
@@ -214,10 +264,10 @@ export default function HUD({ playerState, classId, inventoryOpen, onToggleInven
           padding: '6px 8px',
           boxShadow: '0 -2px 12px rgba(0,0,0,0.6)',
         }}>
-          <SkillSlot hotkey="Q" name={sn.q} cooldown={skills.q || 0} />
-          <SkillSlot hotkey="M2" name={sn.w} cooldown={skills.w || 0} />
-          <SkillSlot hotkey="E" name={sn.e} cooldown={skills.e || 0} active={skills.eActive} />
-          <SkillSlot hotkey="R" name={sn.r} cooldown={skills.r || 0} />
+          <SkillSlot hotkey="Q" name={sn.q} cooldown={skills.q || 0} tooltip={st.q} />
+          <SkillSlot hotkey="M2" name={sn.w} cooldown={skills.w || 0} tooltip={st.w} />
+          <SkillSlot hotkey="E" name={sn.e} cooldown={skills.e || 0} active={skills.eActive} tooltip={st.e} />
+          <SkillSlot hotkey="R" name={sn.r} cooldown={skills.r || 0} tooltip={st.r} />
         </div>
 
         {/* Mana Orb */}

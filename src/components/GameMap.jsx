@@ -253,6 +253,51 @@ const COTTAGE_TILES = [
 ];
 
 /* ═══════════════════════════════════════════════════════════════
+   AUDIO MANAGER (skeleton — loads placeholder sounds)
+   ═══════════════════════════════════════════════════════════════ */
+class AudioManager {
+  constructor(scene) {
+    this.scene = scene;
+    this.sounds = {};
+    this.enabled = true;
+    this.volume = 0.5;
+  }
+  preload() {
+    // Placeholder sounds — will load silently if files not found
+    const soundDefs = [
+      { key: 'sfx_swing', path: 'assets/audio/swing.mp3' },
+      { key: 'sfx_gold', path: 'assets/audio/gold.mp3' },
+      { key: 'sfx_hurt', path: 'assets/audio/hurt.mp3' },
+      { key: 'sfx_levelup', path: 'assets/audio/levelup.mp3' },
+      { key: 'sfx_skill', path: 'assets/audio/skill.mp3' },
+    ];
+    for (const s of soundDefs) {
+      try { this.scene.load.audio(s.key, s.path); } catch (_) { /* missing file OK */ }
+    }
+  }
+  init() {
+    const keys = ['sfx_swing', 'sfx_gold', 'sfx_hurt', 'sfx_levelup', 'sfx_skill'];
+    for (const key of keys) {
+      try {
+        if (this.scene.cache.audio.exists(key)) {
+          this.sounds[key] = this.scene.sound.add(key, { volume: this.volume });
+        }
+      } catch (_) { /* sound not loaded — skip */ }
+    }
+  }
+  play(key) {
+    if (!this.enabled || !this.sounds[key]) return;
+    try { this.sounds[key].play(); } catch (_) { /* playback error — skip */ }
+  }
+  setVolume(v) {
+    this.volume = v;
+    for (const s of Object.values(this.sounds)) {
+      try { s.setVolume(v); } catch (_) {}
+    }
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
    SCENE — DarkForestScene
    ═══════════════════════════════════════════════════════════════ */
 class DarkForestScene extends Phaser.Scene {
@@ -284,6 +329,10 @@ class DarkForestScene extends Phaser.Scene {
       console.error('[PRELOAD ERROR] Failed to load:', file.key, file.url);
     });
     this._preloadHero();
+
+    // Audio manager
+    this._audio = new AudioManager(this);
+    this._audio.preload();
 
     // Trees & Rocks
     for (const t of TREE_DEFS) this.load.image(t.key, `${TREES}/${t.file}`);
@@ -403,12 +452,28 @@ class DarkForestScene extends Phaser.Scene {
     }
     cam.setBackgroundColor('#0a0a08');
 
-    /* --- Input --- */
+    /* --- Input (Diablo-style click-to-move) --- */
     this.keys = this.input.keyboard.addKeys('W,A,S,D,E,F,Q,R,SPACE');
     this.cursors = this.input.keyboard.createCursorKeys();
+    this._moveTarget = null;
+    this._attackTarget = null;
+    this._mercyTimer = 0;
     this.input.on('pointerdown', (pointer) => {
-      if (pointer.leftButtonDown()) this._playerAttack();
-      else if (pointer.rightButtonDown()) this._updateWSkill();
+      if (pointer.leftButtonDown()) {
+        const wx = pointer.worldX, wy = pointer.worldY;
+        let clickedEnemy = null;
+        for (const e of this.enemies) {
+          if (e.enemyData.isDead) continue;
+          if (Math.hypot(e.x - wx, e.y - wy) < 50 * e.scaleX) { clickedEnemy = e; break; }
+        }
+        if (clickedEnemy) {
+          this._attackTarget = clickedEnemy;
+          this._moveTarget = null;
+        } else {
+          this._moveTarget = { x: wx, y: wy };
+          this._attackTarget = null;
+        }
+      } else if (pointer.rightButtonDown()) this._updateWSkill();
     });
     try { this.input.mouse.disableContextMenu(); } catch (_) {
       try { this.game.input.mouse.disableContextMenu(); } catch (_2) {}
@@ -436,6 +501,7 @@ class DarkForestScene extends Phaser.Scene {
       this.playerData._equipBonusCrit = sv._equipBonusCrit;
     }
     this._isDead = false;
+    this._mercyTimer = 0;
 
     /* --- Timers --- */
     this._atkCooldown = 0;
@@ -475,6 +541,7 @@ class DarkForestScene extends Phaser.Scene {
     } catch(e) { _dbg('portal FAIL: ' + e.message); }
 
     try { this._createAtmosphere(); } catch(e) { _dbg('atmo FAIL: ' + e.message); }
+    try { if (this._audio) this._audio.init(); } catch(e) { _dbg('audio FAIL: ' + e.message); }
     this._syncState();
     if (this._onZoneChange) this._onZoneChange('forest');
     this.cameras.main.fadeIn(800);
@@ -595,20 +662,34 @@ class DarkForestScene extends Phaser.Scene {
     this.enemies.push(enemy);
   }
 
+  /* ── CURSOR HELPERS ─────────────────────────────────────── */
+  _getCursorAngle() {
+    const ptr = this.input.activePointer;
+    return Math.atan2(ptr.worldY - this.knight.y, ptr.worldX - this.knight.x);
+  }
+  _faceCursor() {
+    const angle = this._getCursorAngle();
+    const facingRight = Math.abs(angle) < Math.PI / 2;
+    this.knight.setFlipX(!facingRight);
+    this.playerFacing = facingRight ? 'right' : 'left';
+    return angle;
+  }
+
   /* ── PLAYER ATTACK ──────────────────────────────────────── */
   _playerAttack() {
     if (this._atkCooldown > 0 || this.playerData.isAttacking) return;
     this.playerData.isAttacking = true;
     this._atkCooldown = 500;
 
+    const angle = this._faceCursor();
+    if (this._audio) this._audio.play('sfx_swing');
     this.knight.play('hero_attack', true);
     this.knight.once('animationcomplete-hero_attack', () => {
       this.playerData.isAttacking = false;
     });
 
-    const facingRight = !this.knight.flipX;
-    const atkX = this.knight.x + (facingRight ? 50 : -50);
-    const atkY = this.knight.y;
+    const atkX = this.knight.x + Math.cos(angle) * 50;
+    const atkY = this.knight.y + Math.sin(angle) * 50;
 
     const equipDmg = this.playerData._equipBonusDmg || 0;
     const equipCrit = this.playerData._equipBonusCrit || 0;
@@ -735,31 +816,37 @@ class DarkForestScene extends Phaser.Scene {
     pd.mana -= 15;
     this._dashCooldown = 3000;
 
-    const dir = this.playerFacing === 'right' ? 1 : -1;
+    // Dash toward cursor
+    const angle = this._faceCursor();
     const startX = this.knight.x;
+    const startY = this.knight.y;
     const worldW = this.physics.world.bounds.width;
-    const endX = Phaser.Math.Clamp(startX + dir * 200, 50, worldW - 50);
-    const dashY = this.knight.y;
+    const worldH = this.physics.world.bounds.height;
+    const endX = Phaser.Math.Clamp(startX + Math.cos(angle) * 200, 50, worldW - 50);
+    const endY = Phaser.Math.Clamp(startY + Math.sin(angle) * 200, 50, worldH - 50);
 
     // Shadow trail
     for (let i = 0; i < 5; i++) {
       const shadowX = startX + (endX - startX) * (i / 5);
-      const shadow = this.add.sprite(shadowX, dashY, this.knight.texture.key, this.knight.frame?.name);
+      const shadowY = startY + (endY - startY) * (i / 5);
+      const shadow = this.add.sprite(shadowX, shadowY, this.knight.texture.key, this.knight.frame?.name);
       shadow.setScale(this.knight.scaleX, this.knight.scaleY).setFlipX(this.knight.flipX);
-      shadow.setAlpha(0.5).setTint(0x220044).setDepth(dashY - 1);
+      shadow.setAlpha(0.5).setTint(0x220044).setDepth(startY - 1);
       this.tweens.add({ targets: shadow, alpha: 0, duration: 500, delay: i * 50, onComplete: () => shadow.destroy() });
     }
 
     // Teleport
-    this.knight.setPosition(endX, dashY);
+    this.knight.setPosition(endX, endY);
 
     // Damage enemies in path
     const equipDmg = pd._equipBonusDmg || 0;
-    const minX = Math.min(startX, endX);
-    const maxX = Math.max(startX, endX);
     for (const e of this.enemies) {
       if (e.enemyData.isDead) continue;
-      if (e.x >= minX - 40 && e.x <= maxX + 40 && Math.abs(e.y - dashY) < 60) {
+      // Check if enemy is near the dash line
+      const t = Math.max(0, Math.min(1, ((e.x - startX) * (endX - startX) + (e.y - startY) * (endY - startY)) / (Math.hypot(endX - startX, endY - startY) ** 2 || 1)));
+      const closestX = startX + t * (endX - startX);
+      const closestY = startY + t * (endY - startY);
+      if (Math.hypot(e.x - closestX, e.y - closestY) < 60) {
         const dmg = Math.floor((pd.baseDmg + equipDmg) * (0.9 + Math.random() * 0.2));
         this._damageEnemy(e, dmg, false);
       }
@@ -785,30 +872,29 @@ class DarkForestScene extends Phaser.Scene {
     this._qCooldown = 2000;
     pd.isAttacking = true;
 
+    const angle = this._faceCursor();
     this.knight.play('hero_attack', true);
     this.knight.once('animationcomplete-hero_attack', () => { pd.isAttacking = false; });
 
-    // Cone visual
-    const facingRight = !this.knight.flipX;
-    const cx = this.knight.x + (facingRight ? 30 : -30);
-    const cy = this.knight.y;
+    // Cone visual aimed at cursor
+    const cx = this.knight.x + Math.cos(angle) * 30;
+    const cy = this.knight.y + Math.sin(angle) * 30;
     const arc = this.add.graphics().setDepth(10000);
     arc.fillStyle(0xff6622, 0.25);
-    arc.slice(cx, cy, 110, facingRight ? -0.6 : Math.PI - 0.6, facingRight ? 0.6 : Math.PI + 0.6, false);
+    arc.slice(cx, cy, 110, angle - 0.6, angle + 0.6, false);
     arc.fillPath();
     this.tweens.add({ targets: arc, alpha: 0, duration: 350, onComplete: () => arc.destroy() });
 
-    // Hit enemies in front cone
+    // Hit enemies in cursor-aimed cone
     const equipDmg = pd._equipBonusDmg || 0;
     const equipCrit = pd._equipBonusCrit || 0;
     for (const e of this.enemies) {
       if (e.enemyData.isDead) continue;
-      const dx = e.x - this.knight.x, dy = e.y - cy;
+      const dx = e.x - this.knight.x, dy = e.y - this.knight.y;
       const dist = Math.hypot(dx, dy);
       if (dist > 110) continue;
-      const angle = Math.atan2(dy, dx);
-      const facing = facingRight ? 0 : Math.PI;
-      let diff = Math.abs(angle - facing);
+      const eAngle = Math.atan2(dy, dx);
+      let diff = Math.abs(eAngle - angle);
       if (diff > Math.PI) diff = 2 * Math.PI - diff;
       if (diff < 0.8) {
         const isCrit = Math.random() < (pd.critChance + equipCrit);
@@ -826,14 +912,13 @@ class DarkForestScene extends Phaser.Scene {
     pd.mana -= 12;
     this._qCooldown = 1200;
 
+    const angle = this._faceCursor();
     this.knight.play('hero_attack', true);
     this.knight.once('animationcomplete-hero_attack', () => { pd.isAttacking = false; });
     pd.isAttacking = true;
 
-    const facingRight = !this.knight.flipX;
-    const dir = facingRight ? 1 : -1;
-    const sx = this.knight.x + dir * 20;
-    const sy = this.knight.y - 10;
+    const sx = this.knight.x + Math.cos(angle) * 20;
+    const sy = this.knight.y + Math.sin(angle) * 20;
 
     // Create shard projectile
     const shard = this.add.graphics().setDepth(10000);
@@ -853,14 +938,15 @@ class DarkForestScene extends Phaser.Scene {
       callback: () => {
         if (hit) return;
         const step = speed * 0.016;
-        shard.x += dir * step;
+        shard.x += Math.cos(angle) * step;
+        shard.y += Math.sin(angle) * step;
         traveled += step;
 
         // Trail
         const trail = this.add.graphics().setDepth(9999);
         trail.fillStyle(0x4488ff, 0.3);
         trail.fillCircle(0, 0, 4);
-        trail.setPosition(shard.x - dir * 8, shard.y);
+        trail.setPosition(shard.x - Math.cos(angle) * 8, shard.y - Math.sin(angle) * 8);
         this.tweens.add({ targets: trail, alpha: 0, duration: 200, onComplete: () => trail.destroy() });
 
         // Hit check
@@ -871,14 +957,12 @@ class DarkForestScene extends Phaser.Scene {
             const dmg = Math.floor((pd.baseDmg + equipDmg) * 1.4 * (0.9 + Math.random() * 0.2));
             this._damageEnemy(e, dmg, false);
             hit = true;
-            // Freeze briefly
             e.setTint(0x88bbff);
             this.time.delayedCall(800, () => { if (!e.enemyData.isDead) e.clearTint(); });
             break;
           }
         }
         if (traveled >= maxDist || hit) {
-          // Burst
           const burst = this.add.graphics().setDepth(10000);
           burst.fillStyle(0x66bbff, 0.4);
           burst.fillCircle(shard.x, shard.y, 20);
@@ -898,12 +982,12 @@ class DarkForestScene extends Phaser.Scene {
     this._qCooldown = 800;
     pd.isAttacking = true;
 
+    const angle = this._faceCursor();
     this.knight.play('hero_attack', true);
     this.knight.once('animationcomplete-hero_attack', () => { pd.isAttacking = false; });
 
-    const facingRight = !this.knight.flipX;
-    const atkX = this.knight.x + (facingRight ? 50 : -50);
-    const atkY = this.knight.y;
+    const atkX = this.knight.x + Math.cos(angle) * 50;
+    const atkY = this.knight.y + Math.sin(angle) * 50;
     const equipDmg = pd._equipBonusDmg || 0;
     const equipCrit = pd._equipBonusCrit || 0;
 
@@ -922,15 +1006,16 @@ class DarkForestScene extends Phaser.Scene {
     doHit();
     this.time.delayedCall(150, doHit);
 
-    // Slash visual
+    // Slash visual toward cursor
+    const facingRight = Math.abs(angle) < Math.PI / 2;
     for (let i = 0; i < 2; i++) {
       const slash = this.add.graphics().setDepth(10000);
       slash.lineStyle(2, 0xdddddd, 0.7);
-      const ox = this.knight.x + (facingRight ? 20 : -20);
-      const oy = this.knight.y - 15 + i * 20;
+      const ox = this.knight.x + Math.cos(angle) * 20;
+      const oy = this.knight.y + Math.sin(angle) * 20 - 15 + i * 20;
       slash.beginPath();
       slash.moveTo(ox, oy);
-      slash.lineTo(ox + (facingRight ? 60 : -60), oy + (i === 0 ? -10 : 10));
+      slash.lineTo(ox + Math.cos(angle) * 60, oy + Math.sin(angle) * 60 + (i === 0 ? -10 : 10));
       slash.strokePath();
       this.tweens.add({ targets: slash, alpha: 0, duration: 250, delay: i * 100, onComplete: () => slash.destroy() });
     }
@@ -953,12 +1038,12 @@ class DarkForestScene extends Phaser.Scene {
     this._wCooldown = 3000;
     pd.isAttacking = true;
 
+    const angle = this._faceCursor();
     this.knight.play('hero_attack', true);
     this.knight.once('animationcomplete-hero_attack', () => { pd.isAttacking = false; });
 
-    const facingRight = !this.knight.flipX;
-    const bx = this.knight.x + (facingRight ? 45 : -45);
-    const by = this.knight.y;
+    const bx = this.knight.x + Math.cos(angle) * 45;
+    const by = this.knight.y + Math.sin(angle) * 45;
 
     // Impact flash
     const flash = this.add.graphics().setDepth(10000);
@@ -1497,6 +1582,7 @@ class DarkForestScene extends Phaser.Scene {
     if (!label.active) return;
     if (label.lootData.type === 'gold') {
       this.playerData.gold += label.lootData.amount;
+      if (this._audio) this._audio.play('sfx_gold');
     } else if (label.lootData.type === 'item' && this._addToBackpack) {
       this._addToBackpack(label.lootData.item);
     }
@@ -1551,7 +1637,19 @@ class DarkForestScene extends Phaser.Scene {
         }
         case 'chase': {
           const a = Math.atan2(py - e.y, px - e.x);
-          e.body.setVelocity(Math.cos(a) * ed.speed, Math.sin(a) * ed.speed);
+          // Simple obstacle avoidance: track if stuck
+          let moveAngle = a;
+          if (e._prevX !== undefined) {
+            const moved = Math.hypot(e.x - e._prevX, e.y - e._prevY);
+            if (moved < 1 && dist > ed.atkRange + 20) {
+              e._avoidAngle = ((e._avoidAngle || 0) + Math.PI / 4) % (Math.PI * 2);
+              moveAngle = a + (e._avoidAngle > Math.PI ? -Math.PI / 4 : Math.PI / 4);
+            } else {
+              e._avoidAngle = 0;
+            }
+          }
+          e._prevX = e.x; e._prevY = e.y;
+          e.body.setVelocity(Math.cos(moveAngle) * ed.speed, Math.sin(moveAngle) * ed.speed);
           e.setFlipX(px < e.x);
           if (dist < ed.atkRange) { ed.state = 'attack'; ed.atkTimer = 0; }
           else if (dist > ed.aggroRange * 1.5) ed.state = 'wander';
@@ -1569,9 +1667,12 @@ class DarkForestScene extends Phaser.Scene {
             const atkAnim = `${ed.animKey}_attack`;
             if (this.anims.exists(atkAnim)) e.play(atkAnim, true);
             if (dist < ed.atkRange + 30) {
+              // Mercy invulnerability check
+              if (this._mercyTimer > 0) continue;
               const equipDef = this.playerData._equipBonusDef || 0;
               const reducedDmg = Math.max(1, ed.dmg - Math.floor(equipDef * 0.3));
               this.playerData.hp = Math.max(0, this.playerData.hp - reducedDmg);
+              if (this._audio) this._audio.play('sfx_hurt');
               if (this.playerData.hp <= 0 && !this._isDead) {
                 this._isDead = true;
                 this.knight.body.setVelocity(0, 0);
@@ -1843,15 +1944,46 @@ class DarkForestScene extends Phaser.Scene {
 
     const pd = this.playerData;
 
-    /* --- Movement --- */
+    /* --- Movement (Diablo-style click-to-move) --- */
+    if (this._mercyTimer > 0) {
+      this._mercyTimer -= delta;
+      this.knight.setAlpha(Math.sin(this.time.now / 80) > 0 ? 1 : 0.3);
+      if (this._mercyTimer <= 0) this.knight.setAlpha(1);
+    }
     if (!pd.isAttacking && !pd.whirlwinding) {
-      const k = this.keys, c = this.cursors;
       let vx = 0, vy = 0;
-      if (k.A.isDown || c.left.isDown) vx = -1;
-      if (k.D.isDown || c.right.isDown) vx = 1;
-      if (k.W.isDown || c.up.isDown) vy = -1;
-      if (k.S.isDown || c.down.isDown) vy = 1;
-      if (vx && vy) { vx *= 0.707; vy *= 0.707; }
+      // Attack target: approach enemy then auto-attack
+      if (this._attackTarget) {
+        const ae = this._attackTarget;
+        if (ae.enemyData?.isDead || !ae.active) { this._attackTarget = null; }
+        else {
+          const dist = Math.hypot(ae.x - this.knight.x, ae.y - this.knight.y);
+          if (dist < 80) {
+            this._playerAttack();
+            if (!ae.enemyData.isDead) this._attackTarget = ae;
+            else this._attackTarget = null;
+          } else {
+            const a = Math.atan2(ae.y - this.knight.y, ae.x - this.knight.x);
+            vx = Math.cos(a); vy = Math.sin(a);
+          }
+        }
+      }
+      // Move to clicked point
+      else if (this._moveTarget) {
+        const dx = this._moveTarget.x - this.knight.x;
+        const dy = this._moveTarget.y - this.knight.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist < 8) { this._moveTarget = null; }
+        else { vx = dx / dist; vy = dy / dist; }
+      }
+      // WASD fallback
+      const k = this.keys, c = this.cursors;
+      if (k.A.isDown || c.left.isDown) { vx = -1; this._moveTarget = null; this._attackTarget = null; }
+      if (k.D.isDown || c.right.isDown) { vx = 1; this._moveTarget = null; this._attackTarget = null; }
+      if (k.W.isDown || c.up.isDown) { vy = -1; this._moveTarget = null; this._attackTarget = null; }
+      if (k.S.isDown || c.down.isDown) { vy = 1; this._moveTarget = null; this._attackTarget = null; }
+      const mag = Math.hypot(vx, vy);
+      if (mag > 0) { vx /= mag; vy /= mag; }
       this.knight.body.setVelocity(vx * PLAYER_SPEED, vy * PLAYER_SPEED);
       if (vx !== 0 || vy !== 0) {
         if (this.knight.anims.currentAnim?.key !== 'hero_run') this.knight.play('hero_run', true);
@@ -1861,14 +1993,15 @@ class DarkForestScene extends Phaser.Scene {
         if (this.knight.anims.currentAnim?.key !== 'hero_idle') this.knight.play('hero_idle', true);
       }
     } else if (pd.whirlwinding) {
-      const k = this.keys, c = this.cursors;
-      let vx = 0, vy = 0;
-      if (k.A.isDown || c.left.isDown) vx = -1;
-      if (k.D.isDown || c.right.isDown) vx = 1;
-      if (k.W.isDown || c.up.isDown) vy = -1;
-      if (k.S.isDown || c.down.isDown) vy = 1;
-      if (vx && vy) { vx *= 0.707; vy *= 0.707; }
-      this.knight.body.setVelocity(vx * PLAYER_SPEED * 0.5, vy * PLAYER_SPEED * 0.5);
+      // During whirlwind, move toward cursor
+      const ptr = this.input.activePointer;
+      const dx = ptr.worldX - this.knight.x, dy = ptr.worldY - this.knight.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist > 20) {
+        this.knight.body.setVelocity((dx / dist) * PLAYER_SPEED * 0.5, (dy / dist) * PLAYER_SPEED * 0.5);
+      } else {
+        this.knight.body.setVelocity(0, 0);
+      }
     }
 
     /* --- Cooldowns & regen --- */
@@ -1993,7 +2126,10 @@ class ForsakenCryptScene extends DarkForestScene {
   }
 
   create() {
+   try {
+    console.log('[Crypt] create() START');
     this._currentZone = 'crypt';
+    this._buildingPositions = [];
     this.physics.world.setBounds(0, 0, CRYPT_W, CRYPT_H);
 
     /* --- Dungeon floor texture --- */
@@ -2011,6 +2147,7 @@ class ForsakenCryptScene extends DarkForestScene {
       ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, 400); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(400, i); ctx.stroke();
     }
+    if (this.textures.exists('crypt_floor')) this.textures.remove('crypt_floor');
     const tex = this.textures.createCanvas('crypt_floor', 400, 400);
     tex.context.drawImage(canvas, 0, 0); tex.refresh();
     this.add.image(CRYPT_W / 2, CRYPT_H / 2, 'crypt_floor')
@@ -2020,7 +2157,10 @@ class ForsakenCryptScene extends DarkForestScene {
     this.staticObjects = this.physics.add.staticGroup();
     this.decorations = [];
 
-    /* --- Player --- */
+    /* --- Player (center of crypt) --- */
+    if (!this._savedData) this._savedData = {};
+    this._savedData.x = CRYPT_W / 2;
+    this._savedData.y = CRYPT_H - 250;
     this._createPlayer();
 
     /* --- Enemies --- */
@@ -2057,12 +2197,28 @@ class ForsakenCryptScene extends DarkForestScene {
     cam.setBackgroundColor('#050508');
     cam.fadeIn(1000);
 
-    /* --- Input --- */
+    /* --- Input (Diablo-style click-to-move) --- */
     this.keys = this.input.keyboard.addKeys('W,A,S,D,E,F,Q,R,SPACE');
     this.cursors = this.input.keyboard.createCursorKeys();
+    this._moveTarget = null;
+    this._attackTarget = null;
+    this._mercyTimer = 0;
     this.input.on('pointerdown', (pointer) => {
-      if (pointer.leftButtonDown()) this._playerAttack();
-      else if (pointer.rightButtonDown()) this._updateWSkill();
+      if (pointer.leftButtonDown()) {
+        const wx = pointer.worldX, wy = pointer.worldY;
+        let clickedEnemy = null;
+        for (const e of this.enemies) {
+          if (e.enemyData.isDead) continue;
+          if (Math.hypot(e.x - wx, e.y - wy) < 50 * e.scaleX) { clickedEnemy = e; break; }
+        }
+        if (clickedEnemy) {
+          this._attackTarget = clickedEnemy;
+          this._moveTarget = null;
+        } else {
+          this._moveTarget = { x: wx, y: wy };
+          this._attackTarget = null;
+        }
+      } else if (pointer.rightButtonDown()) this._updateWSkill();
     });
     try { this.input.mouse.disableContextMenu(); } catch (_) {
       try { this.game.input.mouse.disableContextMenu(); } catch (_2) { /* no mouse manager */ }
@@ -2090,6 +2246,7 @@ class ForsakenCryptScene extends DarkForestScene {
     }
     this._isDead = false;
     this._transitioning = false;
+    this._mercyTimer = 0;
 
     /* --- Timers --- */
     this._atkCooldown = 0;
@@ -2105,7 +2262,7 @@ class ForsakenCryptScene extends DarkForestScene {
     this._rCooldown = 0;
     this._furyActive = false;
 
-    /* --- Atmosphere (dark purple vignette) --- */
+    /* --- Atmosphere (dark purple vignette + torches) --- */
     const vig = this.add.graphics(); vig.setScrollFactor(0).setDepth(9998);
     const gw = this.cameras.main.width, gh = this.cameras.main.height;
     for (let i = 0; i < 25; i++) {
@@ -2113,9 +2270,44 @@ class ForsakenCryptScene extends DarkForestScene {
       vig.strokeRect(i * 8, i * 8, gw - i * 16, gh - i * 16);
     }
 
+    // Darker camera tint for crypt
+    this.cameras.main.setPostPipeline && this.cameras.main.setBackgroundColor('#030308');
+
+    // Scattered torches
+    const torchPositions = [
+      { x: 200, y: 200 }, { x: CRYPT_W - 200, y: 200 },
+      { x: 200, y: CRYPT_H - 200 }, { x: CRYPT_W / 2, y: 400 },
+      { x: CRYPT_W / 2 - 300, y: CRYPT_H / 2 }, { x: CRYPT_W / 2 + 300, y: CRYPT_H / 2 },
+      { x: 500, y: CRYPT_H - 400 }, { x: CRYPT_W - 500, y: CRYPT_H - 400 },
+    ];
+    for (const tp of torchPositions) {
+      // Torch base
+      const torch = this.add.graphics().setDepth(tp.y - 1);
+      torch.fillStyle(0x554422, 1);
+      torch.fillRect(tp.x - 3, tp.y - 12, 6, 12);
+      // Flame glow
+      const flame = this.add.graphics().setDepth(tp.y);
+      flame.fillStyle(0xff6600, 0.3);
+      flame.fillCircle(tp.x, tp.y - 16, 20);
+      flame.fillStyle(0xffaa00, 0.5);
+      flame.fillCircle(tp.x, tp.y - 16, 8);
+      this.tweens.add({
+        targets: flame, alpha: 0.5, duration: 300 + Math.random() * 400,
+        yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
+      });
+      // Ground light circle
+      const glow = this.add.graphics().setDepth(-999);
+      glow.fillStyle(0xff8800, 0.06);
+      glow.fillCircle(tp.x, tp.y, 80);
+    }
+
     this._syncState();
     if (this._onZoneChange) this._onZoneChange('crypt');
-    this._createMinimap();
+    try { this._createMinimap(); } catch(e) { console.error('[Crypt] minimap FAIL:', e.message); }
+    console.log('[Crypt] create() COMPLETE');
+   } catch (fatalErr) {
+    console.error('[Crypt] create() FATAL:', fatalErr);
+   }
   }
 
   _spawnCryptEnemies() {
@@ -2453,8 +2645,8 @@ export default function GameMap({ playerState, setPlayerState, sceneRef, addToBa
   }, []);
 
   return (
-    <div className="relative w-full h-full">
-      <div ref={containerRef} className="w-full h-full" />
+    <div className="relative w-full h-full" style={{ zIndex: 1 }}>
+      <div ref={containerRef} className="w-full h-full" style={{ position: 'relative', zIndex: 1 }} />
       <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 10 }}>
         <HUD playerState={playerState} classId={chosenClass?.id} inventoryOpen={inventoryOpen} onToggleInventory={() => setInventoryOpen(prev => !prev)} />
       </div>

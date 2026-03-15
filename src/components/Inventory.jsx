@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 
 /* ═══════════════════════════════════════════════════════════════
    CONSTANTS & DATA
@@ -70,18 +70,18 @@ const FONT_MONO = "'Fira Code', 'Consolas', monospace";
 
 const styles = {
   overlay: {
-    position: 'fixed', inset: 0, zIndex: 500,
-    background: 'rgba(0,0,0,0.82)',
-    backdropFilter: 'blur(4px)',
+    position: 'fixed', inset: 0, zIndex: 9000,
+    background: 'rgba(0,0,0,0.55)',
+    backdropFilter: 'blur(6px)',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     animation: 'invFadeIn 0.2s ease-out',
   },
   panel: {
     width: 920, maxWidth: '96vw', height: 620, maxHeight: '90vh',
-    background: `linear-gradient(180deg, #14110e 0%, #0c0a08 40%, #080604 100%)`,
-    border: '2px solid #2a1a08',
+    background: `linear-gradient(180deg, #4a3c28 0%, #3a2e1e 40%, #2c2218 100%)`,
+    border: '2px solid #8a6a38',
     borderRadius: 6,
-    boxShadow: '0 0 60px rgba(0,0,0,0.9), inset 0 0 40px rgba(0,0,0,0.5), 0 0 20px rgba(80,50,10,0.15)',
+    boxShadow: '0 0 60px rgba(0,0,0,0.9), inset 0 0 40px rgba(60,45,20,0.4), 0 0 30px rgba(100,70,20,0.3)',
     display: 'flex', flexDirection: 'column',
     overflow: 'hidden',
     imageRendering: 'auto',
@@ -89,20 +89,20 @@ const styles = {
   header: {
     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
     padding: '10px 18px',
-    borderBottom: '1px solid #2a1a08',
-    background: 'linear-gradient(90deg, rgba(20,16,12,0.9), rgba(40,28,12,0.4), rgba(20,16,12,0.9))',
+    borderBottom: '1px solid #6a4a20',
+    background: 'linear-gradient(90deg, rgba(50,40,24,0.95), rgba(80,60,30,0.7), rgba(50,40,24,0.95))',
   },
   title: {
-    fontFamily: FONT, fontSize: 18, fontWeight: 700,
-    color: '#c9a84c',
+    fontFamily: FONT, fontSize: 20, fontWeight: 700,
+    color: '#e8c860',
     letterSpacing: 2,
-    textShadow: '0 0 8px rgba(200,160,60,0.3)',
+    textShadow: '0 0 10px rgba(220,180,60,0.5)',
     textTransform: 'uppercase',
   },
   closeBtn: {
-    width: 32, height: 32, border: '1px solid #3a2a10',
-    background: 'rgba(20,14,8,0.9)', borderRadius: 4,
-    color: '#aa7744', fontSize: 18, cursor: 'pointer',
+    width: 32, height: 32, border: '1px solid #6a5030',
+    background: 'rgba(60,44,28,0.9)', borderRadius: 4,
+    color: '#dda855', fontSize: 18, cursor: 'pointer',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     transition: 'all 0.15s',
   },
@@ -113,16 +113,17 @@ const styles = {
     display: 'flex', flexDirection: 'column', gap: 6,
   },
   sectionLabel: {
-    fontFamily: FONT, fontSize: 10, fontWeight: 600,
-    color: '#7a6a44', letterSpacing: 2, textTransform: 'uppercase',
-    padding: '4px 0 2px', borderBottom: '1px solid rgba(42,26,8,0.5)',
+    fontFamily: FONT, fontSize: 11, fontWeight: 700,
+    color: '#c9a84c', letterSpacing: 2, textTransform: 'uppercase',
+    padding: '4px 0 2px', borderBottom: '1px solid rgba(100,70,30,0.6)',
     marginBottom: 4,
+    textShadow: '0 0 4px rgba(200,160,60,0.2)',
   },
   footer: {
     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
     padding: '8px 18px',
-    borderTop: '1px solid #2a1a08',
-    background: 'rgba(10,8,5,0.7)',
+    borderTop: '1px solid #6a4a20',
+    background: 'rgba(40,32,20,0.85)',
   },
 };
 
@@ -136,36 +137,40 @@ function StatRow({ label, value, bonus, color }) {
     <div style={{
       display: 'flex', justifyContent: 'space-between', alignItems: 'center',
       padding: '3px 6px', borderRadius: 3,
-      background: 'rgba(255,255,255,0.02)',
+      background: 'rgba(255,255,255,0.06)',
     }}>
-      <span style={{ fontFamily: FONT, fontSize: 11, color: '#8a7a5e' }}>{label}</span>
-      <span style={{ fontFamily: FONT_MONO, fontSize: 12, color: color || '#d4c8a8' }}>
+      <span style={{ fontFamily: FONT, fontSize: 12, color: '#c0b090', fontWeight: 600 }}>{label}</span>
+      <span style={{ fontFamily: FONT_MONO, fontSize: 13, color: color || '#e8dcc0', fontWeight: 700 }}>
         {value}
-        {bonus > 0 && <span style={{ color: '#4d4', fontSize: 10, marginLeft: 3 }}>+{bonus}</span>}
+        {bonus > 0 && <span style={{ color: '#6e6', fontSize: 11, marginLeft: 3 }}>+{bonus}</span>}
       </span>
     </div>
   );
 }
 
 /* ── Equipment Slot ────────────────────────────────────────── */
-function EquipSlot({ slotKey, item, onRightClick, onHover, onLeave, isHighlight }) {
+function EquipSlot({ slotKey, item, onRightClick, onHover, onLeave, isHighlight, onDragStart, onDragOver, onDrop }) {
   const rarity = item?.rarity || 'common';
   return (
     <div
+      draggable={!!item}
+      onDragStart={(e) => { if (item) onDragStart(e, { type: 'equip', slot: slotKey }, item); }}
+      onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
+      onDrop={(e) => { e.preventDefault(); onDrop(e, { type: 'equip', slot: slotKey }); }}
       onContextMenu={(e) => { e.preventDefault(); if (item) onRightClick(slotKey); }}
       onMouseEnter={() => item && onHover(item, 'equip')}
       onMouseLeave={onLeave}
       style={{
         width: 52, height: 52,
         background: item
-          ? `linear-gradient(135deg, ${RARITY_BG[rarity]}, rgba(10,8,5,0.9))`
-          : 'rgba(10,8,5,0.7)',
-        border: `2px solid ${item ? RARITY_COLORS[rarity] + '66' : isHighlight ? '#5a4a2a' : '#1e160c'}`,
+          ? `linear-gradient(135deg, ${RARITY_BG[rarity]}, rgba(30,24,16,0.9))`
+          : 'rgba(30,24,16,0.7)',
+        border: `2px solid ${item ? RARITY_COLORS[rarity] + '88' : isHighlight ? '#8a7a4a' : '#4a3a20'}`,
         borderRadius: 4,
         display: 'flex', flexDirection: 'column',
         alignItems: 'center', justifyContent: 'center',
         cursor: item ? 'pointer' : 'default',
-        boxShadow: item ? RARITY_GLOW[rarity] : 'inset 0 0 10px rgba(0,0,0,0.6)',
+        boxShadow: item ? RARITY_GLOW[rarity] : 'inset 0 0 10px rgba(0,0,0,0.4)',
         transition: 'border-color 0.15s, box-shadow 0.15s',
         position: 'relative',
       }}
@@ -174,16 +179,17 @@ function EquipSlot({ slotKey, item, onRightClick, onHover, onLeave, isHighlight 
         <>
           <span style={{ fontSize: 20, lineHeight: 1 }}>{SLOT_ICONS[slotKey]}</span>
           <span style={{
-            fontSize: 7, fontFamily: FONT, color: RARITY_COLORS[rarity],
+            fontSize: 8, fontFamily: FONT, color: RARITY_COLORS[rarity],
             textAlign: 'center', lineHeight: 1, marginTop: 2,
             maxWidth: 46, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            fontWeight: 600,
           }}>{item.name}</span>
         </>
       ) : (
         <>
-          <span style={{ fontSize: 16, opacity: 0.2 }}>{SLOT_ICONS[slotKey]}</span>
+          <span style={{ fontSize: 16, opacity: 0.4 }}>{SLOT_ICONS[slotKey]}</span>
           <span style={{
-            fontSize: 7, color: '#3a3020', fontFamily: FONT,
+            fontSize: 8, color: '#6a5a3a', fontFamily: FONT,
             textAlign: 'center', marginTop: 1,
           }}>{SLOT_NAMES[slotKey]}</span>
         </>
@@ -193,24 +199,28 @@ function EquipSlot({ slotKey, item, onRightClick, onHover, onLeave, isHighlight 
 }
 
 /* ── Backpack Slot ─────────────────────────────────────────── */
-function BackpackSlot({ item, index, onRightClick, onHover, onLeave }) {
+function BackpackSlot({ item, index, onRightClick, onHover, onLeave, onDragStart, onDragOver, onDrop }) {
   const rarity = item?.rarity || 'common';
   return (
     <div
+      draggable={!!item}
+      onDragStart={(e) => { if (item) onDragStart(e, { type: 'backpack', index }, item); }}
+      onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
+      onDrop={(e) => { e.preventDefault(); onDrop(e, { type: 'backpack', index }); }}
       onContextMenu={(e) => { e.preventDefault(); if (item) onRightClick(index); }}
       onMouseEnter={() => item && onHover(item, 'backpack')}
       onMouseLeave={onLeave}
       style={{
         width: 48, height: 48,
         background: item
-          ? `linear-gradient(135deg, ${RARITY_BG[rarity]}, rgba(8,6,4,0.95))`
-          : 'rgba(8,6,4,0.8)',
-        border: `1px solid ${item ? RARITY_COLORS[rarity] + '44' : '#181208'}`,
+          ? `linear-gradient(135deg, ${RARITY_BG[rarity]}, rgba(24,18,12,0.95))`
+          : 'rgba(24,18,12,0.8)',
+        border: `1px solid ${item ? RARITY_COLORS[rarity] + '66' : '#3a2a14'}`,
         borderRadius: 3,
         display: 'flex', flexDirection: 'column',
         alignItems: 'center', justifyContent: 'center',
         cursor: item ? 'pointer' : 'default',
-        boxShadow: item ? RARITY_GLOW[rarity] : 'inset 0 0 8px rgba(0,0,0,0.5)',
+        boxShadow: item ? RARITY_GLOW[rarity] : 'inset 0 0 8px rgba(0,0,0,0.3)',
         transition: 'all 0.12s',
       }}
     >
@@ -220,9 +230,10 @@ function BackpackSlot({ item, index, onRightClick, onHover, onLeave }) {
             {item.type === 'weapon' ? '⚔️' : item.type === 'armor' ? '🛡️' : item.type === 'potion' ? '🧪' : item.type === 'ring' ? '💍' : item.type === 'amulet' ? '📿' : '❓'}
           </span>
           <span style={{
-            fontSize: 7, fontFamily: FONT, color: RARITY_COLORS[rarity],
+            fontSize: 8, fontFamily: FONT, color: RARITY_COLORS[rarity],
             textAlign: 'center', lineHeight: 1, marginTop: 1,
             maxWidth: 42, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            fontWeight: 600,
           }}>{item.name}</span>
         </>
       )}
@@ -235,7 +246,7 @@ function ItemTooltip({ item }) {
   if (!item) return (
     <div style={{
       flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-      color: '#3a3020', fontFamily: FONT, fontSize: 11, fontStyle: 'italic',
+      color: '#7a6a4a', fontFamily: FONT, fontSize: 12, fontStyle: 'italic',
     }}>
       Hover over an item to inspect
     </div>
@@ -258,10 +269,10 @@ function ItemTooltip({ item }) {
 
   return (
     <div style={{
-      background: 'linear-gradient(180deg, rgba(16,12,8,0.98), rgba(8,6,4,0.98))',
-      border: `1px solid ${RARITY_COLORS[rarity]}55`,
+      background: 'linear-gradient(180deg, rgba(40,32,20,0.98), rgba(24,18,12,0.98))',
+      border: `1px solid ${RARITY_COLORS[rarity]}77`,
       borderRadius: 4, padding: '10px 12px',
-      boxShadow: `${RARITY_GLOW[rarity]}, inset 0 0 20px rgba(0,0,0,0.5)`,
+      boxShadow: `${RARITY_GLOW[rarity]}, inset 0 0 20px rgba(0,0,0,0.3)`,
     }}>
       {/* Name */}
       <div style={{
@@ -273,10 +284,10 @@ function ItemTooltip({ item }) {
 
       {/* Type / Rarity */}
       <div style={{
-        fontFamily: FONT, fontSize: 9, color: '#6a5a3a',
+        fontFamily: FONT, fontSize: 10, color: '#9a8a5a',
         textTransform: 'uppercase', letterSpacing: 1,
         paddingBottom: 6, marginBottom: 6,
-        borderBottom: '1px solid rgba(42,26,8,0.5)',
+        borderBottom: '1px solid rgba(100,70,30,0.5)',
       }}>{rarityLabel} {typeLabel}</div>
 
       {/* Stats */}
@@ -285,8 +296,8 @@ function ItemTooltip({ item }) {
           display: 'flex', justifyContent: 'space-between',
           padding: '2px 0',
         }}>
-          <span style={{ fontFamily: FONT, fontSize: 11, color: '#8a7a5e' }}>{l.label}</span>
-          <span style={{ fontFamily: FONT_MONO, fontSize: 11, color: l.color, fontWeight: 600 }}>{l.value}</span>
+          <span style={{ fontFamily: FONT, fontSize: 12, color: '#b0a080' }}>{l.label}</span>
+          <span style={{ fontFamily: FONT_MONO, fontSize: 12, color: l.color, fontWeight: 700 }}>{l.value}</span>
         </div>
       ))}
 
@@ -294,16 +305,16 @@ function ItemTooltip({ item }) {
       {item.type !== 'potion' && (
         <div style={{
           marginTop: 8, paddingTop: 6,
-          borderTop: '1px solid rgba(42,26,8,0.3)',
-          fontFamily: FONT, fontSize: 9, color: '#4a3a24',
+          borderTop: '1px solid rgba(100,70,30,0.3)',
+          fontFamily: FONT, fontSize: 10, color: '#7a6a44',
           fontStyle: 'italic',
         }}>Right-click to {item._source === 'equip' ? 'unequip' : 'equip'}</div>
       )}
       {item.type === 'potion' && (
         <div style={{
           marginTop: 8, paddingTop: 6,
-          borderTop: '1px solid rgba(42,26,8,0.3)',
-          fontFamily: FONT, fontSize: 9, color: '#4a3a24',
+          borderTop: '1px solid rgba(100,70,30,0.3)',
+          fontFamily: FONT, fontSize: 10, color: '#7a6a44',
           fontStyle: 'italic',
         }}>Right-click to consume</div>
       )}
@@ -314,10 +325,16 @@ function ItemTooltip({ item }) {
 /* ═══════════════════════════════════════════════════════════════
    MAIN INVENTORY COMPONENT
    ═══════════════════════════════════════════════════════════════ */
-export default function Inventory({ isOpen, onClose, backpack, equipment, playerStats, onEquipItem, onUnequipItem, onConsumePotion, gold }) {
+export default function Inventory({ isOpen, onClose, backpack, equipment, playerStats, onEquipItem, onUnequipItem, onConsumePotion, gold, classId, onSwapBackpack }) {
   const [hoveredItem, setHoveredItem] = useState(null);
+  const [dragSource, setDragSource] = useState(null);
 
   if (!isOpen) return null;
+
+  /* Dynamic paperdoll based on class */
+  const CLASS_FOLDERS = { warrior: 'Knight', mage: 'Mage', rogue: 'Rogue' };
+  const heroFolder = CLASS_FOLDERS[classId] || 'Knight';
+  const heroSprite = `assets/sprites/craftpix-891165-assassin-mage-viking-free-pixel-art-game-heroes/PNG/${heroFolder}/Idle/idle1.png`;
 
   /* Compute bonus stats from equipment */
   const equipBonus = useMemo(() => {
@@ -339,6 +356,27 @@ export default function Inventory({ isOpen, onClose, backpack, equipment, player
     setHoveredItem({ ...item, _source: source });
   };
   const handleItemLeave = () => setHoveredItem(null);
+
+  /* Drag and drop handlers */
+  const handleDragStart = (e, source, item) => {
+    setDragSource(source);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', '');
+  };
+
+  const handleDrop = (e, target) => {
+    if (!dragSource) return;
+    const src = dragSource;
+    if (src.type === 'backpack' && target.type === 'equip') {
+      onEquipItem(src.index);
+    } else if (src.type === 'equip' && target.type === 'backpack') {
+      onUnequipItem(src.slot);
+    } else if (src.type === 'backpack' && target.type === 'backpack' && src.index !== target.index) {
+      if (onSwapBackpack) onSwapBackpack(src.index, target.index);
+    }
+    setDragSource(null);
+    setHoveredItem(null);
+  };
 
   const handleBackpackRightClick = (index) => {
     const item = backpack[index];
@@ -373,7 +411,7 @@ export default function Inventory({ isOpen, onClose, backpack, equipment, player
         <div style={styles.header}>
           <div style={styles.title}>Inventory</div>
           <div style={{
-            fontFamily: FONT_MONO, fontSize: 10, color: '#5a4a2a',
+            fontFamily: FONT_MONO, fontSize: 11, color: '#8a7a5a',
             letterSpacing: 1,
           }}>[I] or [ESC] to close</div>
           <div
@@ -419,7 +457,7 @@ export default function Inventory({ isOpen, onClose, backpack, equipment, player
             {/* Dark ornamental background */}
             <div style={{
               position: 'absolute', inset: 0,
-              background: 'radial-gradient(ellipse at center, rgba(30,22,12,0.4) 0%, transparent 70%)',
+              background: 'radial-gradient(ellipse at center, rgba(50,40,24,0.5) 0%, transparent 70%)',
               pointerEvents: 'none',
             }} />
 
@@ -441,11 +479,11 @@ export default function Inventory({ isOpen, onClose, backpack, equipment, player
             }}>
               {/* Head */}
               <div style={{ gridArea: 'head' }}>
-                <EquipSlot slotKey="head" item={equipment.head} onRightClick={handleEquipRightClick} onHover={handleItemHover} onLeave={handleItemLeave} isHighlight={highlightSlots.includes('head')} />
+                <EquipSlot slotKey="head" item={equipment.head} onRightClick={handleEquipRightClick} onHover={handleItemHover} onLeave={handleItemLeave} isHighlight={highlightSlots.includes('head')} onDragStart={handleDragStart} onDragOver={() => {}} onDrop={handleDrop} />
               </div>
               {/* Neck */}
               <div style={{ gridArea: 'neck' }}>
-                <EquipSlot slotKey="neck" item={equipment.neck} onRightClick={handleEquipRightClick} onHover={handleItemHover} onLeave={handleItemLeave} isHighlight={highlightSlots.includes('neck')} />
+                <EquipSlot slotKey="neck" item={equipment.neck} onRightClick={handleEquipRightClick} onHover={handleItemHover} onLeave={handleItemLeave} isHighlight={highlightSlots.includes('neck')} onDragStart={handleDragStart} onDragOver={() => {}} onDrop={handleDrop} />
               </div>
               {/* Torso — spans 2 rows visually, holds the hero sprite */}
               <div style={{
@@ -457,15 +495,15 @@ export default function Inventory({ isOpen, onClose, backpack, equipment, player
                 {/* Hero frame */}
                 <div style={{
                   width: 100, height: 110,
-                  background: 'rgba(10,8,5,0.6)',
-                  border: '1px solid #2a1a08',
+                  background: 'rgba(30,24,16,0.7)',
+                  border: '1px solid #4a3a20',
                   borderRadius: 4,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   boxShadow: 'inset 0 0 20px rgba(0,0,0,0.5), 0 0 10px rgba(0,0,0,0.3)',
                   overflow: 'hidden',
                 }}>
                   <img
-                    src="assets/sprites/craftpix-891165-assassin-mage-viking-free-pixel-art-game-heroes/PNG/Knight/Idle/idle1.png"
+                    src={heroSprite}
                     alt="Hero"
                     style={{
                       width: 90, height: 90,
@@ -476,36 +514,36 @@ export default function Inventory({ isOpen, onClose, backpack, equipment, player
                 </div>
                 {/* Equip slot overlay for torso */}
                 <div style={{ position: 'absolute', bottom: -6, right: -6 }}>
-                  <EquipSlot slotKey="torso" item={equipment.torso} onRightClick={handleEquipRightClick} onHover={handleItemHover} onLeave={handleItemLeave} isHighlight={highlightSlots.includes('torso')} />
+                  <EquipSlot slotKey="torso" item={equipment.torso} onRightClick={handleEquipRightClick} onHover={handleItemHover} onLeave={handleItemLeave} isHighlight={highlightSlots.includes('torso')} onDragStart={handleDragStart} onDragOver={() => {}} onDrop={handleDrop} />
                 </div>
               </div>
               {/* Off-hand */}
               <div style={{ gridArea: 'offHand' }}>
-                <EquipSlot slotKey="offHand" item={equipment.offHand} onRightClick={handleEquipRightClick} onHover={handleItemHover} onLeave={handleItemLeave} isHighlight={highlightSlots.includes('offHand')} />
+                <EquipSlot slotKey="offHand" item={equipment.offHand} onRightClick={handleEquipRightClick} onHover={handleItemHover} onLeave={handleItemLeave} isHighlight={highlightSlots.includes('offHand')} onDragStart={handleDragStart} onDragOver={() => {}} onDrop={handleDrop} />
               </div>
               {/* Main Hand */}
               <div style={{ gridArea: 'mainHand' }}>
-                <EquipSlot slotKey="mainHand" item={equipment.mainHand} onRightClick={handleEquipRightClick} onHover={handleItemHover} onLeave={handleItemLeave} isHighlight={highlightSlots.includes('mainHand')} />
+                <EquipSlot slotKey="mainHand" item={equipment.mainHand} onRightClick={handleEquipRightClick} onHover={handleItemHover} onLeave={handleItemLeave} isHighlight={highlightSlots.includes('mainHand')} onDragStart={handleDragStart} onDragOver={() => {}} onDrop={handleDrop} />
               </div>
               {/* Ring 1 */}
               <div style={{ gridArea: 'ring1' }}>
-                <EquipSlot slotKey="ring1" item={equipment.ring1} onRightClick={handleEquipRightClick} onHover={handleItemHover} onLeave={handleItemLeave} isHighlight={highlightSlots.includes('ring1')} />
+                <EquipSlot slotKey="ring1" item={equipment.ring1} onRightClick={handleEquipRightClick} onHover={handleItemHover} onLeave={handleItemLeave} isHighlight={highlightSlots.includes('ring1')} onDragStart={handleDragStart} onDragOver={() => {}} onDrop={handleDrop} />
               </div>
               {/* Hands */}
               <div style={{ gridArea: 'hands' }}>
-                <EquipSlot slotKey="hands" item={equipment.hands} onRightClick={handleEquipRightClick} onHover={handleItemHover} onLeave={handleItemLeave} isHighlight={highlightSlots.includes('hands')} />
+                <EquipSlot slotKey="hands" item={equipment.hands} onRightClick={handleEquipRightClick} onHover={handleItemHover} onLeave={handleItemLeave} isHighlight={highlightSlots.includes('hands')} onDragStart={handleDragStart} onDragOver={() => {}} onDrop={handleDrop} />
               </div>
               {/* Legs */}
               <div style={{ gridArea: 'legs' }}>
-                <EquipSlot slotKey="legs" item={equipment.legs} onRightClick={handleEquipRightClick} onHover={handleItemHover} onLeave={handleItemLeave} isHighlight={highlightSlots.includes('legs')} />
+                <EquipSlot slotKey="legs" item={equipment.legs} onRightClick={handleEquipRightClick} onHover={handleItemHover} onLeave={handleItemLeave} isHighlight={highlightSlots.includes('legs')} onDragStart={handleDragStart} onDragOver={() => {}} onDrop={handleDrop} />
               </div>
               {/* Ring 2 */}
               <div style={{ gridArea: 'ring2' }}>
-                <EquipSlot slotKey="ring2" item={equipment.ring2} onRightClick={handleEquipRightClick} onHover={handleItemHover} onLeave={handleItemLeave} isHighlight={highlightSlots.includes('ring2')} />
+                <EquipSlot slotKey="ring2" item={equipment.ring2} onRightClick={handleEquipRightClick} onHover={handleItemHover} onLeave={handleItemLeave} isHighlight={highlightSlots.includes('ring2')} onDragStart={handleDragStart} onDragOver={() => {}} onDrop={handleDrop} />
               </div>
               {/* Feet */}
               <div style={{ gridArea: 'feet' }}>
-                <EquipSlot slotKey="feet" item={equipment.feet} onRightClick={handleEquipRightClick} onHover={handleItemHover} onLeave={handleItemLeave} isHighlight={highlightSlots.includes('feet')} />
+                <EquipSlot slotKey="feet" item={equipment.feet} onRightClick={handleEquipRightClick} onHover={handleItemHover} onLeave={handleItemLeave} isHighlight={highlightSlots.includes('feet')} onDragStart={handleDragStart} onDragOver={() => {}} onDrop={handleDrop} />
               </div>
             </div>
           </div>
@@ -521,8 +559,8 @@ export default function Inventory({ isOpen, onClose, backpack, equipment, player
               gap: 3,
               justifyContent: 'center',
               padding: 6,
-              background: 'rgba(6,4,2,0.5)',
-              border: '1px solid #1a1208',
+              background: 'rgba(30,24,14,0.7)',
+              border: '1px solid #4a3a1c',
               borderRadius: 4,
             }}>
               {Array.from({ length: totalSlots }, (_, i) => (
@@ -533,6 +571,9 @@ export default function Inventory({ isOpen, onClose, backpack, equipment, player
                   onRightClick={handleBackpackRightClick}
                   onHover={handleItemHover}
                   onLeave={handleItemLeave}
+                  onDragStart={handleDragStart}
+                  onDragOver={() => {}}
+                  onDrop={handleDrop}
                 />
               ))}
             </div>
@@ -562,7 +603,7 @@ export default function Inventory({ isOpen, onClose, backpack, equipment, player
             }}>{gold?.toLocaleString() || 0}</span>
           </div>
           <div style={{
-            fontFamily: FONT, fontSize: 9, color: '#3a3020',
+            fontFamily: FONT, fontSize: 10, color: '#6a5a3a',
             letterSpacing: 1,
           }}>
             {backpack.filter(Boolean).length} / {totalSlots} slots used
