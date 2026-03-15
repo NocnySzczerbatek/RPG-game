@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { CITIES } from '../data/WorldData';
 
 const FONT = "'Fira Code', 'Consolas', monospace";
 
@@ -7,6 +8,7 @@ const HELP_TEXT = [
   '/gold [ilość]    — dodaj złoto',
   '/god             — tryb boga (nieśmiertelność + nieskończona mana)',
   '/tp [x] [y]     — teleportuj na współrzędne',
+  '/tp house [city] — teleportuj do domu w mieście',
   '/level [n]       — ustaw poziom',
   '/skillpoints [n] — dodaj punkty umiejętności',
   '/clear           — wyczyść konsolę',
@@ -100,9 +102,27 @@ export default function AdminPanel({
         break;
 
       case '/tp': {
+        if (parts[1] === 'house') {
+          const cityId = (parts[2] || '').toLowerCase();
+          const scene = sceneRef?.current;
+          if (!scene?.knight) { pushLog('[BŁĄD] Brak gracza.'); break; }
+          const houses = scene._enterableHouses || [];
+          let target = null;
+          if (cityId) {
+            target = houses.find(h => h.city && h.city.toLowerCase().includes(cityId));
+            if (!target) { pushLog(`[BŁĄD] Nie znaleziono domu w mieście: ${cityId}. Dostępne: ${[...new Set(houses.map(h => h.city))].join(', ')}`); break; }
+          } else {
+            target = houses[0];
+            if (!target) { pushLog('[BŁĄD] Brak domów na mapie.'); break; }
+          }
+          scene.knight.setPosition(target.x, target.y);
+          scene.knight.body.setVelocity(0, 0);
+          pushLog(`[OK] Teleportowano do domu w ${target.city} (${Math.round(target.x)}, ${Math.round(target.y)}) — ${target.roomName}`);
+          break;
+        }
         const x = parseInt(parts[1], 10);
         const y = parseInt(parts[2], 10);
-        if (isNaN(x) || isNaN(y)) { pushLog('[BŁĄD] Użyj: /tp [x] [y]'); break; }
+        if (isNaN(x) || isNaN(y)) { pushLog('[BŁĄD] Użyj: /tp [x] [y] lub /tp house [miasto]'); break; }
         const scene = sceneRef?.current;
         if (scene?.knight) {
           scene.knight.setPosition(x, y);

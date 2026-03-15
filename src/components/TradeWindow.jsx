@@ -21,7 +21,7 @@ export function getItemValue(item) {
 /* ═══════════════════════════════════════════════════════════════
    TRADE WINDOW
    ═══════════════════════════════════════════════════════════════ */
-export default function TradeWindow({ isOpen, onClose, shopStock, backpack, gold, onBuy, onSell }) {
+export default function TradeWindow({ isOpen, onClose, shopStock, backpack, gold, onBuy, onSell, npcName }) {
   if (!isOpen) return null;
 
   return (
@@ -46,8 +46,8 @@ export default function TradeWindow({ isOpen, onClose, shopStock, backpack, gold
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <div>
-            <h2 style={{ margin: 0, color: '#c8a96e', fontSize: 22 }}>⚒ Blacksmith</h2>
-            <p style={{ margin: '4px 0 0', fontSize: 12, color: '#887755' }}>Buy wares or sell your loot</p>
+            <h2 style={{ margin: 0, color: '#c8a96e', fontSize: 22 }}>⚒ {npcName || 'Handlarz'}</h2>
+            <p style={{ margin: '4px 0 0', fontSize: 12, color: '#887755' }}>Kup towary lub sprzedaj swoje łupy</p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             <span style={{ color: '#ffd700', fontSize: 16 }}>💰 {gold}</span>
@@ -65,9 +65,9 @@ export default function TradeWindow({ isOpen, onClose, shopStock, backpack, gold
           {/* BUY section */}
           <div style={{ flex: 1 }}>
             <h3 style={{ color: '#88aa66', fontSize: 14, margin: '0 0 8px', borderBottom: '1px solid #332a1a', paddingBottom: 4 }}>
-              FOR SALE
+              NA SPRZEDAŻ
             </h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 320, overflowY: 'auto' }}>
               {shopStock.map((item, i) => {
                 const price = getItemValue(item);
                 const canAfford = gold >= price;
@@ -116,7 +116,7 @@ export default function TradeWindow({ isOpen, onClose, shopStock, backpack, gold
           {/* SELL section */}
           <div style={{ flex: 1 }}>
             <h3 style={{ color: '#aa6644', fontSize: 14, margin: '0 0 8px', borderBottom: '1px solid #332a1a', paddingBottom: 4 }}>
-              YOUR ITEMS (click to sell at 25%)
+              TWOJE PRZEDMIOTY (kliknij by sprzedać za 25%)
             </h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 320, overflowY: 'auto' }}>
               {backpack.map((item, i) => {
@@ -148,7 +148,7 @@ export default function TradeWindow({ isOpen, onClose, shopStock, backpack, gold
 
         {/* Footer hint */}
         <p style={{ textAlign: 'center', fontSize: 11, color: '#554433', marginTop: 14 }}>
-          Press <span style={{ color: '#887755' }}>ESC</span> or click outside to close
+          Naciśnij <span style={{ color: '#887755' }}>ESC</span> lub kliknij poza oknem aby zamknąć
         </p>
       </div>
     </div>

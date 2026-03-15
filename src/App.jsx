@@ -98,6 +98,7 @@ export default function App() {
   const [chosenClass, setChosenClass] = useState(null);
   const sceneRef = useRef(null);
   const [tradeOpen, setTradeOpen] = useState(false);
+  const [tradeNpcName, setTradeNpcName] = useState('Handlarz');
   const [shopStock, setShopStock] = useState(() => generateShopStock());
   const [zone, setZone] = useState('forest');
   const prevLevelRef = useRef(1);
@@ -345,7 +346,8 @@ export default function App() {
   }, []);
 
   /* ── Trade window open/close ────────────────────────────── */
-  const onOpenTrade = useCallback(() => {
+  const onOpenTrade = useCallback((npcName) => {
+    setTradeNpcName(npcName || 'Handlarz');
     setTradeOpen(true);
     setInventoryOpen(false);
   }, []);
@@ -487,9 +489,10 @@ export default function App() {
       scene.playerData.mana = scene.playerData.maxMana;
       // Mercy invulnerability — 3 seconds
       scene._mercyTimer = 3000;
-      // Teleport to Eldergrove (first city)
+      // Teleport to Eldergrove hall (start building)
       if (scene.knight) {
-        scene.knight.setPosition(1200, 1200);
+        const hall = scene._startHouse || { x: 1200, y: 1140 };
+        scene.knight.setPosition(hall.x, hall.y);
         scene.knight.body.setVelocity(0, 0);
         scene.knight.clearTint();
         scene.knight.setAlpha(1);
@@ -589,6 +592,7 @@ export default function App() {
           gold={playerState.gold || 0}
           onBuy={handleBuy}
           onSell={handleSell}
+          npcName={tradeNpcName}
         />
       )}
       {isAdmin && (

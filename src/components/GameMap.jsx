@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useCallback } from 'react';
 import Phaser from 'phaser';
 import HUD from './HUD';
 import { RARITIES, LOOT_TABLE, MOB_WEIGHTS, ITEM_DB, rollMobItem, rollBossItem } from '../data/ItemDatabase';
-import { WORLD_SIZE, CITIES, ROADS, PORTAL_POS, ENEMY_ZONES, SUMMER_TILES, GUILD_TILES, DUNGEON_TILES, BUILDING_DEFS } from '../data/WorldData';
+import { WORLD_SIZE, CITIES, ROADS, PORTAL_POS, ENEMY_ZONES, SUMMER_TILES, GUILD_TILES, DUNGEON_TILES, BUILDING_DEFS, ROOM_TYPES } from '../data/WorldData';
 
 /* ═══════════════════════════════════════════════════════════════
    CONSTANTS
@@ -211,13 +211,21 @@ function bezierPoint(p, t) {
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   BUILDING TEMPLATES
+   FURNITURE COLORS (drawn procedurally)
    ═══════════════════════════════════════════════════════════════ */
-const COTTAGE_W = 7, COTTAGE_H = 6;
-const COTTAGE_TILES = [
-  [0,1,1,1,1,1,2],[9,10,10,10,10,10,11],[9,10,10,10,10,10,11],
-  [9,10,10,10,10,10,11],[9,10,10,10,10,10,11],[18,19,19,19,19,19,20],
-];
+const FURNITURE_STYLES = {
+  bed:        { w: 40, h: 24, color: 0x8b4513, topColor: 0xcc6633 },
+  table_large:{ w: 48, h: 28, color: 0x6b3410, topColor: 0x7a4520 },
+  table_small:{ w: 28, h: 20, color: 0x6b3410, topColor: 0x7a4520 },
+  chair:      { w: 14, h: 14, color: 0x5a2d0c },
+  shelf:      { w: 16, h: 36, color: 0x7a4420, topColor: 0x8a5430 },
+  barrel:     { w: 18, h: 18, color: 0x8b6914, topColor: 0x6b4914 },
+  chest:      { w: 24, h: 16, color: 0x8b7530, topColor: 0xdaa520 },
+  candle:     { w: 6,  h: 6,  color: 0xffcc00, glow: true },
+  anvil:      { w: 24, h: 16, color: 0x555555, topColor: 0x333333 },
+  forge_fire: { w: 20, h: 20, color: 0xff4400, glow: true },
+  counter:    { w: 80, h: 10, color: 0x5a3a1a, topColor: 0x7a5a30 },
+};
 
 /* ═══════════════════════════════════════════════════════════════
    AUDIO MANAGER (skeleton — loads placeholder sounds)
@@ -331,9 +339,13 @@ class DarkForestScene extends Phaser.Scene {
     this.load.spritesheet('citizen1_idle', `${GUILD_TILES}/Citizen1_Idle.png`, { frameWidth: 64, frameHeight: 64 });
     this.load.spritesheet('citizen2_idle', `${GUILD_TILES}/Citizen2_Idle.png`, { frameWidth: 64, frameHeight: 64 });
     this.load.spritesheet('fighter_idle',  `${GUILD_TILES}/Fighter2_Idle.png`, { frameWidth: 64, frameHeight: 64 });
-    // Cottage from home pack
+    // Home pack assets (used for interior reference)
     this.load.image('home_exterior', `${HOME}/exterior.png`);
-    this.load.image('bld_campfire',  `${SUMMER_TILES}/Top-Down Simple Summer_Prop - Campfire.png`);
+    this.load.image('home_interior', `${HOME}/Interior.png`);
+    this.load.image('home_details',  `${HOME}/house_details.png`);
+    // Additional city decoration props
+    this.load.image('bld_chest',     `${SUMMER_TILES}/Top-Down Simple Summer_Prop - Treasure Chest.png`);
+    this.load.image('bld_stall',     `${SUMMER_TILES}/Top-Down Simple Summer_Prop - Wooden Cart.png`);
 
     // Orc spritesheets (64x64 frames, 4 direction rows)
     this.load.spritesheet('orc1_idle',   `${ORCS}/Orc1/With_shadow/orc1_idle_with_shadow.png`,   { frameWidth: 64, frameHeight: 64 });
@@ -455,6 +467,21 @@ class DarkForestScene extends Phaser.Scene {
     this.input.on('pointerdown', (pointer) => {
       if (pointer.leftButtonDown()) {
         const wx = pointer.worldX, wy = pointer.worldY;
+        // Check NPC click first
+        let clickedNPC = null;
+        if (this.npcs) {
+          for (const n of this.npcs) {
+            if (!n.visible) continue;
+            if (Math.hypot(n.x - wx, n.y - wy) < 45 * n.scaleX) { clickedNPC = n; break; }
+          }
+        }
+        if (clickedNPC && Math.hypot(this.knight.x - clickedNPC.x, this.knight.y - clickedNPC.y) < 90) {
+          if (clickedNPC.npcRole === 'blacksmith' || clickedNPC.npcRole === 'merchant') {
+            this._activeTradeNpc = clickedNPC.npcLabel || 'Handlarz';
+            if (this._onOpenTrade) this._onOpenTrade(this._activeTradeNpc);
+          }
+          return;
+        }
         let clickedEnemy = null;
         for (const e of this.enemies) {
           if (e.enemyData.isDead) continue;
@@ -520,7 +547,7 @@ class DarkForestScene extends Phaser.Scene {
           const nx = city.x + npcDef.ox, ny = city.y + npcDef.oy;
           const spriteKey = this.textures.exists('citizen1_idle') ? 'citizen1_idle' : 'npc_blacksmith';
           const npcSprite = this.physics.add.sprite(nx, ny, spriteKey);
-          npcSprite.setScale(1.8).setDepth(ny).setImmovable(true);
+          npcSprite.setScale(2.8).setDepth(ny).setImmovable(true);
           npcSprite.body.setImmovable(true);
           npcSprite.npcRole = npcDef.role;
           npcSprite.npcLabel = npcDef.label;
@@ -540,10 +567,10 @@ class DarkForestScene extends Phaser.Scene {
           if (this.knight) this.physics.add.collider(this.knight, npcSprite);
 
           const labelText = npcDef.role === 'quest' ? `[E] ${npcDef.label}` : `[E] Handel - ${npcDef.label}`;
-          const label = this.add.text(nx, ny - 50, labelText, {
-            fontSize: '10px', fontFamily: "'Cinzel', serif",
+          const label = this.add.text(nx, ny - 80, labelText, {
+            fontSize: '13px', fontFamily: "'Cinzel', serif",
             color: npcDef.role === 'quest' ? '#88bbff' : '#c8a96e',
-            stroke: '#000', strokeThickness: 2,
+            stroke: '#000', strokeThickness: 3,
           }).setOrigin(0.5).setDepth(10001).setVisible(false);
           npcSprite._label = label;
           this.npcs.push(npcSprite);
@@ -552,6 +579,54 @@ class DarkForestScene extends Phaser.Scene {
       }
       this.npc = this.npcs[0] || null;
       this._npcLabel = null;
+
+      // Spawn indoor resident NPCs — one per enterable house, behind counter if trade room
+      if (this._enterableHouses) {
+        for (const house of this._enterableHouses) {
+          // Position: behind counter (north side) for trade rooms, random for quest rooms
+          let rx, ry;
+          if (house.npcRole === 'trade') {
+            // Stand behind the counter (north side, ~30px above center)
+            rx = house.x;
+            ry = house.y - 35;
+          } else {
+            rx = house.x + (Math.random() - 0.5) * house.w * 0.2;
+            ry = house.y - house.h * 0.15;
+          }
+          const rKey = this.textures.exists('citizen2_idle') ? 'citizen2_idle' : (this.textures.exists('citizen1_idle') ? 'citizen1_idle' : 'npc_blacksmith');
+          const resident = this.physics.add.sprite(rx, ry, rKey);
+          resident.setScale(2.0).setDepth(ry).setImmovable(true);
+          resident.body.setImmovable(true);
+          resident.body.setSize(20, 14).setOffset(22, 42);
+          resident.npcRole = house.npcRole === 'trade' ? 'merchant' : 'quest';
+          resident.npcLabel = house.npcName;
+          resident.setVisible(false);
+
+          if (this.textures.exists('citizen2_idle')) {
+            const animKey = 'citizen2_idle_anim';
+            if (!this.anims.exists(animKey)) {
+              const tf = this.textures.get('citizen2_idle').frameTotal;
+              if (tf > 1) this.anims.create({ key: animKey, frames: this.anims.generateFrameNumbers('citizen2_idle', { start: 0, end: tf - 2 }), frameRate: 5, repeat: -1 });
+            }
+            if (this.anims.exists(animKey)) resident.play(animKey);
+          }
+
+          if (this.knight) this.physics.add.collider(this.knight, resident);
+
+          const labelColor = house.npcRole === 'trade' ? '#c8a96e' : '#88bbff';
+          const labelPrefix = house.npcRole === 'trade' ? '[E] Handel' : '[E] Rozmowa';
+          const rlabel = this.add.text(rx, ry - 60, `${labelPrefix} - ${house.npcName}`, {
+            fontSize: '11px', fontFamily: "'Cinzel', serif", color: labelColor,
+            stroke: '#000', strokeThickness: 3,
+          }).setOrigin(0.5).setDepth(10001).setVisible(false);
+          resident._label = rlabel;
+          resident._houseRef = house;
+          house.furnitureSprites.push(resident);
+          house.furnitureSprites.push(rlabel);
+          this.npcs.push(resident);
+          this._npcLabels.push(rlabel);
+        }
+      }
       _dbg('npcs OK: ' + this.npcs.length);
     } catch(e) { _dbg('npc FAIL: ' + e.message); }
 
@@ -650,7 +725,7 @@ class DarkForestScene extends Phaser.Scene {
           if (x < MARGIN || x > WORLD_W - MARGIN || y < MARGIN || y > WORLD_H - MARGIN) continue;
           // Don't spawn in cities
           let inCity = false;
-          for (const c of CITIES) { if (Math.hypot(x - c.x, y - c.y) < c.radius + 80) { inCity = true; break; } }
+          for (const c of CITIES) { if (Math.hypot(x - c.x, y - c.y) < c.radius + 250) { inCity = true; break; } }
           if (inCity) continue;
           // Don't spawn on paths
           const gx = Math.floor(x / 48), gy = Math.floor(y / 48);
@@ -1878,21 +1953,14 @@ class DarkForestScene extends Phaser.Scene {
 
   /* ── BUILDINGS ──────────────────────────────────────────── */
   _createBuildings(rng) {
-    // Build the cottage texture from tilemap (for house_small type)
-    const cw = COTTAGE_W * TILE, ch = COTTAGE_H * TILE;
-    const rt = this.add.renderTexture(0, 0, cw, ch); rt.setVisible(false);
-    for (let row = 0; row < COTTAGE_H; row++)
-      for (let col = 0; col < COTTAGE_W; col++)
-        rt.drawFrame('walls_floor', COTTAGE_TILES[row][col], col * TILE, row * TILE);
-    rt.saveTexture('building_cottage'); rt.destroy();
-
-    // Create a key alias for cottage
     this._buildingPositions = [];
+    this._enterableHouses = [];
+    this._startHouse = null; // Eldergrove hall — player spawns here
 
     for (const city of CITIES) {
-      // City name label
-      this.add.text(city.x, city.y - city.radius - 20, city.name, {
-        fontSize: '14px', fontFamily: "'Cinzel', serif", color: '#ddc080',
+      // City name label above city
+      this.add.text(city.x, city.y - city.radius - 15, city.name, {
+        fontSize: '12px', fontFamily: "'Cinzel', serif", color: '#ddc080',
         stroke: '#000', strokeThickness: 3, fontStyle: 'bold',
       }).setOrigin(0.5).setDepth(10000);
 
@@ -1902,29 +1970,226 @@ class DarkForestScene extends Phaser.Scene {
         const bx = city.x + bld.ox;
         const by = city.y + bld.oy;
 
-        // Choose correct texture key
-        let spriteKey = def.key;
-        if (bld.type === 'house_small') spriteKey = 'building_cottage';
+        if (def.enterable) {
+          /* ═══ ENTERABLE BUILDING ═══ */
+          const fw = def.floorW, fh = def.floorH;
 
-        // Check if texture exists, fallback to cottage
-        if (!this.textures.exists(spriteKey)) spriteKey = 'building_cottage';
+          // --- Tiled floor using walls_floor spritesheet (16×16 tiles) ---
+          const floor = this.add.graphics().setDepth(by - 2);
+          const TILE_S = 16;
+          const floorFrame = 0; // first tile in walls_floor is a plank
+          const wallFrame = 3;  // stone wall tile
+          const tilesX = Math.ceil(fw / TILE_S);
+          const tilesY = Math.ceil(fh / TILE_S);
+          const originX = bx - fw / 2;
+          const originY = by - fh / 2;
+          // Draw floor tile pattern
+          for (let ty = 0; ty < tilesY; ty++) {
+            for (let tx = 0; tx < tilesX; tx++) {
+              const isEdge = tx === 0 || tx === tilesX - 1 || ty === 0 || ty === tilesY - 1;
+              const color = isEdge ? 0x55443a : ((tx + ty) % 2 === 0 ? 0x44362a : 0x3e3024);
+              floor.fillStyle(color, 1);
+              floor.fillRect(originX + tx * TILE_S, originY + ty * TILE_S, TILE_S, TILE_S);
+            }
+          }
+          // Wall border
+          floor.lineStyle(3, 0x665544, 0.9);
+          floor.strokeRect(bx - fw / 2, by - fh / 2, fw, fh);
+          // Inner shadow
+          floor.lineStyle(1, 0x221108, 0.3);
+          floor.strokeRect(bx - fw / 2 + 2, by - fh / 2 + 2, fw - 4, fh - 4);
+          floor.setVisible(false);
 
-        const sprite = this.add.image(bx, by, spriteKey);
-        sprite.setScale(def.scale).setOrigin(0.5, 0.85).setDepth(by);
-        this.decorations.push(sprite);
+          // --- Room type ---
+          const roomName = bld.room || 'Sypialnia';
+          const room = ROOM_TYPES.find(r => r.name === roomName) || ROOM_TYPES[0];
 
-        // Collision zone at building base
-        if (def.colH > 0) {
-          const dispW = def.w * def.scale;
-          const dispH = def.h * def.scale;
-          const baseH = dispH * def.colH;
-          const zone = this.add.zone(bx, by - dispH * 0.15 + dispH * 0.5 - baseH / 2 + dispH * 0.3, dispW * 0.85, baseH);
-          this.physics.add.existing(zone, true);
-          this.staticObjects.add(zone);
+          // --- Furniture (with small collision boxes) ---
+          const furnitureSprites = [];
+          const furnitureColliders = [];
+          for (const furn of room.furniture) {
+            const style = FURNITURE_STYLES[furn.type];
+            if (!style) continue;
+            const fx = bx + furn.ox, fy = by + furn.oy;
+            const g = this.add.graphics().setDepth(by - 1);
+            // Shadow
+            g.fillStyle(0x000000, 0.25);
+            g.fillRoundedRect(fx - style.w / 2 + 2, fy - style.h / 2 + 2, style.w, style.h, 2);
+            // Body
+            g.fillStyle(style.color, 1);
+            g.fillRoundedRect(fx - style.w / 2, fy - style.h / 2, style.w, style.h, 2);
+            // Top highlight
+            if (style.topColor) {
+              g.fillStyle(style.topColor, 1);
+              g.fillRoundedRect(fx - style.w / 2, fy - style.h / 2, style.w, Math.max(3, Math.floor(style.h * 0.35)), 2);
+            }
+            // Glow
+            if (style.glow) {
+              g.fillStyle(style.color, 0.15);
+              g.fillCircle(fx, fy, 16);
+              g.fillStyle(0xffffff, 0.08);
+              g.fillCircle(fx, fy, 9);
+            }
+            g.setVisible(false);
+            furnitureSprites.push(g);
+
+            // Small collision box for solid furniture (not candles/glow items)
+            if (!style.glow && style.w >= 14) {
+              const colW = Math.max(8, style.w - 6);
+              const colH = Math.max(6, style.h - 4);
+              const fz = this.add.zone(fx, fy, colW, colH);
+              this.physics.add.existing(fz, true);
+              this.staticObjects.add(fz);
+              furnitureColliders.push(fz);
+            }
+          }
+
+          // Room name label (inside)
+          const roomLabel = this.add.text(bx, by - fh / 2 + 10, room.name, {
+            fontSize: '8px', fontFamily: "'Cinzel', serif", color: '#bbaa80',
+            stroke: '#000', strokeThickness: 2,
+          }).setOrigin(0.5).setDepth(by - 1).setVisible(false);
+          furnitureSprites.push(roomLabel);
+
+          // --- Wall colliders (with door gap south) ---
+          const wt = 6, doorGap = 28;
+          const wn = this.add.zone(bx, by - fh / 2, fw, wt);
+          this.physics.add.existing(wn, true); this.staticObjects.add(wn);
+          const hs = (fw - doorGap) / 2;
+          const wsl = this.add.zone(bx - fw / 4 - doorGap / 4, by + fh / 2, hs, wt);
+          this.physics.add.existing(wsl, true); this.staticObjects.add(wsl);
+          const wsr = this.add.zone(bx + fw / 4 + doorGap / 4, by + fh / 2, hs, wt);
+          this.physics.add.existing(wsr, true); this.staticObjects.add(wsr);
+          const wwz = this.add.zone(bx - fw / 2, by, wt, fh);
+          this.physics.add.existing(wwz, true); this.staticObjects.add(wwz);
+          const wez = this.add.zone(bx + fw / 2, by, wt, fh);
+          this.physics.add.existing(wez, true); this.staticObjects.add(wez);
+
+          // --- Roof sprite (fades when player enters) ---
+          const roofKey = this.textures.exists(def.key) ? def.key : 'bld_house';
+          const roof = this.add.image(bx, by + 10, roofKey);
+          roof.setScale(def.scale).setOrigin(0.5, 0.85).setDepth(by + 5);
+
+          // --- Door entry marker ---
+          const doorLabel = this.add.text(bx, by + fh / 2 + 14, '▼ Wejdź', {
+            fontSize: '8px', fontFamily: "'Cinzel', serif", color: '#c8a96e',
+            stroke: '#000', strokeThickness: 2,
+          }).setOrigin(0.5).setDepth(by + 6).setAlpha(0.7);
+
+          const houseData = {
+            x: bx, y: by, w: fw, h: fh,
+            roof, floor, furnitureSprites, doorLabel, furnitureColliders,
+            city: city.id, type: bld.type, roomName: room.name,
+            npcRole: room.npcRole || 'quest',
+            npcName: room.npcName || 'Mieszkaniec',
+          };
+          this._enterableHouses.push(houseData);
+
+          // Mark Eldergrove hall as spawn point
+          if (city.id === 'eldergrove' && bld.type === 'hall') {
+            this._startHouse = houseData;
+          }
+
+          // Building collision zone (for overlap avoidance)
+          this._buildingPositions.push({ x: bx, y: by, r: Math.max(fw, fh) / 2 + 15 });
+
+        } else {
+          /* ═══ NON-ENTERABLE PROP ═══ */
+          const spriteKey = this.textures.exists(def.key) ? def.key : 'bld_house';
+          const sprite = this.add.image(bx, by, spriteKey);
+          sprite.setScale(def.scale).setOrigin(0.5, 0.85).setDepth(by);
+          this.decorations.push(sprite);
+
+          if (def.colR > 0) {
+            const zone = this.add.zone(bx, by - 5, def.colR * 2, def.colR * 2);
+            this.physics.add.existing(zone, true);
+            this.staticObjects.add(zone);
+          }
+          this._buildingPositions.push({ x: bx, y: by, r: 25 });
         }
-
-        this._buildingPositions.push({ x: bx, y: by });
       }
+
+      // City decorations
+      this._decorateCity(city, rng);
+    }
+  }
+
+  /* ── CITY DECORATIONS ───────────────────────────────────── */
+  _decorateCity(city, rng) {
+    const cx = city.x, cy = city.y, r = city.radius;
+
+    const decoTypes = [
+      { key: 'bld_barrel', scale: 0.38, count: 5 },
+      { key: 'bld_fence_h', scale: 0.35, count: 4 },
+      { key: 'bld_cart', scale: 0.28, count: 1 },
+      { key: 'bld_banner_r', scale: 0.30, count: 2 },
+    ];
+
+    for (const dt of decoTypes) {
+      if (!this.textures.exists(dt.key)) continue;
+      for (let i = 0; i < dt.count; i++) {
+        for (let att = 0; att < 30; att++) {
+          const angle = rng() * Math.PI * 2;
+          const dist = r * 0.35 + rng() * r * 0.45;
+          const dx = cx + Math.cos(angle) * dist;
+          const dy = cy + Math.sin(angle) * dist;
+          let overlap = false;
+          for (const bp of this._buildingPositions) {
+            if (Math.hypot(dx - bp.x, dy - bp.y) < bp.r + 20) { overlap = true; break; }
+          }
+          if (overlap) continue;
+          this.add.image(dx, dy, dt.key).setScale(dt.scale).setOrigin(0.5, 0.85).setDepth(dy);
+          break;
+        }
+      }
+    }
+
+    // Market tents
+    if (city.style === 'market' && this.textures.exists('bld_tent')) {
+      for (let i = 0; i < 2; i++) {
+        for (let att = 0; att < 20; att++) {
+          const a = (i / 2) * Math.PI + rng() * 1.0;
+          const d = r * 0.25 + rng() * r * 0.2;
+          const sx = cx + Math.cos(a) * d;
+          const sy = cy + Math.sin(a) * d + 40;
+          let overlap = false;
+          for (const bp of this._buildingPositions) {
+            if (Math.hypot(sx - bp.x, sy - bp.y) < bp.r + 30) { overlap = true; break; }
+          }
+          if (!overlap) {
+            this.add.image(sx, sy, 'bld_tent').setScale(0.28).setOrigin(0.5, 0.85).setDepth(sy);
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  /* ── ROOF ALPHA SYSTEM ──────────────────────────────────── */
+  _updateRoofAlpha() {
+    if (!this._enterableHouses || !this.knight) return;
+    const px = this.knight.x, py = this.knight.y;
+
+    for (const house of this._enterableHouses) {
+      const hw = house.w / 2 + 6, hh = house.h / 2 + 6;
+      const inside = px > house.x - hw && px < house.x + hw &&
+                     py > house.y - hh && py < house.y + hh + 15;
+      const nearDist = Math.hypot(px - house.x, py - house.y);
+      const near = nearDist < Math.max(house.w, house.h) * 1.0;
+
+      const targetAlpha = inside ? 0.06 : (near ? 0.30 : 1.0);
+      const showInterior = inside || near;
+
+      // Smooth lerp
+      const cur = house.roof.alpha;
+      house.roof.setAlpha(cur + (targetAlpha - cur) * 0.12);
+
+      // Show/hide floor & furniture
+      house.floor.setVisible(showInterior);
+      for (const fs of house.furnitureSprites) fs.setVisible(showInterior);
+
+      // Door indicator
+      if (house.doorLabel) house.doorLabel.setAlpha(near || inside ? 0 : 0.7);
     }
   }
 
@@ -1967,10 +2232,8 @@ class DarkForestScene extends Phaser.Scene {
   }
 
   _nearBuilding(x, y, dist) {
-    // Check building positions
     const positions = this._buildingPositions || [];
-    if (positions.some(b => Math.abs(x - b.x) + Math.abs(y - b.y) < dist)) return true;
-    // Check city centers
+    if (positions.some(b => Math.hypot(x - b.x, y - b.y) < b.r + dist)) return true;
     for (const c of CITIES) {
       if (Math.hypot(x - c.x, y - c.y) < c.radius + 40) return true;
     }
@@ -1980,8 +2243,10 @@ class DarkForestScene extends Phaser.Scene {
   /* ── PLAYER ─────────────────────────────────────────────── */
   _createPlayer() {
     const sv = this._savedData || {};
-    const startX = sv.x ?? CITIES[0].x;
-    const startY = sv.y ?? CITIES[0].y;
+    // Default spawn: inside Eldergrove hall if no saved position
+    const hallPos = this._startHouse || { x: CITIES[0].x, y: CITIES[0].y };
+    const startX = sv.x ?? hallPos.x;
+    const startY = sv.y ?? hallPos.y;
     this.knight = this.physics.add.sprite(startX, startY, 'hero_idle_1');
     this.knight.setScale(SPRITE_SCALE).setCollideWorldBounds(true).setDepth(startY);
     this.knight.body.setSize(22, 14).setOffset(53, 106);
@@ -2207,7 +2472,8 @@ class DarkForestScene extends Phaser.Scene {
       this._enterPortal();
     } else if (nearNPC && Phaser.Input.Keyboard.JustDown(this.keys.E)) {
       if (nearNPC.npcRole === 'blacksmith' || nearNPC.npcRole === 'merchant') {
-        if (this._onOpenTrade) this._onOpenTrade();
+        this._activeTradeNpc = nearNPC.npcLabel || 'Handlarz';
+        if (this._onOpenTrade) this._onOpenTrade(this._activeTradeNpc);
       }
     } else {
       this._updateESkill(delta);
@@ -2267,6 +2533,9 @@ class DarkForestScene extends Phaser.Scene {
     /* --- Culling --- */
     this._cullTimer += delta;
     if (this._cullTimer > 200) { this._cullTimer = 0; this._updateCulling(); }
+
+    /* --- Roof alpha (enterable houses) --- */
+    this._updateRoofAlpha();
 
     /* --- Fog of War (crypt only) --- */
     if (this._fogTex && this.knight) {
