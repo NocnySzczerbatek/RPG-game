@@ -1,8 +1,11 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import GameMap from './components/GameMap';
+import GameMap, { LOOT_TABLE, RARITIES } from './components/GameMap';
 import Inventory from './components/Inventory';
 import MainMenu, { CLASSES } from './components/MainMenu';
 import DeathOverlay from './components/DeathOverlay';
+import TradeWindow from './components/TradeWindow';
+import MiniMap from './components/MiniMap';
+import { getItemValue } from './components/TradeWindow';
 
 /* ═══════════════════════════════════════════════════════════════
    CONSTANTS
@@ -24,6 +27,18 @@ const EMPTY_EQUIPMENT = {
 
 const BACKPACK_SIZE = 40;
 const SAVE_KEY = 'godslayer_save';
+
+/* ── Shop stock generation ────────────────────────────────── */
+function generateShopStock() {
+  const potions = [
+    { name: 'Health Potion', type: 'potion', rarity: 'common', heal: 30 },
+    { name: 'Greater Heal',  type: 'potion', rarity: 'magic',  heal: 60 },
+    { name: 'Mana Potion',   type: 'potion', rarity: 'common', manaRestore: 20 },
+  ];
+  const eligible = LOOT_TABLE.filter(i => i.rarity === 'magic' || i.rarity === 'rare');
+  const shuffled = [...eligible].sort(() => Math.random() - 0.5);
+  return [...potions, ...shuffled.slice(0, 3)];
+}
 
 /* ═══════════════════════════════════════════════════════════════
    SAVE / LOAD
@@ -60,30 +75,38 @@ export default function App() {
   const [playerState, setPlayerState] = useState({});
   const [chosenClass, setChosenClass] = useState(null);
   const sceneRef = useRef(null);
+  const [tradeOpen, setTradeOpen] = useState(false);
+  const [shopStock, setShopStock] = useState(() => generateShopStock());
+  const [zone, setZone] = useState('forest');
+  const prevLevelRef = useRef(1);
 
   /* ── Keyboard: I toggles inventory, ESC closes ─────────── */
   useEffect(() => {
     const handler = (e) => {
       if (screen !== 'playing') return;
-      if (e.key === 'i' || e.key === 'I') setInventoryOpen(prev => !prev);
-      if (e.key === 'Escape' && inventoryOpen) setInventoryOpen(false);
+      if (e.key === 'i' || e.key === 'I') { if (!tradeOpen) setInventoryOpen(prev => !prev); }
+      if (e.key === 'Escape') {
+        if (tradeOpen) setTradeOpen(false);
+        else if (inventoryOpen) setInventoryOpen(false);
+      }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [inventoryOpen, screen]);
+  }, [inventoryOpen, tradeOpen, screen]);
 
   /* ── Pause Phaser when inventory open ──────────────────── */
   useEffect(() => {
     const scene = sceneRef.current;
     if (!scene) return;
-    if (inventoryOpen) {
+    const shouldPause = inventoryOpen || tradeOpen;
+    if (shouldPause) {
       scene.physics?.world?.pause();
       if (scene.input?.keyboard) scene.input.keyboard.enabled = false;
     } else {
       scene.physics?.world?.resume();
       if (scene.input?.keyboard) scene.input.keyboard.enabled = true;
     }
-  }, [inventoryOpen]);
+  }, [inventoryOpen, tradeOpen]);
 
   /* ── Add item to backpack (from Phaser) ────────────────── */
   const addToBackpack = useCallback((item) => {
@@ -204,6 +227,48 @@ export default function App() {
     setScreen('dead');
   }, []);
 
+  /* ── Trade window open/close ────────────────────────────── */
+  const onOpenTrade = useCallback(() => {
+    setTradeOpen(true);
+    setInventoryOpen(false);
+  }, []);
+
+  const onZoneChange = useCallback((z) => setZone(z), []);
+
+  /* ── Buy from shop ─────────────────────────────────────── */
+  const handleBuy = useCallback((shopIndex) => {
+    const item = shopStock[shopIndex];
+    if (!item) return;
+    const price = getItemValue(item);
+    const scene = sceneRef.current;
+    if (!scene?.playerData || scene.playerData.gold < price) return;
+    scene.playerData.gold -= price;
+    addToBackpack({ ...item, id: Date.now() + Math.random() });
+  }, [shopStock, addToBackpack]);
+
+  /* ── Sell item from backpack ────────────────────────────── */
+  const handleSell = useCallback((backpackIndex) => {
+    setBackpack(prev => {
+      const item = prev[backpackIndex];
+      if (!item) return prev;
+      const sellPrice = Math.max(1, Math.floor(getItemValue(item) * 0.25));
+      const scene = sceneRef.current;
+      if (scene?.playerData) scene.playerData.gold += sellPrice;
+      const next = [...prev];
+      next[backpackIndex] = null;
+      return next;
+    });
+  }, []);
+
+  /* ── Refresh shop on level up ───────────────────────────── */
+  useEffect(() => {
+    const lvl = playerState.level || 1;
+    if (lvl > prevLevelRef.current) {
+      prevLevelRef.current = lvl;
+      setShopStock(generateShopStock());
+    }
+  }, [playerState.level]);
+
   /* ── START GAME (from menu) ────────────────────────────── */
   const handleStartGame = useCallback((classData) => {
     setChosenClass(classData);
@@ -247,7 +312,7 @@ export default function App() {
         scene.knight.body.setVelocity(0, 0);
         scene.knight.clearTint();
         scene.knight.setAlpha(1);
-        scene.knight.play('knight_idle', true);
+        scene.knight.play('hero_idle', true);
       }
       scene.physics?.world?.resume();
       if (scene.input?.keyboard) scene.input.keyboard.enabled = true;
@@ -303,7 +368,10 @@ export default function App() {
         chosenClass={chosenClass}
         savedData={savedDataRef.current}
         onPlayerDeath={onPlayerDeath}
+        onOpenTrade={onOpenTrade}
+        onZoneChange={onZoneChange}
       />
+      <MiniMap playerState={playerState} />
       <Inventory
         isOpen={inventoryOpen && screen === 'playing'}
         onClose={() => setInventoryOpen(false)}
@@ -317,6 +385,17 @@ export default function App() {
       />
       {screen === 'dead' && (
         <DeathOverlay gold={playerState.gold || 0} onRespawn={handleRespawn} />
+      )}
+      {tradeOpen && screen === 'playing' && (
+        <TradeWindow
+          isOpen={true}
+          onClose={() => setTradeOpen(false)}
+          shopStock={shopStock}
+          backpack={backpack}
+          gold={playerState.gold || 0}
+          onBuy={handleBuy}
+          onSell={handleSell}
+        />
       )}
     </div>
   );

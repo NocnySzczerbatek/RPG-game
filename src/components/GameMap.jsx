@@ -21,6 +21,10 @@ const HOME    = 'assets/sprites/craftpix-net-654184-main-characters-home-free-to
 const ORCS    = 'assets/sprites/craftpix-net-363992-free-top-down-orc-game-character-pixel-art/PNG';
 const SLIMES  = 'assets/sprites/craftpix-net-788364-free-slime-mobs-pixel-art-top-down-sprite-pack/PNG';
 const MONSTERS = 'assets/sprites/craftpix-561178-free-rpg-monster-sprites-pixel-art/PNG';
+const VAMPIRES = 'assets/sprites/craftpix-net-208004-free-vampire-4-direction-pixel-character-sprite-pack/PNG';
+const CRYPT_W = 2000, CRYPT_H = 2000;
+const FOREST_PORTAL_POS = { x: 3200, y: 800 };
+const NPC_POS = { x: 1950, y: 2050 };
 
 /* ── hero class animation defs ─────────────────────────────── */
 const HERO_CLASSES = {
@@ -113,6 +117,18 @@ const ENEMY_TYPES = {
       attack: { prefix: 'demon_attack_', count: 4, frameRate: 10 },
       hurt:   { prefix: 'demon_hurt_',   count: 2, frameRate: 8  },
       death:  { prefix: 'demon_death_',  count: 6, frameRate: 7  },
+    },
+  },
+  vampire: {
+    key: 'vamp1', hp: 80, dmg: 12, xp: 40, speed: 75,
+    aggroRange: 320, atkRange: 50, atkCooldown: 1400, scale: 2.0,
+    anims: {
+      idle:   { sheet: 'vamp1_idle',   cols: 4,  frameRate: 6  },
+      walk:   { sheet: 'vamp1_walk',   cols: 6,  frameRate: 8  },
+      run:    { sheet: 'vamp1_run',    cols: 8,  frameRate: 10 },
+      attack: { sheet: 'vamp1_attack', cols: 12, frameRate: 12 },
+      hurt:   { sheet: 'vamp1_hurt',   cols: 4,  frameRate: 10 },
+      death:  { sheet: 'vamp1_death',  cols: 11, frameRate: 8  },
     },
   },
 };
@@ -227,7 +243,7 @@ const COTTAGE_TILES = [
    SCENE — DarkForestScene
    ═══════════════════════════════════════════════════════════════ */
 class DarkForestScene extends Phaser.Scene {
-  constructor() { super('DarkForest'); }
+  constructor(key = 'DarkForest') { super(key); }
 
   init(data) {
     this._syncFn = data.syncFn;
@@ -236,21 +252,14 @@ class DarkForestScene extends Phaser.Scene {
     this._chosenClass = data.chosenClass;
     this._savedData = data.savedData;
     this._onPlayerDeath = data.onPlayerDeath;
+    this._onOpenTrade = data.onOpenTrade;
+    this._onZoneChange = data.onZoneChange;
     if (this._sceneRef) this._sceneRef.current = this;
   }
 
   /* ── PRELOAD ───────────────────────────────────────────────── */
   preload() {
-    // Load hero frames for the chosen class
-    const classId = this._chosenClass?.id || 'warrior';
-    const heroDef = HERO_CLASSES[classId] || HERO_CLASSES.warrior;
-    const heroPath = `${HERO_BASE}/${heroDef.folder}`;
-    for (const a of heroDef.anims) {
-      const folder = a.folder || a.name.charAt(0).toUpperCase() + a.name.slice(1);
-      const prefix = a.filePrefix || a.name;
-      for (let i = a.start; i < a.start + a.count; i++)
-        this.load.image(`hero_${a.name}_${i}`, `${heroPath}/${folder}/${prefix}${i}.png`);
-    }
+    this._preloadHero();
 
     // Trees & Rocks
     for (const t of TREE_DEFS) this.load.image(t.key, `${TREES}/${t.file}`);
@@ -285,10 +294,31 @@ class DarkForestScene extends Phaser.Scene {
       for (let i = 1; i <= a.count; i++)
         this.load.image(`demon_${a.name}_${i}`, `${MONSTERS}/demon/${folder}${i}.png`);
     }
+
+    // NPC (blacksmith)
+    this.load.image('npc_blacksmith', 'assets/sprites/npc_merchant.png');
+
+    // Portal
+    this.load.image('portal_purple', 'assets/sprites/portal_purple.png');
+  }
+
+  /* ── shared hero preload ─────────────────────────────────── */
+  _preloadHero() {
+    const classId = this._chosenClass?.id || 'warrior';
+    const heroDef = HERO_CLASSES[classId] || HERO_CLASSES.warrior;
+    const heroPath = `${HERO_BASE}/${heroDef.folder}`;
+    for (const a of heroDef.anims) {
+      const folder = a.folder || a.name.charAt(0).toUpperCase() + a.name.slice(1);
+      const prefix = a.filePrefix || a.name;
+      for (let i = a.start; i < a.start + a.count; i++)
+        this.load.image(`hero_${a.name}_${i}`, `${heroPath}/${folder}/${prefix}${i}.png`);
+    }
   }
 
   /* ── CREATE ────────────────────────────────────────────────── */
   create() {
+    this._currentZone = 'forest';
+    this._transitioning = false;
     this.physics.world.setBounds(0, 0, WORLD_W, WORLD_H);
 
     const seed = 12345;
@@ -341,15 +371,21 @@ class DarkForestScene extends Phaser.Scene {
     const sv = this._savedData || {};
     this.playerData = {
       hp: sv.hp ?? cls.hp ?? 100,
-      maxHp: cls.hp ?? 100,
+      maxHp: sv.maxHp ?? cls.hp ?? 100,
       mana: sv.mana ?? cls.mana ?? 50,
-      maxMana: cls.mana ?? 50,
+      maxMana: sv.maxMana ?? cls.mana ?? 50,
       xp: sv.xp ?? 0, xpToLevel: sv.xpToLevel ?? 100,
       level: sv.level ?? 1, gold: sv.gold ?? 0,
-      baseDmg: cls.baseDmg ?? 12, critChance: (cls.critChance ?? 15) / 100,
+      baseDmg: sv.baseDmg ?? cls.baseDmg ?? 12,
+      critChance: sv.critChance ?? (cls.critChance ?? 15) / 100,
       isAttacking: false, whirlwinding: false,
       skills: { q: 0, w: 0, e: 0, r: 0, eActive: false },
     };
+    if (sv._equipBonusDmg != null) {
+      this.playerData._equipBonusDmg = sv._equipBonusDmg;
+      this.playerData._equipBonusDef = sv._equipBonusDef;
+      this.playerData._equipBonusCrit = sv._equipBonusCrit;
+    }
     this._isDead = false;
 
     /* --- Timers --- */
@@ -359,10 +395,33 @@ class DarkForestScene extends Phaser.Scene {
     this._cullTimer = 0;
     this._manaRegen = 0;
     this._whirlTimer = 0;
+    this._frostCooldown = 0;
+    this._dashCooldown = 0;
+
+    /* --- NPC blacksmith --- */
+    this.npc = this.physics.add.sprite(NPC_POS.x, NPC_POS.y, 'npc_blacksmith');
+    this.npc.setScale(2.2).setDepth(NPC_POS.y).setImmovable(true);
+    this.npc.body.setImmovable(true);
+    this.physics.add.collider(this.knight, this.npc);
+    this._npcLabel = this.add.text(NPC_POS.x, NPC_POS.y - 55, '[E] Trade', {
+      fontSize: '11px', fontFamily: "'Cinzel', serif", color: '#c8a96e',
+      stroke: '#000', strokeThickness: 2,
+    }).setOrigin(0.5).setDepth(10001).setVisible(false);
+
+    /* --- Dungeon portal --- */
+    this.portal = this.physics.add.sprite(FOREST_PORTAL_POS.x, FOREST_PORTAL_POS.y, 'portal_purple');
+    this.portal.setScale(2.5).setDepth(FOREST_PORTAL_POS.y);
+    this.portal.body.setImmovable(true);
+    this._portalLabel = this.add.text(FOREST_PORTAL_POS.x, FOREST_PORTAL_POS.y - 55, '[E] Enter Crypt', {
+      fontSize: '11px', fontFamily: "'Cinzel', serif", color: '#aa88ff',
+      stroke: '#000', strokeThickness: 2,
+    }).setOrigin(0.5).setDepth(10001).setVisible(false);
 
     /* --- Atmosphere --- */
     this._createAtmosphere();
     this._syncState();
+    if (this._onZoneChange) this._onZoneChange('forest');
+    this.cameras.main.fadeIn(800);
   }
 
   /* ── ENEMY ANIMATIONS ──────────────────────────────────── */
@@ -403,9 +462,21 @@ class DarkForestScene extends Phaser.Scene {
         });
       }
     }
+    // Vampire (spritesheet — only if loaded, used in crypt)
+    if (this.textures.exists('vamp1_idle')) {
+      for (const [state, info] of Object.entries(ENEMY_TYPES.vampire.anims)) {
+        const key = `vamp1_${state}`;
+        if (!this.anims.exists(key)) {
+          this.anims.create({
+            key,
+            frames: this.anims.generateFrameNumbers(info.sheet, { start: 0, end: info.cols - 1 }),
+            frameRate: info.frameRate,
+            repeat: state === 'death' ? 0 : -1,
+          });
+        }
+      }
+    }
   }
-
-  /* ── SPAWN ENEMIES ──────────────────────────────────────── */
   _spawnEnemies(rng) {
     const MARGIN = 120;
     const spawnDefs = [
@@ -512,6 +583,155 @@ class DarkForestScene extends Phaser.Scene {
       pd.skills.eActive = false;
       this.knight.angle = 0;
     }
+  }
+
+  /* ── CLASS-AWARE E SKILL ────────────────────────────────── */
+  _updateESkill(delta) {
+    const classId = this._chosenClass?.id || 'warrior';
+    if (classId === 'warrior') this._updateWhirlwind(delta);
+    else if (classId === 'mage') this._updateFrostNova();
+    else if (classId === 'rogue') this._updateShadowDash();
+  }
+
+  /* ── FROST NOVA (Mage E) ────────────────────────────────── */
+  _updateFrostNova() {
+    const pd = this.playerData;
+    if (this._frostCooldown > 0 || pd.isAttacking) return;
+    if (!Phaser.Input.Keyboard.JustDown(this.keys.E)) return;
+    if (pd.mana < 25) return;
+
+    pd.mana -= 25;
+    this._frostCooldown = 5000;
+
+    // Blue circle burst
+    const cx = this.knight.x, cy = this.knight.y;
+    const ring = this.add.graphics().setDepth(10000);
+    ring.lineStyle(3, 0x4488ff, 0.6);
+    ring.strokeCircle(cx, cy, 10);
+    let radius = 10;
+    const expandEvent = this.time.addEvent({
+      delay: 16, repeat: 24,
+      callback: () => {
+        radius += 4.5;
+        ring.clear();
+        ring.lineStyle(3, 0x4488ff, 0.6 - (radius / 120) * 0.6);
+        ring.strokeCircle(cx, cy, radius);
+      },
+    });
+    this.time.delayedCall(420, () => ring.destroy());
+
+    // Frost particles
+    for (let i = 0; i < 12; i++) {
+      const angle = (i / 12) * Math.PI * 2;
+      const g = this.add.graphics().setDepth(10000);
+      g.fillStyle(0x66bbff, 0.7);
+      g.fillCircle(0, 0, 3);
+      g.setPosition(cx, cy);
+      this.tweens.add({
+        targets: g,
+        x: cx + Math.cos(angle) * 120,
+        y: cy + Math.sin(angle) * 120,
+        alpha: 0, duration: 400,
+        onComplete: () => g.destroy(),
+      });
+    }
+
+    // Damage + freeze enemies in range
+    const equipDmg = pd._equipBonusDmg || 0;
+    for (const e of this.enemies) {
+      if (e.enemyData.isDead) continue;
+      if (Math.hypot(e.x - cx, e.y - cy) < 120) {
+        const dmg = Math.floor((pd.baseDmg + equipDmg) * 0.8 * (0.9 + Math.random() * 0.2));
+        this._damageEnemy(e, dmg, false);
+        // Freeze
+        e.setTint(0x6688ff);
+        const prevSpeed = e.enemyData.speed;
+        e.enemyData.speed = 0;
+        e.enemyData.state = 'hurt';
+        e.body.setVelocity(0, 0);
+        this.time.delayedCall(2000, () => {
+          if (!e.enemyData.isDead) {
+            e.clearTint();
+            e.enemyData.speed = prevSpeed;
+            e.enemyData.state = 'wander';
+          }
+        });
+      }
+    }
+    this.cameras.main.flash(200, 100, 150, 255, false);
+  }
+
+  /* ── SHADOW DASH (Rogue E) ──────────────────────────────── */
+  _updateShadowDash() {
+    const pd = this.playerData;
+    if (this._dashCooldown > 0 || pd.isAttacking || pd.whirlwinding) return;
+    if (!Phaser.Input.Keyboard.JustDown(this.keys.E)) return;
+    if (pd.mana < 15) return;
+
+    pd.mana -= 15;
+    this._dashCooldown = 3000;
+
+    const dir = this.playerFacing === 'right' ? 1 : -1;
+    const startX = this.knight.x;
+    const worldW = this.physics.world.bounds.width;
+    const endX = Phaser.Math.Clamp(startX + dir * 200, 50, worldW - 50);
+    const dashY = this.knight.y;
+
+    // Shadow trail
+    for (let i = 0; i < 5; i++) {
+      const shadowX = startX + (endX - startX) * (i / 5);
+      const shadow = this.add.sprite(shadowX, dashY, this.knight.texture.key, this.knight.frame?.name);
+      shadow.setScale(this.knight.scaleX, this.knight.scaleY).setFlipX(this.knight.flipX);
+      shadow.setAlpha(0.5).setTint(0x220044).setDepth(dashY - 1);
+      this.tweens.add({ targets: shadow, alpha: 0, duration: 500, delay: i * 50, onComplete: () => shadow.destroy() });
+    }
+
+    // Teleport
+    this.knight.setPosition(endX, dashY);
+
+    // Damage enemies in path
+    const equipDmg = pd._equipBonusDmg || 0;
+    const minX = Math.min(startX, endX);
+    const maxX = Math.max(startX, endX);
+    for (const e of this.enemies) {
+      if (e.enemyData.isDead) continue;
+      if (e.x >= minX - 40 && e.x <= maxX + 40 && Math.abs(e.y - dashY) < 60) {
+        const dmg = Math.floor((pd.baseDmg + equipDmg) * (0.9 + Math.random() * 0.2));
+        this._damageEnemy(e, dmg, false);
+      }
+    }
+    this.cameras.main.flash(100, 50, 0, 80, false);
+  }
+
+  /* ── PORTAL TRANSITION ──────────────────────────────────── */
+  _enterPortal() {
+    if (this._transitioning) return;
+    this._transitioning = true;
+    this.cameras.main.fadeOut(1000, 0, 0, 0);
+    this.cameras.main.once('camerafadeoutcomplete', () => {
+      this.scene.start('ForsakenCrypt', this._getTransitionData());
+    });
+  }
+
+  _getTransitionData() {
+    const pd = this.playerData;
+    return {
+      syncFn: this._syncFn,
+      addToBackpack: this._addToBackpack,
+      sceneRef: this._sceneRef,
+      chosenClass: this._chosenClass,
+      onPlayerDeath: this._onPlayerDeath,
+      onOpenTrade: this._onOpenTrade,
+      onZoneChange: this._onZoneChange,
+      savedData: {
+        hp: pd.hp, maxHp: pd.maxHp, mana: pd.mana, maxMana: pd.maxMana,
+        xp: pd.xp, xpToLevel: pd.xpToLevel, level: pd.level, gold: pd.gold,
+        baseDmg: pd.baseDmg, critChance: pd.critChance,
+        _equipBonusDmg: pd._equipBonusDmg || 0,
+        _equipBonusDef: pd._equipBonusDef || 0,
+        _equipBonusCrit: pd._equipBonusCrit || 0,
+      },
+    };
   }
 
   /* ── DAMAGE ENEMY ───────────────────────────────────────── */
@@ -953,6 +1173,14 @@ class DarkForestScene extends Phaser.Scene {
         level: pd.level, gold: pd.gold,
         baseDmg: pd.baseDmg, critChance: pd.critChance,
         skills: { ...pd.skills },
+        // Minimap data
+        playerX: this.knight?.x, playerY: this.knight?.y,
+        enemies: this.enemies ? this.enemies.filter(e => !e.enemyData.isDead).map(e => ({ x: e.x, y: e.y })) : [],
+        npcX: this.npc?.x, npcY: this.npc?.y,
+        portalX: this.portal?.x, portalY: this.portal?.y,
+        worldW: this.physics.world.bounds.width,
+        worldH: this.physics.world.bounds.height,
+        zone: this._currentZone || 'forest',
       });
     }
   }
@@ -996,7 +1224,28 @@ class DarkForestScene extends Phaser.Scene {
 
     /* --- Cooldowns & regen --- */
     if (this._atkCooldown > 0) this._atkCooldown -= delta;
-    this._updateWhirlwind(delta);
+    if (this._frostCooldown > 0) this._frostCooldown -= delta;
+    if (this._dashCooldown > 0) this._dashCooldown -= delta;
+
+    /* --- E key: Portal > NPC > Skill --- */
+    const nearPortal = this.portal && Math.hypot(this.knight.x - this.portal.x, this.knight.y - this.portal.y) < 80;
+    const nearNPC = this.npc && Math.hypot(this.knight.x - this.npc.x, this.knight.y - this.npc.y) < 80;
+    if (this._portalLabel) this._portalLabel.setVisible(nearPortal);
+    if (this._npcLabel) this._npcLabel.setVisible(nearNPC && !nearPortal);
+
+    if (nearPortal && Phaser.Input.Keyboard.JustDown(this.keys.E)) {
+      this._enterPortal();
+    } else if (nearNPC && Phaser.Input.Keyboard.JustDown(this.keys.E)) {
+      if (this._onOpenTrade) this._onOpenTrade();
+    } else {
+      this._updateESkill(delta);
+    }
+
+    // Sync skill cooldown for HUD
+    const _cid = this._chosenClass?.id || 'warrior';
+    if (_cid === 'mage') pd.skills.e = Math.max(0, Math.ceil(this._frostCooldown ?? 0));
+    else if (_cid === 'rogue') pd.skills.e = Math.max(0, Math.ceil(this._dashCooldown ?? 0));
+
     this._manaRegen += delta;
     if (this._manaRegen > 500) {
       this._manaRegen = 0;
@@ -1022,9 +1271,191 @@ class DarkForestScene extends Phaser.Scene {
 }
 
 /* ═══════════════════════════════════════════════════════════════
+   FORSAKEN CRYPT SCENE (inherits combat/AI/loot from DarkForest)
+   ═══════════════════════════════════════════════════════════════ */
+class ForsakenCryptScene extends DarkForestScene {
+  constructor() { super('ForsakenCrypt'); }
+
+  preload() {
+    this._preloadHero();
+
+    // Vampire spritesheets (64×64 frames, 4 direction rows)
+    for (const [state, file] of [
+      ['idle', 'Idle'], ['walk', 'Walk'], ['run', 'Run'],
+      ['attack', 'Attack'], ['hurt', 'Hurt'], ['death', 'Death'],
+    ]) {
+      this.load.spritesheet(`vamp1_${state}`,
+        `${VAMPIRES}/Vampires1/With_shadow/Vampires1_${file}_with_shadow.png`,
+        { frameWidth: 64, frameHeight: 64 });
+    }
+
+    // Demon frames
+    const demonAnims = [
+      { name: 'idle', count: 3 }, { name: 'walk', count: 6 }, { name: 'attack', count: 4 },
+      { name: 'hurt', count: 2 }, { name: 'death', count: 6 },
+    ];
+    for (const a of demonAnims) {
+      const folder = a.name.charAt(0).toUpperCase() + a.name.slice(1);
+      for (let i = 1; i <= a.count; i++)
+        this.load.image(`demon_${a.name}_${i}`, `${MONSTERS}/demon/${folder}${i}.png`);
+    }
+
+    // Portal
+    this.load.image('portal_purple', 'assets/sprites/portal_purple.png');
+  }
+
+  create() {
+    this._currentZone = 'crypt';
+    this.physics.world.setBounds(0, 0, CRYPT_W, CRYPT_H);
+
+    /* --- Dungeon floor texture --- */
+    const canvas = document.createElement('canvas');
+    canvas.width = 400; canvas.height = 400;
+    const ctx = canvas.getContext('2d');
+    for (let y = 0; y < 400; y++) for (let x = 0; x < 400; x++) {
+      const n = Math.random() * 12;
+      ctx.fillStyle = `rgb(${18 + n},${16 + n},${22 + n})`;
+      ctx.fillRect(x, y, 1, 1);
+    }
+    ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 400; i += 16) {
+      ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, 400); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(400, i); ctx.stroke();
+    }
+    const tex = this.textures.createCanvas('crypt_floor', 400, 400);
+    tex.context.drawImage(canvas, 0, 0); tex.refresh();
+    this.add.image(CRYPT_W / 2, CRYPT_H / 2, 'crypt_floor')
+      .setDisplaySize(CRYPT_W, CRYPT_H).setDepth(-1000);
+
+    /* --- Static groups --- */
+    this.staticObjects = this.physics.add.staticGroup();
+    this.decorations = [];
+
+    /* --- Player --- */
+    this._createPlayer();
+
+    /* --- Enemies --- */
+    this.enemies = [];
+    this._createEnemyAnims();
+    this._spawnCryptEnemies();
+
+    /* --- Loot --- */
+    this.lootDrops = [];
+
+    /* --- Exit portal --- */
+    const exitX = CRYPT_W - 200, exitY = CRYPT_H - 200;
+    this.portal = this.physics.add.sprite(exitX, exitY, 'portal_purple');
+    this.portal.setScale(2.5).setDepth(exitY);
+    this.portal.body.setImmovable(true);
+    this._portalLabel = this.add.text(exitX, exitY - 55, '[E] Exit Crypt', {
+      fontSize: '11px', fontFamily: "'Cinzel', serif", color: '#aa88ff',
+      stroke: '#000', strokeThickness: 2,
+    }).setOrigin(0.5).setDepth(10001).setVisible(false);
+
+    /* --- No NPC in crypt --- */
+    this.npc = null;
+    this._npcLabel = null;
+
+    /* --- Physics --- */
+    this.physics.add.collider(this.knight, this.staticObjects);
+
+    /* --- Camera --- */
+    const cam = this.cameras.main;
+    cam.setBounds(0, 0, CRYPT_W, CRYPT_H);
+    cam.startFollow(this.knight, true, 0.09, 0.09);
+    cam.setBackgroundColor('#050508');
+    cam.fadeIn(1000);
+
+    /* --- Input --- */
+    this.keys = this.input.keyboard.addKeys('W,A,S,D,E,F');
+    this.cursors = this.input.keyboard.createCursorKeys();
+    this.input.on('pointerdown', (pointer) => {
+      if (pointer.leftButtonDown()) this._playerAttack();
+    });
+
+    /* --- Player state --- */
+    const cls = this._chosenClass || {};
+    const sv = this._savedData || {};
+    this.playerData = {
+      hp: sv.hp ?? cls.hp ?? 100,
+      maxHp: sv.maxHp ?? cls.hp ?? 100,
+      mana: sv.mana ?? cls.mana ?? 50,
+      maxMana: sv.maxMana ?? cls.mana ?? 50,
+      xp: sv.xp ?? 0, xpToLevel: sv.xpToLevel ?? 100,
+      level: sv.level ?? 1, gold: sv.gold ?? 0,
+      baseDmg: sv.baseDmg ?? cls.baseDmg ?? 12,
+      critChance: sv.critChance ?? (cls.critChance ?? 15) / 100,
+      isAttacking: false, whirlwinding: false,
+      skills: { q: 0, w: 0, e: 0, r: 0, eActive: false },
+    };
+    if (sv._equipBonusDmg != null) {
+      this.playerData._equipBonusDmg = sv._equipBonusDmg;
+      this.playerData._equipBonusDef = sv._equipBonusDef;
+      this.playerData._equipBonusCrit = sv._equipBonusCrit;
+    }
+    this._isDead = false;
+    this._transitioning = false;
+
+    /* --- Timers --- */
+    this._atkCooldown = 0;
+    this._hitStopTimer = 0;
+    this._syncTimer = 0;
+    this._cullTimer = 0;
+    this._manaRegen = 0;
+    this._whirlTimer = 0;
+    this._frostCooldown = 0;
+    this._dashCooldown = 0;
+
+    /* --- Atmosphere (dark purple vignette) --- */
+    const vig = this.add.graphics(); vig.setScrollFactor(0).setDepth(9998);
+    const gw = this.cameras.main.width, gh = this.cameras.main.height;
+    for (let i = 0; i < 25; i++) {
+      vig.lineStyle(8, 0x0a0020, (i / 25) * 0.5);
+      vig.strokeRect(i * 8, i * 8, gw - i * 16, gh - i * 16);
+    }
+
+    this._syncState();
+    if (this._onZoneChange) this._onZoneChange('crypt');
+  }
+
+  _spawnCryptEnemies() {
+    const MARGIN = 200;
+    const spawnDefs = [
+      { type: 'vampire', count: 10 },
+      { type: 'demon',   count: 4  },
+    ];
+    for (const sd of spawnDefs) {
+      const typeDef = ENEMY_TYPES[sd.type];
+      let placed = 0;
+      for (let attempt = 0; attempt < 500 && placed < sd.count; attempt++) {
+        const x = MARGIN + Math.random() * (CRYPT_W - MARGIN * 2);
+        const y = MARGIN + Math.random() * (CRYPT_H - MARGIN * 2);
+        if (Math.hypot(x - CRYPT_W / 2, y - CRYPT_H / 2) < 200) continue;
+        this._createEnemy(x, y, sd.type, typeDef);
+        placed++;
+      }
+    }
+  }
+
+  /* Override portal: return to forest */
+  _enterPortal() {
+    if (this._transitioning) return;
+    this._transitioning = true;
+    this.cameras.main.fadeOut(1000, 0, 0, 0);
+    this.cameras.main.once('camerafadeoutcomplete', () => {
+      const data = this._getTransitionData();
+      data.savedData.x = FOREST_PORTAL_POS.x;
+      data.savedData.y = FOREST_PORTAL_POS.y + 50;
+      this.scene.start('DarkForest', data);
+    });
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
    REACT COMPONENT
    ═══════════════════════════════════════════════════════════════ */
-export default function GameMap({ playerState, setPlayerState, sceneRef, addToBackpack, inventoryOpen, setInventoryOpen, chosenClass, savedData, onPlayerDeath }) {
+export default function GameMap({ playerState, setPlayerState, sceneRef, addToBackpack, inventoryOpen, setInventoryOpen, chosenClass, savedData, onPlayerDeath, onOpenTrade, onZoneChange }) {
   const containerRef = useRef(null);
   const gameRef = useRef(null);
 
@@ -1047,12 +1478,12 @@ export default function GameMap({ playerState, setPlayerState, sceneRef, addToBa
       pixelArt: true,
       backgroundColor: '#0a0a08',
       physics: { default: 'arcade', arcade: { gravity: { y: 0 }, debug: false } },
-      scene: [DarkForestScene],
+      scene: [DarkForestScene, ForsakenCryptScene],
       scale: { mode: Phaser.Scale.RESIZE, autoCenter: Phaser.Scale.CENTER_BOTH },
     });
-    gameRef.current.scene.start('DarkForest', { syncFn, addToBackpack, sceneRef, chosenClass, savedData, onPlayerDeath });
+    gameRef.current.scene.start('DarkForest', { syncFn, addToBackpack, sceneRef, chosenClass, savedData, onPlayerDeath, onOpenTrade, onZoneChange });
     return () => { if (gameRef.current) { gameRef.current.destroy(true); gameRef.current = null; } };
-  }, [syncFn, addToBackpack, sceneRef, chosenClass, savedData, onPlayerDeath]);
+  }, [syncFn, addToBackpack, sceneRef, chosenClass, savedData, onPlayerDeath, onOpenTrade, onZoneChange]);
 
   return (
     <div className="relative w-full h-full">
@@ -1061,3 +1492,5 @@ export default function GameMap({ playerState, setPlayerState, sceneRef, addToBa
     </div>
   );
 }
+
+export { LOOT_TABLE, RARITIES };
