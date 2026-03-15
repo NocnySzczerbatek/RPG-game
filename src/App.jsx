@@ -153,9 +153,16 @@ export default function App() {
     const handler = (e) => {
       if (screen !== 'playing') return;
       const k = e.key;
+      const code = e.code;
 
-      // Tilde / backtick / semicolon → admin panel (if admin)
-      if ((k === '`' || k === '~' || k === ';') && isAdmin) { e.preventDefault(); setAdminOpen(prev => !prev); return; }
+      // Admin console toggle: Backquote key (physical), or ; or / keys (if admin)
+      // Using e.code for Backquote works regardless of keyboard layout (PL, EN, etc.)
+      if (isAdmin && (code === 'Backquote' || k === ';' || k === '/')) {
+        e.preventDefault();
+        e.stopPropagation();
+        setAdminOpen(prev => !prev);
+        return;
+      }
 
       // ESC priority: trade → inventory → admin → toggle settings
       if (k === 'Escape') {
@@ -174,8 +181,9 @@ export default function App() {
         if (!tradeOpen) setInventoryOpen(prev => !prev);
       }
     };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
+    // Use capture phase so our handler fires BEFORE Phaser's keyboard listener
+    window.addEventListener('keydown', handler, true);
+    return () => window.removeEventListener('keydown', handler, true);
   }, [inventoryOpen, tradeOpen, adminOpen, settingsOpen, screen, bindings, isAdmin]);
 
   /* ── Pause Phaser when any overlay open ────────────────── */

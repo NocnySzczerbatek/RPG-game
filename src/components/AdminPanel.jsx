@@ -141,12 +141,13 @@ export default function AdminPanel({
       execute(input);
       setInput('');
     }
-    if (e.key === '`' || e.key === '~') {
+    // Backquote (physical key) always closes
+    if (e.code === 'Backquote') {
       e.preventDefault();
       onClose();
     }
-    // Semicolon closes console only when input is empty (so you can type ; in commands)
-    if (e.key === ';' && !input) {
+    // Semicolon or slash close only when input is empty
+    if ((e.key === ';' || e.key === '/') && !input) {
       e.preventDefault();
       onClose();
     }
