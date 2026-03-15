@@ -259,6 +259,7 @@ class DarkForestScene extends Phaser.Scene {
   constructor(key = 'DarkForest') { super(key); }
 
   init(data) {
+    console.log('[DarkForest] init() called, chosenClass:', data?.chosenClass?.id, 'hasSyncFn:', !!data?.syncFn);
     this._syncFn = data.syncFn;
     this._addToBackpack = data.addToBackpack;
     this._sceneRef = data.sceneRef;
@@ -379,7 +380,9 @@ class DarkForestScene extends Phaser.Scene {
       if (pointer.leftButtonDown()) this._playerAttack();
       else if (pointer.rightButtonDown()) this._updateWSkill();
     });
-    this.input.mouse.disableContextMenu();
+    try { this.input.mouse.disableContextMenu(); } catch (_) {
+      try { this.game.input.mouse.disableContextMenu(); } catch (_2) { /* no mouse manager */ }
+    }
 
     /* --- Player state (from class + save) --- */
     const cls = this._chosenClass || {};
@@ -442,6 +445,7 @@ class DarkForestScene extends Phaser.Scene {
 
     /* --- Phaser minimap camera --- */
     this._createMinimap();
+    console.log('[DarkForest] create() complete — player at', this.knight?.x, this.knight?.y);
   }
 
   /* ── ENEMY ANIMATIONS ──────────────────────────────────── */
@@ -1801,6 +1805,10 @@ class DarkForestScene extends Phaser.Scene {
   /* ── UPDATE ─────────────────────────────────────────────── */
   update(time, delta) {
     if (!this.knight || this._isDead) return;
+    if (!this._firstUpdateLogged) {
+      console.log('[DarkForest] first update tick — knight exists, input active');
+      this._firstUpdateLogged = true;
+    }
 
     // Hit-stop freeze
     if (this._hitStopTimer > 0) { this._hitStopTimer -= delta; return; }
@@ -2028,7 +2036,9 @@ class ForsakenCryptScene extends DarkForestScene {
       if (pointer.leftButtonDown()) this._playerAttack();
       else if (pointer.rightButtonDown()) this._updateWSkill();
     });
-    this.input.mouse.disableContextMenu();
+    try { this.input.mouse.disableContextMenu(); } catch (_) {
+      try { this.game.input.mouse.disableContextMenu(); } catch (_2) { /* no mouse manager */ }
+    }
 
     /* --- Player state --- */
     const cls = this._chosenClass || {};
@@ -2380,6 +2390,7 @@ export default function GameMap({ playerState, setPlayerState, sceneRef, addToBa
 
   useEffect(() => {
     if (gameRef.current) return;
+    console.log('[GameMap] Creating Phaser game, chosenClass:', chosenClass?.id);
     gameRef.current = new Phaser.Game({
       type: Phaser.AUTO,
       parent: containerRef.current,
@@ -2388,10 +2399,14 @@ export default function GameMap({ playerState, setPlayerState, sceneRef, addToBa
       pixelArt: true,
       backgroundColor: '#0a0a08',
       physics: { default: 'arcade', arcade: { gravity: { y: 0 }, debug: false } },
-      scene: [DarkForestScene, ForsakenCryptScene],
+      scene: [],
       scale: { mode: Phaser.Scale.RESIZE, autoCenter: Phaser.Scale.CENTER_BOTH },
     });
-    gameRef.current.scene.start('DarkForest', { syncFn, addToBackpack, sceneRef, chosenClass, savedData, onPlayerDeath, onOpenTrade, onZoneChange });
+    const sceneData = { syncFn, addToBackpack, sceneRef, chosenClass, savedData, onPlayerDeath, onOpenTrade, onZoneChange };
+    gameRef.current.scene.add('DarkForest', DarkForestScene, false);
+    gameRef.current.scene.add('ForsakenCrypt', ForsakenCryptScene, false);
+    gameRef.current.scene.start('DarkForest', sceneData);
+    console.log('[GameMap] Scene start queued with data');
     return () => { if (gameRef.current) { gameRef.current.destroy(true); gameRef.current = null; } };
   }, [syncFn, addToBackpack, sceneRef, chosenClass, savedData, onPlayerDeath, onOpenTrade, onZoneChange]);
 

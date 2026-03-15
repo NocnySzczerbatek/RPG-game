@@ -4,7 +4,6 @@ import Inventory from './components/Inventory';
 import MainMenu, { CLASSES } from './components/MainMenu';
 import DeathOverlay from './components/DeathOverlay';
 import TradeWindow from './components/TradeWindow';
-import MiniMap from './components/MiniMap';
 import { getItemValue } from './components/TradeWindow';
 
 /* ═══════════════════════════════════════════════════════════════
@@ -271,6 +270,7 @@ export default function App() {
 
   /* ── START GAME (from menu) ────────────────────────────── */
   const handleStartGame = useCallback((classData) => {
+    console.log('[App] handleStartGame, class:', classData?.id);
     setChosenClass(classData);
     setBackpack(new Array(BACKPACK_SIZE).fill(null));
     setEquipment({ ...EMPTY_EQUIPMENT });
@@ -371,7 +371,7 @@ export default function App() {
         onOpenTrade={onOpenTrade}
         onZoneChange={onZoneChange}
       />
-      <MiniMap playerState={playerState} />
+      {/* MiniMap now handled by Phaser camera — React MiniMap removed to avoid overlap */}
       <Inventory
         isOpen={inventoryOpen && screen === 'playing'}
         onClose={() => setInventoryOpen(false)}
