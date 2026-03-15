@@ -5,24 +5,19 @@
 export const WORLD_SIZE = 6000;
 
 /* ── 6 City definitions ────────────────────────────────────── */
+/* NPCs are now INSIDE buildings (npcLabel field). No outdoor NPC arrays. */
 export const CITIES = [
   {
     id: 'eldergrove', name: 'Eldergrove', x: 1200, y: 1200,
     radius: 460, style: 'village', biome: 'forest',
     desc: 'Spokojne miasteczko, bezpieczna przystań dla podróżników.',
     buildings: [
-      { type: 'hall', ox: 0, oy: -60, room: 'Karczma' },
-      { type: 'hut', ox: -280, oy: -180, room: 'Sypialnia' },
-      { type: 'hut', ox: 280, oy: -160, room: 'Sklep' },
-      { type: 'hut', ox: -260, oy: 160, room: 'Biblioteka' },
-      { type: 'hut', ox: 270, oy: 180, room: 'Kuźnia' },
+      { type: 'hall', ox: 0, oy: -60, room: 'Karczma', npcLabel: 'Karczmarz Bogdan' },
+      { type: 'hut', ox: -280, oy: -180, room: 'Sypialnia', npcLabel: 'Stary Aethor' },
+      { type: 'hut', ox: 280, oy: -160, room: 'Sklep', npcLabel: 'Kupiec Lira' },
+      { type: 'hut', ox: -260, oy: 160, room: 'Biblioteka', npcLabel: 'Skryba Mira' },
+      { type: 'hut', ox: 270, oy: 180, room: 'Kuźnia', npcLabel: 'Kowal Thorn' },
       { type: 'well', ox: 0, oy: 80 },
-    ],
-    npcs: [
-      { role: 'blacksmith', ox: 310, oy: 180, label: 'Kowal Thorn' },
-      { role: 'merchant', ox: -320, oy: -180, label: 'Uzdrowiciel Lira' },
-      { role: 'quest', ox: -80, oy: -130, label: 'Stary Aethor' },
-      { role: 'quest', ox: 80, oy: -130, label: 'Zwiadowca Mira' },
     ],
   },
   {
@@ -30,17 +25,11 @@ export const CITIES = [
     radius: 440, style: 'fortress', biome: 'plains',
     desc: 'Forteca wojowników na wzgórzach.',
     buildings: [
-      { type: 'hall', ox: 0, oy: -50, room: 'Karczma' },
-      { type: 'hut', ox: -270, oy: 140, room: 'Kuźnia' },
-      { type: 'hut', ox: 270, oy: 160, room: 'Sypialnia' },
-      { type: 'hut', ox: -260, oy: -170, room: 'Sklep' },
+      { type: 'hall', ox: 0, oy: -50, room: 'Karczma', npcLabel: 'Karczmarz Aldric' },
+      { type: 'hut', ox: -270, oy: 140, room: 'Kuźnia', npcLabel: 'Kowal Garen' },
+      { type: 'hut', ox: 270, oy: 160, room: 'Sypialnia', npcLabel: 'Kapitan Yara' },
+      { type: 'hut', ox: -260, oy: -170, room: 'Sklep', npcLabel: 'Handlarz Felix' },
       { type: 'watchtower', ox: 280, oy: -170 },
-    ],
-    npcs: [
-      { role: 'blacksmith', ox: -310, oy: 140, label: 'Kowal Garen' },
-      { role: 'merchant', ox: -300, oy: -170, label: 'Handlarz Felix' },
-      { role: 'quest', ox: 80, oy: -120, label: 'Kapitan Aldros' },
-      { role: 'quest', ox: 310, oy: 160, label: 'Mag Obrońca Yara' },
     ],
   },
   {
@@ -48,16 +37,10 @@ export const CITIES = [
     radius: 420, style: 'mountain', biome: 'barren',
     desc: 'Miasteczko górnicze, pełne rud i minersów.',
     buildings: [
-      { type: 'hall', ox: 0, oy: -50, room: 'Karczma' },
-      { type: 'hut', ox: -270, oy: -160, room: 'Sypialnia' },
-      { type: 'hut', ox: 270, oy: -150, room: 'Kuźnia' },
-      { type: 'hut', ox: -260, oy: 170, room: 'Biblioteka' },
-    ],
-    npcs: [
-      { role: 'blacksmith', ox: 310, oy: -150, label: 'Kowalka Brenna' },
-      { role: 'merchant', ox: -310, oy: -160, label: 'Aptekarz Dolin' },
-      { role: 'quest', ox: 80, oy: -120, label: 'Górnik Kael' },
-      { role: 'quest', ox: -300, oy: 170, label: 'Badacz Ronen' },
+      { type: 'hall', ox: 0, oy: -50, room: 'Karczma', npcLabel: 'Karczmarz Dolin' },
+      { type: 'hut', ox: -270, oy: -160, room: 'Sypialnia', npcLabel: 'Górnik Kael' },
+      { type: 'hut', ox: 270, oy: -150, room: 'Kuźnia', npcLabel: 'Kowalka Brenna' },
+      { type: 'hut', ox: -260, oy: 170, room: 'Biblioteka', npcLabel: 'Badacz Ronen' },
     ],
   },
   {
@@ -65,17 +48,10 @@ export const CITIES = [
     radius: 430, style: 'swamp', biome: 'swamp',
     desc: 'Mroczna osada na bagnach, dom wiedźm i łotrzyków.',
     buildings: [
-      { type: 'hall', ox: 0, oy: -50, room: 'Karczma' },
-      { type: 'hut', ox: -270, oy: -160, room: 'Sklep' },
-      { type: 'hut', ox: 270, oy: -150, room: 'Sypialnia' },
-      { type: 'hut', ox: 260, oy: 170, room: 'Kuźnia' },
-    ],
-    npcs: [
-      { role: 'blacksmith', ox: 300, oy: 170, label: 'Kowal Morven' },
-      { role: 'merchant', ox: -310, oy: -160, label: 'Znachor Ilsa' },
-      { role: 'quest', ox: 80, oy: -120, label: 'Strażnik Fenn' },
-      { role: 'quest', ox: 310, oy: -150, label: 'Czarodziejka Vex' },
-      { role: 'quest', ox: -100, oy: 85, label: 'Złodziej Pip' },
+      { type: 'hall', ox: 0, oy: -50, room: 'Karczma', npcLabel: 'Znachorka Ilsa' },
+      { type: 'hut', ox: -270, oy: -160, room: 'Sklep', npcLabel: 'Handlarz Vex' },
+      { type: 'hut', ox: 270, oy: -150, room: 'Sypialnia', npcLabel: 'Strażnik Fenn' },
+      { type: 'hut', ox: 260, oy: 170, room: 'Kuźnia', npcLabel: 'Kowal Morven' },
     ],
   },
   {
@@ -83,18 +59,12 @@ export const CITIES = [
     radius: 470, style: 'market', biome: 'forest',
     desc: 'Wielki targ handlowy w sercu lasu.',
     buildings: [
-      { type: 'hall', ox: 0, oy: -60, room: 'Karczma' },
-      { type: 'hut', ox: -290, oy: -180, room: 'Sklep' },
-      { type: 'hut', ox: 290, oy: -160, room: 'Sypialnia' },
-      { type: 'hut', ox: -280, oy: 170, room: 'Biblioteka' },
-      { type: 'hut', ox: 280, oy: 190, room: 'Kuźnia' },
+      { type: 'hall', ox: 0, oy: -60, room: 'Karczma', npcLabel: 'Karczmarz Luken' },
+      { type: 'hut', ox: -290, oy: -180, room: 'Sklep', npcLabel: 'Kupiec Sarina' },
+      { type: 'hut', ox: 290, oy: -160, room: 'Sypialnia', npcLabel: 'Łowca Kira' },
+      { type: 'hut', ox: -280, oy: 170, room: 'Biblioteka', npcLabel: 'Bard Elion' },
+      { type: 'hut', ox: 280, oy: 190, room: 'Kuźnia', npcLabel: 'Kowal Dorin' },
       { type: 'well', ox: 0, oy: 80 },
-    ],
-    npcs: [
-      { role: 'blacksmith', ox: 320, oy: 190, label: 'Kowal Dorin' },
-      { role: 'merchant', ox: -330, oy: -180, label: 'Kupiec Sarina' },
-      { role: 'quest', ox: 80, oy: -130, label: 'Łowca Kira' },
-      { role: 'quest', ox: -80, oy: -130, label: 'Bard Luken' },
     ],
   },
   {
@@ -102,14 +72,9 @@ export const CITIES = [
     radius: 420, style: 'ruins', biome: 'barren',
     desc: 'Opuszczone ruiny na skraju świata, brama do Krypty.',
     buildings: [
-      { type: 'hall', ox: 0, oy: -50, room: 'Karczma' },
-      { type: 'hut', ox: -270, oy: 150, room: 'Kuźnia' },
-      { type: 'hut', ox: 270, oy: -160, room: 'Biblioteka' },
-    ],
-    npcs: [
-      { role: 'blacksmith', ox: -310, oy: 150, label: 'Kowal Ashen' },
-      { role: 'merchant', ox: 310, oy: -160, label: 'Wiedźma Nyx' },
-      { role: 'quest', ox: 80, oy: -120, label: 'Strażnik Krypty' },
+      { type: 'hall', ox: 0, oy: -50, room: 'Karczma', npcLabel: 'Karczmarz Nyx' },
+      { type: 'hut', ox: -270, oy: 150, room: 'Kuźnia', npcLabel: 'Kowal Ashen' },
+      { type: 'hut', ox: 270, oy: -160, room: 'Biblioteka', npcLabel: 'Strażnik Krypty' },
     ],
   },
 ];

@@ -482,6 +482,12 @@ class DarkForestScene extends Phaser.Scene {
           }
           return;
         }
+        // Inside building — no enemy targeting, just movement
+        if (this._insideBuilding) {
+          this._moveTarget = { x: wx, y: wy };
+          this._attackTarget = null;
+          return;
+        }
         let clickedEnemy = null;
         for (const e of this.enemies) {
           if (e.enemyData.isDead) continue;
@@ -539,54 +545,15 @@ class DarkForestScene extends Phaser.Scene {
     this._furyActive = false;
 
     try {
-      // --- City NPCs (all cities) ---
+      // --- NPCs (indoor only — inside buildings) ---
       this.npcs = [];
       this._npcLabels = [];
-      for (const city of CITIES) {
-        for (const npcDef of city.npcs) {
-          const nx = city.x + npcDef.ox, ny = city.y + npcDef.oy;
-          const spriteKey = this.textures.exists('citizen1_idle') ? 'citizen1_idle' : 'npc_blacksmith';
-          const npcSprite = this.physics.add.sprite(nx, ny, spriteKey);
-          npcSprite.setScale(2.8).setDepth(ny).setImmovable(true);
-          npcSprite.body.setImmovable(true);
-          npcSprite.npcRole = npcDef.role;
-          npcSprite.npcLabel = npcDef.label;
 
-          // Try to play idle animation if spritesheet
-          if (this.textures.exists('citizen1_idle')) {
-            const animKey = `citizen1_idle_anim`;
-            if (!this.anims.exists(animKey)) {
-              const totalFrames = this.textures.get('citizen1_idle').frameTotal;
-              if (totalFrames > 1) {
-                this.anims.create({ key: animKey, frames: this.anims.generateFrameNumbers('citizen1_idle', { start: 0, end: totalFrames - 2 }), frameRate: 6, repeat: -1 });
-              }
-            }
-            if (this.anims.exists(animKey)) npcSprite.play(animKey);
-          }
-
-          if (this.knight) this.physics.add.collider(this.knight, npcSprite);
-
-          const labelText = npcDef.role === 'quest' ? `[E] ${npcDef.label}` : `[E] Handel - ${npcDef.label}`;
-          const label = this.add.text(nx, ny - 80, labelText, {
-            fontSize: '13px', fontFamily: "'Cinzel', serif",
-            color: npcDef.role === 'quest' ? '#88bbff' : '#c8a96e',
-            stroke: '#000', strokeThickness: 3,
-          }).setOrigin(0.5).setDepth(10001).setVisible(false);
-          npcSprite._label = label;
-          this.npcs.push(npcSprite);
-          this._npcLabels.push(label);
-        }
-      }
-      this.npc = this.npcs[0] || null;
-      this._npcLabel = null;
-
-      // Spawn indoor resident NPCs — one per enterable house, behind counter if trade room
+      // Spawn indoor resident NPCs — one per enterable house
       if (this._enterableHouses) {
         for (const house of this._enterableHouses) {
-          // Position: behind counter (north side) for trade rooms, random for quest rooms
           let rx, ry;
           if (house.npcRole === 'trade') {
-            // Stand behind the counter (north side, ~30px above center)
             rx = house.x;
             ry = house.y - 35;
           } else {
@@ -599,7 +566,7 @@ class DarkForestScene extends Phaser.Scene {
           resident.body.setImmovable(true);
           resident.body.setSize(20, 14).setOffset(22, 42);
           resident.npcRole = house.npcRole === 'trade' ? 'merchant' : 'quest';
-          resident.npcLabel = house.npcName;
+          resident.npcLabel = house.npcLabel;
           resident.setVisible(false);
 
           if (this.textures.exists('citizen2_idle')) {
@@ -614,15 +581,15 @@ class DarkForestScene extends Phaser.Scene {
           if (this.knight) this.physics.add.collider(this.knight, resident);
 
           const labelColor = house.npcRole === 'trade' ? '#c8a96e' : '#88bbff';
-          const labelPrefix = house.npcRole === 'trade' ? '[E] Handel' : '[E] Rozmowa';
-          const rlabel = this.add.text(rx, ry - 60, `${labelPrefix} - ${house.npcName}`, {
+          const labelPrefix = house.npcRole === 'trade' ? '[F] Handel' : '[F] Rozmowa';
+          const rlabel = this.add.text(rx, ry - 60, `${labelPrefix} - ${house.npcLabel}`, {
             fontSize: '11px', fontFamily: "'Cinzel', serif", color: labelColor,
             stroke: '#000', strokeThickness: 3,
-          }).setOrigin(0.5).setDepth(10001).setVisible(false);
+          }).setOrigin(0.5).setDepth(100002).setVisible(false);
           resident._label = rlabel;
           resident._houseRef = house;
-          house.furnitureSprites.push(resident);
-          house.furnitureSprites.push(rlabel);
+          house._indoorNpc = resident;
+          house._indoorNpcLabel = rlabel;
           this.npcs.push(resident);
           this._npcLabels.push(rlabel);
         }
@@ -634,7 +601,7 @@ class DarkForestScene extends Phaser.Scene {
       this.portal = this.physics.add.sprite(PORTAL_POS.x, PORTAL_POS.y, 'portal_purple');
       this.portal.setScale(2.5).setDepth(PORTAL_POS.y);
       this.portal.body.setImmovable(true);
-      this._portalLabel = this.add.text(PORTAL_POS.x, PORTAL_POS.y - 55, '[E] Wejdź do Krypty', {
+      this._portalLabel = this.add.text(PORTAL_POS.x, PORTAL_POS.y - 55, '[F] Wejdź do Krypty', {
         fontSize: '11px', fontFamily: "'Cinzel', serif", color: '#aa88ff',
         stroke: '#000', strokeThickness: 2,
       }).setOrigin(0.5).setDepth(10001).setVisible(false);
@@ -1712,6 +1679,7 @@ class DarkForestScene extends Phaser.Scene {
 
   /* ── ENEMY AI ───────────────────────────────────────────── */
   _updateEnemyAI(delta) {
+    if (this._insideBuilding) return;
     const px = this.knight.x, py = this.knight.y;
     for (const e of this.enemies) {
       const ed = e.enemyData;
@@ -2052,7 +2020,7 @@ class DarkForestScene extends Phaser.Scene {
           furnitureSprites.push(roomLabel);
 
           // --- Wall colliders (with door gap south) ---
-          const wt = 6, doorGap = 28;
+          const wt = 6, doorGap = 56;
           const wn = this.add.zone(bx, by - fh / 2, fw, wt);
           this.physics.add.existing(wn, true); this.staticObjects.add(wn);
           const hs = (fw - doorGap) / 2;
@@ -2068,20 +2036,27 @@ class DarkForestScene extends Phaser.Scene {
           // --- Roof sprite (fades when player enters) ---
           const roofKey = this.textures.exists(def.key) ? def.key : 'bld_house';
           const roof = this.add.image(bx, by + 10, roofKey);
-          roof.setScale(def.scale).setOrigin(0.5, 0.85).setDepth(by + 5);
+          roof.setScale(def.scale).setOrigin(0.5, 0.85).setDepth(100000);
 
-          // --- Door entry marker ---
-          const doorLabel = this.add.text(bx, by + fh / 2 + 14, '▼ Wejdź', {
-            fontSize: '8px', fontFamily: "'Cinzel', serif", color: '#c8a96e',
+          // --- Dark background for interior (covers outside world when zoomed in) ---
+          const darkBg = this.add.graphics().setDepth(by - 4);
+          darkBg.fillStyle(0x0a0a08, 1);
+          darkBg.fillRect(bx - 400, by - 400, 800, 800);
+          darkBg.setVisible(false);
+
+          // --- Door entry label ---
+          const doorLabel = this.add.text(bx, by + fh / 2 + 14, '[F] Wejdź', {
+            fontSize: '9px', fontFamily: "'Cinzel', serif", color: '#c8a96e',
             stroke: '#000', strokeThickness: 2,
-          }).setOrigin(0.5).setDepth(by + 6).setAlpha(0.7);
+          }).setOrigin(0.5).setDepth(100001).setVisible(false);
 
           const houseData = {
             x: bx, y: by, w: fw, h: fh,
-            roof, floor, furnitureSprites, doorLabel, furnitureColliders,
+            roof, floor, darkBg, furnitureSprites, doorLabel, furnitureColliders,
             city: city.id, type: bld.type, roomName: room.name,
             npcRole: room.npcRole || 'quest',
             npcName: room.npcName || 'Mieszkaniec',
+            npcLabel: bld.npcLabel || room.npcName || 'Mieszkaniec',
           };
           this._enterableHouses.push(houseData);
 
@@ -2165,32 +2140,102 @@ class DarkForestScene extends Phaser.Scene {
     }
   }
 
-  /* ── ROOF ALPHA SYSTEM ──────────────────────────────────── */
+  /* ── ROOF & INTERIOR SYSTEM ───────────────────────────────── */
   _updateRoofAlpha() {
     if (!this._enterableHouses || !this.knight) return;
-    const px = this.knight.x, py = this.knight.y;
 
     for (const house of this._enterableHouses) {
-      const hw = house.w / 2 + 6, hh = house.h / 2 + 6;
-      const inside = px > house.x - hw && px < house.x + hw &&
-                     py > house.y - hh && py < house.y + hh + 15;
-      const nearDist = Math.hypot(px - house.x, py - house.y);
-      const near = nearDist < Math.max(house.w, house.h) * 1.0;
-
-      const targetAlpha = inside ? 0.06 : (near ? 0.30 : 1.0);
-      const showInterior = inside || near;
-
-      // Smooth lerp
-      const cur = house.roof.alpha;
-      house.roof.setAlpha(cur + (targetAlpha - cur) * 0.12);
-
-      // Show/hide floor & furniture
-      house.floor.setVisible(showInterior);
-      for (const fs of house.furnitureSprites) fs.setVisible(showInterior);
-
-      // Door indicator
-      if (house.doorLabel) house.doorLabel.setAlpha(near || inside ? 0 : 0.7);
+      if (this._insideBuilding === house) {
+        // Player is inside — show full interior, hide roof
+        house.roof.setAlpha(0);
+        house.floor.setVisible(true);
+        if (house.darkBg) house.darkBg.setVisible(true);
+        for (const fs of house.furnitureSprites) fs.setVisible(true);
+        if (house._indoorNpc) house._indoorNpc.setVisible(true);
+        // NPC label visibility managed by proximity check in update
+      } else {
+        // Building closed — show roof, hide interior
+        house.roof.setAlpha(1);
+        house.floor.setVisible(false);
+        if (house.darkBg) house.darkBg.setVisible(false);
+        for (const fs of house.furnitureSprites) fs.setVisible(false);
+        if (house._indoorNpc) house._indoorNpc.setVisible(false);
+        if (house._indoorNpcLabel) house._indoorNpcLabel.setVisible(false);
+      }
     }
+  }
+
+  /* ── ENTER BUILDING ─────────────────────────────────────── */
+  _enterBuilding(house) {
+    if (this._insideBuilding || this._transitioning) return;
+    this._transitioning = true;
+
+    this.cameras.main.fadeOut(200, 0, 0, 0);
+    this.time.delayedCall(250, () => {
+      this._insideBuilding = house;
+
+      // Position player inside at door
+      this.knight.setPosition(house.x, house.y + house.h / 2 - 15);
+      this.knight.body.setVelocity(0, 0);
+      this._moveTarget = null;
+      this._attackTarget = null;
+
+      // Zoom camera in
+      this.cameras.main.setZoom(3.5);
+
+      // Block door gap with temporary collider
+      house._doorBlocker = this.add.zone(house.x, house.y + house.h / 2 + 3, house.w, 10);
+      this.physics.add.existing(house._doorBlocker, true);
+
+      // Disable enemies
+      for (const e of this.enemies) {
+        e.setVisible(false);
+        e.setActive(false);
+        if (e.body) e.body.enable = false;
+      }
+
+      // Fade in
+      this.cameras.main.fadeIn(300, 0, 0, 0);
+      this.time.delayedCall(300, () => { this._transitioning = false; });
+    });
+  }
+
+  /* ── EXIT BUILDING ──────────────────────────────────────── */
+  _exitBuilding() {
+    if (!this._insideBuilding || this._transitioning) return;
+    this._transitioning = true;
+    const house = this._insideBuilding;
+
+    this.cameras.main.fadeOut(200, 0, 0, 0);
+    this.time.delayedCall(250, () => {
+      // Position player outside door
+      this.knight.setPosition(house.x, house.y + house.h / 2 + 25);
+      this.knight.body.setVelocity(0, 0);
+      this._moveTarget = null;
+      this._attackTarget = null;
+
+      // Remove door blocker
+      if (house._doorBlocker) {
+        house._doorBlocker.destroy();
+        house._doorBlocker = null;
+      }
+
+      // Zoom back out
+      this.cameras.main.setZoom(1);
+
+      // Re-enable enemies
+      for (const e of this.enemies) {
+        if (!e.enemyData.isDead) {
+          e.setActive(true);
+          if (e.body) e.body.enable = true;
+        }
+      }
+
+      this._insideBuilding = null;
+
+      this.cameras.main.fadeIn(300, 0, 0, 0);
+      this.time.delayedCall(300, () => { this._transitioning = false; });
+    });
   }
 
   /* ── TREES ──────────────────────────────────────────────── */
@@ -2334,16 +2379,9 @@ class DarkForestScene extends Phaser.Scene {
     }
   }
 
-  /* ── F KEY PICKUP ───────────────────────────────────────── */
+  /* ── F KEY PICKUP (now handled in update loop alongside NPC/Portal) ── */
   _checkPickupKey() {
-    if (Phaser.Input.Keyboard.JustDown(this.keys.F)) {
-      let closest = null, closestDist = 80;
-      for (const l of this.lootDrops) {
-        const d = Math.hypot(l.x - this.knight.x, l.y - this.knight.y);
-        if (d < closestDist) { closestDist = d; closest = l; }
-      }
-      if (closest) this._pickupLoot(closest);
-    }
+    // F key is now handled in the main update loop (Portal > NPC > Loot)
   }
 
   /* ── SYNC HUD STATE ─────────────────────────────────────── */
@@ -2450,34 +2488,94 @@ class DarkForestScene extends Phaser.Scene {
       if (this._furyTimer <= 0) this._endFuryBuff();
     }
 
-    /* --- E key: Portal > NPC > Skill --- */
-    const nearPortal = this.portal && Math.hypot(this.knight.x - this.portal.x, this.knight.y - this.portal.y) < 80;
+    /* --- NPC / Portal / Door proximity --- */
+    const nearPortal = !this._insideBuilding && this.portal && Math.hypot(this.knight.x - this.portal.x, this.knight.y - this.portal.y) < 80;
 
-    // Check all city NPCs for proximity
     let nearNPC = null;
     if (this.npcs) {
       for (const n of this.npcs) {
+        if (this._insideBuilding && n._houseRef !== this._insideBuilding) continue;
+        if (!this._insideBuilding && !n.visible) continue;
         if (Math.hypot(this.knight.x - n.x, this.knight.y - n.y) < 70) { nearNPC = n; break; }
       }
     }
-    // Show/hide NPC labels
     if (this.npcs) {
       for (const n of this.npcs) {
-        if (n._label) n._label.setVisible(n === nearNPC && !nearPortal);
+        if (n._label) n._label.setVisible(n === nearNPC);
       }
     }
     if (this._portalLabel) this._portalLabel.setVisible(nearPortal);
 
-    if (nearPortal && Phaser.Input.Keyboard.JustDown(this.keys.E)) {
-      this._enterPortal();
-    } else if (nearNPC && Phaser.Input.Keyboard.JustDown(this.keys.E)) {
-      if (nearNPC.npcRole === 'blacksmith' || nearNPC.npcRole === 'merchant') {
-        this._activeTradeNpc = nearNPC.npcLabel || 'Handlarz';
-        if (this._onOpenTrade) this._onOpenTrade(this._activeTradeNpc);
+    // Building door proximity (outside)
+    let nearDoor = null;
+    if (!this._insideBuilding && this._enterableHouses) {
+      for (const h of this._enterableHouses) {
+        // Nowa logika: trigger wejścia dokładnie na poziomie drzwi (można łatwo wejść)
+        const doorY = h.y + h.h / 2 + 38;
+        if (Math.abs(this.knight.x - h.x) < 70 && Math.abs(this.knight.y - doorY) < 70) {
+          nearDoor = h; break;
+        }
       }
-    } else {
-      this._updateESkill(delta);
     }
+
+    // Exit door proximity (inside)
+    let nearExit = false;
+    if (this._insideBuilding) {
+      const h = this._insideBuilding;
+      // Trigger wyjścia: przy drzwiach wewnętrznych
+      const exitY = h.y + h.h / 2 - 18;
+      nearExit = Math.abs(this.knight.x - h.x) < 70 && Math.abs(this.knight.y - exitY) < 70;
+    }
+
+    // Door labels
+    if (this._enterableHouses) {
+      for (const h of this._enterableHouses) {
+        if (!h.doorLabel) continue;
+        if (this._insideBuilding === h) {
+          h.doorLabel.setText('[F] Wyjdź');
+          h.doorLabel.setPosition(h.x, h.y + h.h / 2 - 18);
+          h.doorLabel.setDepth(100001);
+          h.doorLabel.setVisible(nearExit);
+          h.doorLabel.setAlpha(1);
+        } else if (!this._insideBuilding && nearDoor === h) {
+          h.doorLabel.setText('[F] Wejdź');
+          h.doorLabel.setPosition(h.x, h.y + h.h / 2 + 38);
+          h.doorLabel.setDepth(100001);
+          h.doorLabel.setVisible(true);
+          h.doorLabel.setAlpha(0.95);
+        } else {
+          h.doorLabel.setVisible(false);
+        }
+      }
+    }
+
+    /* --- F key: Building door / Portal / NPC / Loot --- */
+    if (Phaser.Input.Keyboard.JustDown(this.keys.F)) {
+      if (this._insideBuilding) {
+        // Wnętrze: wyjście na F
+        if (nearExit) {
+          this._exitBuilding();
+        }
+      } else {
+        // Zewnętrze: wejście na F
+        if (nearDoor) {
+          this._enterBuilding(nearDoor);
+        } else if (nearPortal) {
+          this._enterPortal();
+        } else {
+          // Loot pickup fallback
+          let closest = null, closestDist = 80;
+          for (const l of this.lootDrops) {
+            const d = Math.hypot(l.x - this.knight.x, l.y - this.knight.y);
+            if (d < closestDist) { closestDist = d; closest = l; }
+          }
+          if (closest) this._pickupLoot(closest);
+        }
+      }
+    }
+
+    /* --- E key: Skill only --- */
+    this._updateESkill(delta);
 
     /* --- Q skill --- */
     this._updateQSkill();
