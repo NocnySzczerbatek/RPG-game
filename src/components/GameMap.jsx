@@ -259,16 +259,23 @@ class DarkForestScene extends Phaser.Scene {
   constructor(key = 'DarkForest') { super(key); }
 
   init(data) {
-    console.log('[DarkForest] init() called, chosenClass:', data?.chosenClass?.id, 'hasSyncFn:', !!data?.syncFn);
-    this._syncFn = data.syncFn;
-    this._addToBackpack = data.addToBackpack;
-    this._sceneRef = data.sceneRef;
-    this._chosenClass = data.chosenClass;
-    this._savedData = data.savedData;
-    this._onPlayerDeath = data.onPlayerDeath;
-    this._onOpenTrade = data.onOpenTrade;
-    this._onZoneChange = data.onZoneChange;
+    // Read from module-level storage (most reliable) or from Phaser data arg
+    const d = (__pendingSceneData && __pendingSceneData.syncFn) ? __pendingSceneData : (data || {});
+    if (__pendingSceneData) __pendingSceneData = null;
+    console.log('[DarkForest] init() called, chosenClass:', d.chosenClass?.id, 'hasSyncFn:', !!d.syncFn);
+    this._syncFn = d.syncFn;
+    this._addToBackpack = d.addToBackpack;
+    this._sceneRef = d.sceneRef;
+    this._chosenClass = d.chosenClass;
+    this._savedData = d.savedData;
+    this._onPlayerDeath = d.onPlayerDeath;
+    this._onOpenTrade = d.onOpenTrade;
+    this._onZoneChange = d.onZoneChange;
     if (this._sceneRef) this._sceneRef.current = this;
+    // Register ForsakenCrypt scene if not already present
+    if (!this.scene.manager.keys['ForsakenCrypt']) {
+      this.scene.manager.add('ForsakenCrypt', ForsakenCryptScene, false);
+    }
   }
 
   /* ── PRELOAD ───────────────────────────────────────────────── */
@@ -334,6 +341,8 @@ class DarkForestScene extends Phaser.Scene {
 
   /* ── CREATE ────────────────────────────────────────────────── */
   create() {
+    console.log('[DarkForest] create() START');
+    try {
     this._currentZone = 'forest';
     this._transitioning = false;
     this.physics.world.setBounds(0, 0, WORLD_W, WORLD_H);
@@ -352,17 +361,22 @@ class DarkForestScene extends Phaser.Scene {
     this._createGroundTexture(noise, pathPoints);
     this.staticObjects = this.physics.add.staticGroup();
     this.decorations = [];
-    this._createBuildings(rng);
-    this._scatterTrees(noise, rng);
-    this._scatterRocks(noise, rng);
+    console.log('[DarkForest] ground done');
+
+    try { this._createBuildings(rng); } catch(e) { console.error('[DarkForest] _createBuildings FAILED:', e); }
+    try { this._scatterTrees(noise, rng); } catch(e) { console.error('[DarkForest] _scatterTrees FAILED:', e); }
+    try { this._scatterRocks(noise, rng); } catch(e) { console.error('[DarkForest] _scatterRocks FAILED:', e); }
+    console.log('[DarkForest] world objects done');
 
     /* --- Player --- */
     this._createPlayer();
+    console.log('[DarkForest] player created at', this.knight?.x, this.knight?.y, 'visible:', this.knight?.visible);
 
     /* --- Enemies --- */
     this.enemies = [];
-    this._createEnemyAnims();
-    this._spawnEnemies(rng);
+    try { this._createEnemyAnims(); } catch(e) { console.error('[DarkForest] _createEnemyAnims FAILED:', e); }
+    try { this._spawnEnemies(rng); } catch(e) { console.error('[DarkForest] _spawnEnemies FAILED:', e); }
+    console.log('[DarkForest] enemies spawned:', this.enemies.length);
 
     /* --- Loot on ground --- */
     this.lootDrops = [];
@@ -375,6 +389,7 @@ class DarkForestScene extends Phaser.Scene {
     cam.setBounds(0, 0, WORLD_W, WORLD_H);
     cam.startFollow(this.knight, true, 0.09, 0.09);
     cam.setBackgroundColor('#0a0a08');
+    console.log('[DarkForest] camera following knight, cam scroll:', cam.scrollX, cam.scrollY);
 
     /* --- Input --- */
     this.keys = this.input.keyboard.addKeys('W,A,S,D,E,F,Q,R,SPACE');
@@ -386,6 +401,7 @@ class DarkForestScene extends Phaser.Scene {
     try { this.input.mouse.disableContextMenu(); } catch (_) {
       try { this.game.input.mouse.disableContextMenu(); } catch (_2) { /* no mouse manager */ }
     }
+    console.log('[DarkForest] input setup done');
 
     /* --- Player state (from class + save) --- */
     const cls = this._chosenClass || {};
@@ -441,14 +457,17 @@ class DarkForestScene extends Phaser.Scene {
     }).setOrigin(0.5).setDepth(10001).setVisible(false);
 
     /* --- Atmosphere --- */
-    this._createAtmosphere();
+    try { this._createAtmosphere(); } catch(e) { console.error('[DarkForest] _createAtmosphere FAILED:', e); }
     this._syncState();
     if (this._onZoneChange) this._onZoneChange('forest');
     this.cameras.main.fadeIn(800);
 
     /* --- Phaser minimap camera --- */
-    this._createMinimap();
-    console.log('[DarkForest] create() complete — player at', this.knight?.x, this.knight?.y);
+    try { this._createMinimap(); } catch(e) { console.error('[DarkForest] _createMinimap FAILED:', e); }
+    console.log('[DarkForest] create() COMPLETE — player at', this.knight?.x, this.knight?.y);
+    } catch (fatalErr) {
+      console.error('[DarkForest] create() FATAL ERROR:', fatalErr);
+    }
   }
 
   /* ── ENEMY ANIMATIONS ──────────────────────────────────── */
@@ -2388,6 +2407,9 @@ class ForsakenCryptScene extends DarkForestScene {
 /* ═══════════════════════════════════════════════════════════════
    REACT COMPONENT
    ═══════════════════════════════════════════════════════════════ */
+// Module-level storage for scene data — avoids Phaser data-passing issues
+let __pendingSceneData = null;
+
 export default function GameMap({ playerState, setPlayerState, sceneRef, addToBackpack, inventoryOpen, setInventoryOpen, chosenClass, savedData, onPlayerDeath, onOpenTrade, onZoneChange }) {
   const containerRef = useRef(null);
   const gameRef = useRef(null);
@@ -2409,7 +2431,10 @@ export default function GameMap({ playerState, setPlayerState, sceneRef, addToBa
     if (gameRef.current) return;
     const d = dataRef.current;
     console.log('[GameMap] Creating Phaser game, chosenClass:', d.chosenClass?.id);
-    const sceneData = { ...d };
+
+    // Store data at module level — DarkForestScene.init will read it
+    __pendingSceneData = { ...d };
+
     gameRef.current = new Phaser.Game({
       type: Phaser.AUTO,
       parent: containerRef.current,
@@ -2418,17 +2443,9 @@ export default function GameMap({ playerState, setPlayerState, sceneRef, addToBa
       pixelArt: true,
       backgroundColor: '#0a0a08',
       physics: { default: 'arcade', arcade: { gravity: { y: 0 }, debug: false } },
-      scene: [],
+      scene: [DarkForestScene],
       scale: { mode: Phaser.Scale.RESIZE, autoCenter: Phaser.Scale.CENTER_BOTH },
       input: { keyboard: { target: window }, mouse: { target: containerRef.current } },
-      callbacks: {
-        postBoot: (game) => {
-          console.log('[GameMap] postBoot — adding scenes');
-          game.scene.add('DarkForest', DarkForestScene, true, sceneData);
-          game.scene.add('ForsakenCrypt', ForsakenCryptScene, false);
-          console.log('[GameMap] DarkForest started with data');
-        },
-      },
     });
     // Focus the canvas so Phaser captures keyboard input
     setTimeout(() => {
