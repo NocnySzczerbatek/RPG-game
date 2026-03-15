@@ -5,7 +5,10 @@ import MainMenu, { CLASSES } from './components/MainMenu';
 import DeathOverlay from './components/DeathOverlay';
 import TradeWindow from './components/TradeWindow';
 import { getItemValue as getItemValueTrade } from './components/TradeWindow';
-import { ITEM_DB, LOOT_TABLE, RARITIES, TYPE_TO_SLOTS, SKILL_TREES, rollMobItem, rollBossItem, getItemValue } from './data/ItemDatabase';
+import AdminPanel from './components/AdminPanel';
+import SettingsMenu, { DEFAULT_BINDINGS } from './components/SettingsMenu';
+import { ITEM_DB, LOOT_TABLE, RARITIES, TYPE_TO_SLOTS, SKILL_TREES, rollMobItem, rollBossItem, getItemValue, canClassEquip } from './data/ItemDatabase';
+import { fetchIsAdmin } from './lib/supabase';
 
 /* ═══════════════════════════════════════════════════════════════
    CONSTANTS
@@ -104,25 +107,82 @@ export default function App() {
   const [skillPoints, setSkillPoints] = useState(0);
   const [skillSlots, setSkillSlots] = useState({ q: null, w: null, e: null, r: null });
 
-  /* ── Keyboard: I toggles inventory, ESC closes ─────────── */
+  /* ── Admin & Settings state ─────────────────────────────── */
+  // DEV: true for local testing. In production, Supabase overrides this.
+  const [isAdmin, setIsAdmin] = useState(true);
+  const [adminOpen, setAdminOpen] = useState(false);
+
+  // Fetch admin flag from Supabase profiles table on mount (overrides default)
+  useEffect(() => {
+    let cancelled = false;
+    fetchIsAdmin().then(flag => { if (!cancelled && flag !== null) setIsAdmin(flag); });
+    return () => { cancelled = true; };
+  }, []);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [bindings, setBindings] = useState(() => {
+    try { const s = localStorage.getItem('godslayer_bindings'); return s ? { ...DEFAULT_BINDINGS, ...JSON.parse(s) } : { ...DEFAULT_BINDINGS }; }
+    catch { return { ...DEFAULT_BINDINGS }; }
+  });
+  const [musicVolume, setMusicVolume] = useState(() => {
+    try { return Number(localStorage.getItem('godslayer_musicVol')) || 50; } catch { return 50; }
+  });
+  const [sfxVolume, setSfxVolume] = useState(() => {
+    try { return Number(localStorage.getItem('godslayer_sfxVol')) || 70; } catch { return 70; }
+  });
+
+  const handleUpdateBinding = useCallback((key, value) => {
+    setBindings(prev => {
+      const next = { ...prev, [key]: value };
+      try { localStorage.setItem('godslayer_bindings', JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }, []);
+
+  const handleMusicVolume = useCallback((v) => {
+    setMusicVolume(v);
+    try { localStorage.setItem('godslayer_musicVol', String(v)); } catch {}
+  }, []);
+
+  const handleSfxVolume = useCallback((v) => {
+    setSfxVolume(v);
+    try { localStorage.setItem('godslayer_sfxVol', String(v)); } catch {}
+  }, []);
+
+  /* ── Keyboard: bindings, tilde for admin, ESC for settings */
   useEffect(() => {
     const handler = (e) => {
       if (screen !== 'playing') return;
-      if (e.key === 'i' || e.key === 'I') { if (!tradeOpen) setInventoryOpen(prev => !prev); }
-      if (e.key === 'Escape') {
-        if (tradeOpen) setTradeOpen(false);
-        else if (inventoryOpen) setInventoryOpen(false);
+      const k = e.key;
+
+      // Tilde / backtick / semicolon → admin panel (if admin)
+      if ((k === '`' || k === '~' || k === ';') && isAdmin) { e.preventDefault(); setAdminOpen(prev => !prev); return; }
+
+      // ESC priority: trade → inventory → admin → toggle settings
+      if (k === 'Escape') {
+        if (tradeOpen) { setTradeOpen(false); return; }
+        if (inventoryOpen) { setInventoryOpen(false); return; }
+        if (adminOpen) { setAdminOpen(false); return; }
+        setSettingsOpen(prev => !prev);
+        return;
+      }
+
+      // Don't process other bindings while overlays are open
+      if (adminOpen || settingsOpen) return;
+
+      // Inventory toggle
+      if (k.toUpperCase() === bindings.inventory.toUpperCase()) {
+        if (!tradeOpen) setInventoryOpen(prev => !prev);
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [inventoryOpen, tradeOpen, screen]);
+  }, [inventoryOpen, tradeOpen, adminOpen, settingsOpen, screen, bindings, isAdmin]);
 
-  /* ── Pause Phaser when inventory open ──────────────────── */
+  /* ── Pause Phaser when any overlay open ────────────────── */
   useEffect(() => {
     const scene = sceneRef.current;
     if (!scene) return;
-    const shouldPause = inventoryOpen || tradeOpen;
+    const shouldPause = inventoryOpen || tradeOpen || adminOpen || settingsOpen;
     if (shouldPause) {
       scene.physics?.world?.pause();
       if (scene.input?.keyboard) scene.input.keyboard.enabled = false;
@@ -130,7 +190,7 @@ export default function App() {
       scene.physics?.world?.resume();
       if (scene.input?.keyboard) scene.input.keyboard.enabled = true;
     }
-  }, [inventoryOpen, tradeOpen]);
+  }, [inventoryOpen, tradeOpen, adminOpen, settingsOpen]);
 
   /* ── Add item to backpack (from Phaser) ────────────────── */
   const addToBackpack = useCallback((item) => {
@@ -148,6 +208,7 @@ export default function App() {
     setBackpack(prev => {
       const item = prev[backpackIndex];
       if (!item) return prev;
+      if (!canClassEquip(chosenClass?.id, item)) return prev; // class restriction
       const possibleSlots = TYPE_TO_SLOTS[item.type] || [];
       if (possibleSlots.length === 0) return prev;
       const nextPack = [...prev];
@@ -161,7 +222,7 @@ export default function App() {
       });
       return nextPack;
     });
-  }, []);
+  }, [chosenClass]);
 
   /* ── Unequip to backpack ───────────────────────────────── */
   const handleUnequipItem = useCallback((slotKey) => {
@@ -322,7 +383,6 @@ export default function App() {
   const handleAssignSlot = useCallback((slotKey, skillId) => {
     setSkillSlots(prev => {
       const next = { ...prev };
-      // Remove skill from other slots if already assigned
       for (const k of Object.keys(next)) {
         if (next[k] === skillId) next[k] = null;
       }
@@ -330,6 +390,41 @@ export default function App() {
       return next;
     });
   }, []);
+
+  /* ── Admin: add gold ───────────────────────────────────── */
+  const handleAdminAddGold = useCallback((amount) => {
+    const scene = sceneRef.current;
+    if (scene?.playerData) scene.playerData.gold += amount;
+  }, []);
+
+  /* ── Admin: add skill points ───────────────────────────── */
+  const handleAdminAddSkillPoints = useCallback((n) => {
+    setSkillPoints(prev => prev + n);
+  }, []);
+
+  /* ── Return to main menu from settings ─────────────────── */
+  const handleReturnToMenu = useCallback(() => {
+    // Save before quitting
+    const scene = sceneRef.current;
+    if (scene?.playerData && chosenClass) {
+      const pd = scene.playerData;
+      saveGame({
+        classId: chosenClass.id,
+        level: pd.level, xp: pd.xp, xpToLevel: pd.xpToLevel,
+        gold: pd.gold, baseDmg: pd.baseDmg, critChance: pd.critChance,
+        maxHp: pd.maxHp, maxMana: pd.maxMana,
+        backpack, equipment,
+        stats: chosenClass.stats,
+      });
+      setHasSave(true);
+    }
+    // Close all overlays and go to menu
+    setInventoryOpen(false);
+    setTradeOpen(false);
+    setAdminOpen(false);
+    setSettingsOpen(false);
+    setScreen('menu');
+  }, [chosenClass, backpack, equipment]);
 
   /* ── START GAME (from menu) ────────────────────────────── */
   const handleStartGame = useCallback((classData) => {
@@ -469,6 +564,29 @@ export default function App() {
           onSell={handleSell}
         />
       )}
+      {isAdmin && (
+        <AdminPanel
+          isOpen={adminOpen && screen === 'playing'}
+          onClose={() => setAdminOpen(false)}
+          sceneRef={sceneRef}
+          addToBackpack={addToBackpack}
+          itemDb={ITEM_DB}
+          onAddGold={handleAdminAddGold}
+          onAddSkillPoints={handleAdminAddSkillPoints}
+          isAdmin={isAdmin}
+        />
+      )}
+      <SettingsMenu
+        isOpen={settingsOpen && screen === 'playing'}
+        onClose={() => setSettingsOpen(false)}
+        onReturnToMenu={handleReturnToMenu}
+        bindings={bindings}
+        onUpdateBindings={handleUpdateBinding}
+        musicVolume={musicVolume}
+        sfxVolume={sfxVolume}
+        onMusicVolume={handleMusicVolume}
+        onSfxVolume={handleSfxVolume}
+      />
     </div>
   );
 }

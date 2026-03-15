@@ -227,7 +227,7 @@ function StoryPanel() {
 
 function TutorialPanel() {
   const tips = [
-    { icon: '🖱️', title: 'Poruszanie', desc: 'Kliknij LPM na ziemię, by się poruszać. WASD również działa.' },
+    { icon: '🖱️', title: 'Poruszanie', desc: 'Kliknij LPM na ziemię, by się poruszać.' },
     { icon: '⚔️', title: 'Atak', desc: 'Kliknij LPM na wroga, by do niego podejść i zaatakować.' },
     { icon: '🔥', title: 'Umiejętności', desc: 'Q, W (PPM), E, R — każda klasa ma 4 unikalne skille.' },
     { icon: '📦', title: 'Ekwipunek', desc: 'Klawisz I otwiera ekwipunek. PPM aby założyć/zdjąć przedmiot.' },

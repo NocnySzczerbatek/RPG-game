@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { RARITIES, SLOT_LABELS, TYPE_TO_SLOTS, SKILL_TREES } from '../data/ItemDatabase';
+import { RARITIES, SLOT_LABELS, TYPE_TO_SLOTS, SKILL_TREES, canClassEquip } from '../data/ItemDatabase';
 
 /* ═══════════════════════════════════════════════════════════════
    STYLE CONSTANTS
@@ -22,9 +22,10 @@ const SLOT_ICONS = {
 /* ═══════════════════════════════════════════════════════════════
    FLOATING TOOLTIP
    ═══════════════════════════════════════════════════════════════ */
-function FloatingTooltip({ item, mousePos }) {
+function FloatingTooltip({ item, mousePos, classId }) {
   if (!item) return null;
   const rarity = item.rarity || 'common';
+  const classBlocked = item._src === 'backpack' && !canClassEquip(classId, item);
   const lines = [];
   if (item.dmg) lines.push({ label: 'Obrażenia', val: `+${item.dmg}`, c: '#ff7755' });
   if (item.def) lines.push({ label: 'Pancerz', val: `+${item.def}`, c: '#6699dd' });
@@ -62,6 +63,11 @@ function FloatingTooltip({ item, mousePos }) {
       <div style={{ marginTop: 8, paddingTop: 6, borderTop: '1px solid rgba(80,60,30,0.3)', fontSize: 10, color: '#6a5a3a', fontStyle: 'italic' }}>
         {item.type === 'potion' ? 'PPM — użyj' : `PPM — ${item._src === 'equip' ? 'zdejmij' : 'załóż'}`}
       </div>
+      {classBlocked && (
+        <div style={{ marginTop: 6, padding: '4px 6px', background: 'rgba(180,30,30,0.2)', border: '1px solid #882222', borderRadius: 3, fontSize: 10, color: '#ff5544', fontWeight: 700, textAlign: 'center' }}>
+          ✕ Ta klasa nie może używać tego przedmiotu
+        </div>
+      )}
     </div>
   );
 }
@@ -233,12 +239,17 @@ function GearTab({
   const hoverOut = () => setTip(null);
   const dragStart = (e, src) => { setDragSrc(src); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', ''); };
 
+  const [errMsg, setErrMsg] = useState(null);
+
+  const showErr = (msg) => { setErrMsg(msg); setTimeout(() => setErrMsg(null), 2000); };
+
   const drop = (e, tgt) => {
     if (!dragSrc) return;
     // Slot validation for equip drops
     if (dragSrc.type === 'backpack' && tgt.type === 'equip') {
       const item = backpack[dragSrc.index];
       if (item) {
+        if (!canClassEquip(classId, item)) { showErr('Ta klasa nie może używać tego przedmiotu'); setDragSrc(null); return; }
         const allowed = TYPE_TO_SLOTS[item.type] || [];
         if (!allowed.includes(tgt.slot)) { setDragSrc(null); return; } // wrong slot
       }
@@ -251,7 +262,12 @@ function GearTab({
     setDragSrc(null); setTip(null);
   };
 
-  const bpRC = (i) => { const it = backpack[i]; if (!it) return; it.type === 'potion' ? onConsumePotion(i) : onEquipItem(i); setTip(null); };
+  const bpRC = (i) => {
+    const it = backpack[i]; if (!it) return;
+    if (it.type === 'potion') { onConsumePotion(i); setTip(null); return; }
+    if (!canClassEquip(classId, it)) { showErr('Ta klasa nie może używać tego przedmiotu'); return; }
+    onEquipItem(i); setTip(null);
+  };
   const eqRC = (s) => { onUnequipItem(s); setTip(null); };
   const hl = tip && tip._src === 'backpack' ? (TYPE_TO_SLOTS[tip.type] || []) : [];
 
@@ -260,7 +276,18 @@ function GearTab({
   const BACKPACK_TOTAL = 40;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', position: 'relative' }}>
+      {/* Class restriction error toast */}
+      {errMsg && (
+        <div style={{
+          position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 300,
+          background: 'rgba(120,20,20,0.95)', border: '2px solid #cc3333', borderRadius: 4,
+          padding: '8px 16px', fontFamily: FONT, fontSize: 12, fontWeight: 700, color: '#ff6644',
+          textShadow: '0 1px 3px #000', whiteSpace: 'nowrap',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.7)',
+          animation: 'errShake 0.3s ease-out',
+        }}>✕ {errMsg}</div>
+      )}
       {/* Equipment paperdoll */}
       <div style={{
         flex: 1.2, display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -565,7 +592,7 @@ export default function Inventory({
           </div>
         </div>
       </div>
-      <FloatingTooltip item={tip} mousePos={mpos} />
+      <FloatingTooltip item={tip} mousePos={mpos} classId={classId} />
     </>
   );
 }

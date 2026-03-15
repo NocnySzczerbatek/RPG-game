@@ -53,6 +53,21 @@ export const TYPE_TO_SLOTS = {
   potion:  [],
 };
 
+/* ── Class restrictions — which types each class CAN use ──── */
+export const CLASS_ALLOWED_TYPES = {
+  warrior: ['weapon', 'shield', 'armor', 'helmet', 'pants', 'boots', 'belt', 'amulet', 'ring', 'potion'],
+  mage:    ['weapon', 'bow', 'armor', 'helmet', 'pants', 'boots', 'belt', 'amulet', 'ring', 'potion'],
+  rogue:   ['dagger', 'bow', 'armor', 'helmet', 'pants', 'boots', 'belt', 'amulet', 'ring', 'potion'],
+};
+
+/** Check if a class can equip an item */
+export function canClassEquip(classId, item) {
+  if (!item || !classId) return true;
+  const allowed = CLASS_ALLOWED_TYPES[classId];
+  if (!allowed) return true;
+  return allowed.includes(item.type);
+}
+
 /* ═══════════════════════════════════════════════════════════════
    FULL ITEM DATABASE
    ═══════════════════════════════════════════════════════════════ */
