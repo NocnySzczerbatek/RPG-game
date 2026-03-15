@@ -487,9 +487,9 @@ export default function App() {
       scene.playerData.mana = scene.playerData.maxMana;
       // Mercy invulnerability — 3 seconds
       scene._mercyTimer = 3000;
-      // Teleport to Eldergrove (center of map)
+      // Teleport to Eldergrove (first city)
       if (scene.knight) {
-        scene.knight.setPosition(2000, 2000);
+        scene.knight.setPosition(1200, 1200);
         scene.knight.body.setVelocity(0, 0);
         scene.knight.clearTint();
         scene.knight.setAlpha(1);

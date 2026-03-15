@@ -2,17 +2,19 @@ import React, { useEffect, useRef, useCallback } from 'react';
 import Phaser from 'phaser';
 import HUD from './HUD';
 import { RARITIES, LOOT_TABLE, MOB_WEIGHTS, ITEM_DB, rollMobItem, rollBossItem } from '../data/ItemDatabase';
+import { WORLD_SIZE, CITIES, ROADS, PORTAL_POS, ENEMY_ZONES, SUMMER_TILES, GUILD_TILES, DUNGEON_TILES, BUILDING_DEFS } from '../data/WorldData';
 
 /* ═══════════════════════════════════════════════════════════════
    CONSTANTS
    ═══════════════════════════════════════════════════════════════ */
-const WORLD_W = 4000;
-const WORLD_H = 4000;
+const WORLD_W = WORLD_SIZE;
+const WORLD_H = WORLD_SIZE;
 const TILE = 16;
 const PLAYER_SPEED = 210;
 const SPRITE_SCALE = 1.6;
-const GROUND_RES = 800;
+const GROUND_RES = 1200;
 const PX_PER_TEXEL = WORLD_W / GROUND_RES;
+const ROAD_HALF_W = 4; // road half-width in texels (~20px world)
 
 /* ── asset paths ───────────────────────────────────────────── */
 const HERO_BASE = 'assets/sprites/craftpix-891165-assassin-mage-viking-free-pixel-art-game-heroes/PNG';
@@ -23,9 +25,7 @@ const ORCS    = 'assets/sprites/craftpix-net-363992-free-top-down-orc-game-chara
 const SLIMES  = 'assets/sprites/craftpix-net-788364-free-slime-mobs-pixel-art-top-down-sprite-pack/PNG';
 const MONSTERS = 'assets/sprites/craftpix-561178-free-rpg-monster-sprites-pixel-art/PNG';
 const VAMPIRES = 'assets/sprites/craftpix-net-208004-free-vampire-4-direction-pixel-character-sprite-pack/PNG';
-const CRYPT_W = 2000, CRYPT_H = 2000;
-const FOREST_PORTAL_POS = { x: 3200, y: 800 };
-const NPC_POS = { x: 1950, y: 2050 };
+const CRYPT_W = 2400, CRYPT_H = 2400;
 
 /* ── hero class animation defs ─────────────────────────────── */
 const HERO_CLASSES = {
@@ -305,8 +305,35 @@ class DarkForestScene extends Phaser.Scene {
     for (const t of TREE_DEFS) this.load.image(t.key, `${TREES}/${t.file}`);
     for (const r of ROCK_DEFS) this.load.image(r.key, `${ROCKS}/${r.file}`);
 
-    // Building
+    // Building tilesets
     this.load.spritesheet('walls_floor', `${HOME}/walls_floor.png`, { frameWidth: 16, frameHeight: 16 });
+    // Summer tileset props
+    this.load.image('bld_house',      `${SUMMER_TILES}/Top-Down Simple Summer_Prop - House.png`);
+    this.load.image('bld_castle_sq',  `${SUMMER_TILES}/Top-Down Simple Summer_Prop - Castle Square.png`);
+    this.load.image('bld_castle_rd',  `${SUMMER_TILES}/Top-Down Simple Summer_Prop - Castle Round.png`);
+    this.load.image('bld_tower',      `${SUMMER_TILES}/Top-Down Simple Summer_Prop - Watchtower Tall.png`);
+    this.load.image('bld_tower_s',    `${SUMMER_TILES}/Top-Down Simple Summer_Prop - Watchtower Short.png`);
+    this.load.image('bld_well',       `${SUMMER_TILES}/Top-Down Simple Summer_Prop - Well.png`);
+    this.load.image('bld_camp',       `${SUMMER_TILES}/Top-Down Simple Summer_Prop - Campfire.png`);
+    this.load.image('bld_windmill',   `${SUMMER_TILES}/Top-Down Simple Summer_Prop - Windmill.png`);
+    this.load.image('bld_barrel',     `${SUMMER_TILES}/Top-Down Simple Summer_Prop - Wooden Barrel.png`);
+    this.load.image('bld_fence_h',    `${SUMMER_TILES}/Top-Down Simple Summer_Prop - Wooden Fence Horizontal.png`);
+    this.load.image('bld_fence_v',    `${SUMMER_TILES}/Top-Down Simple Summer_Prop - Wooden Fence Vertical.png`);
+    this.load.image('bld_banner_r',   `${SUMMER_TILES}/Top-Down Simple Summer_Prop - Red Banner.png`);
+    this.load.image('bld_banner_b',   `${SUMMER_TILES}/Top-Down Simple Summer_Prop - Blue Banner.png`);
+    this.load.image('bld_tent',       `${SUMMER_TILES}/Top-Down Simple Summer_Prop - Tent.png`);
+    this.load.image('bld_cart',       `${SUMMER_TILES}/Top-Down Simple Summer_Prop - Wooden Cart.png`);
+    this.load.image('bld_bush_l',     `${SUMMER_TILES}/Top-Down Simple Summer_Prop - Bushes Large.png`);
+    this.load.image('bld_bush_m',     `${SUMMER_TILES}/Top-Down Simple Summer_Prop - Bushes Medium.png`);
+    // Guild hall exterior + NPC sprites
+    this.load.image('guild_exterior', `${GUILD_TILES}/Exterior.png`);
+    this.load.image('guild_walls',    `${GUILD_TILES}/Walls_street.png`);
+    this.load.spritesheet('citizen1_idle', `${GUILD_TILES}/Citizen1_Idle.png`, { frameWidth: 64, frameHeight: 64 });
+    this.load.spritesheet('citizen2_idle', `${GUILD_TILES}/Citizen2_Idle.png`, { frameWidth: 64, frameHeight: 64 });
+    this.load.spritesheet('fighter_idle',  `${GUILD_TILES}/Fighter2_Idle.png`, { frameWidth: 64, frameHeight: 64 });
+    // Cottage from home pack
+    this.load.image('home_exterior', `${HOME}/exterior.png`);
+    this.load.image('bld_campfire',  `${SUMMER_TILES}/Top-Down Simple Summer_Prop - Campfire.png`);
 
     // Orc spritesheets (64x64 frames, 4 direction rows)
     this.load.spritesheet('orc1_idle',   `${ORCS}/Orc1/With_shadow/orc1_idle_with_shadow.png`,   { frameWidth: 64, frameHeight: 64 });
@@ -485,22 +512,54 @@ class DarkForestScene extends Phaser.Scene {
     this._furyActive = false;
 
     try {
-      this.npc = this.physics.add.sprite(NPC_POS.x, NPC_POS.y, 'npc_blacksmith');
-      this.npc.setScale(2.2).setDepth(NPC_POS.y).setImmovable(true);
-      this.npc.body.setImmovable(true);
-      if (this.knight) this.physics.add.collider(this.knight, this.npc);
-      this._npcLabel = this.add.text(NPC_POS.x, NPC_POS.y - 55, '[E] Trade', {
-        fontSize: '11px', fontFamily: "'Cinzel', serif", color: '#c8a96e',
-        stroke: '#000', strokeThickness: 2,
-      }).setOrigin(0.5).setDepth(10001).setVisible(false);
-      _dbg('npc OK');
+      // --- City NPCs (all cities) ---
+      this.npcs = [];
+      this._npcLabels = [];
+      for (const city of CITIES) {
+        for (const npcDef of city.npcs) {
+          const nx = city.x + npcDef.ox, ny = city.y + npcDef.oy;
+          const spriteKey = this.textures.exists('citizen1_idle') ? 'citizen1_idle' : 'npc_blacksmith';
+          const npcSprite = this.physics.add.sprite(nx, ny, spriteKey);
+          npcSprite.setScale(1.8).setDepth(ny).setImmovable(true);
+          npcSprite.body.setImmovable(true);
+          npcSprite.npcRole = npcDef.role;
+          npcSprite.npcLabel = npcDef.label;
+
+          // Try to play idle animation if spritesheet
+          if (this.textures.exists('citizen1_idle')) {
+            const animKey = `citizen1_idle_anim`;
+            if (!this.anims.exists(animKey)) {
+              const totalFrames = this.textures.get('citizen1_idle').frameTotal;
+              if (totalFrames > 1) {
+                this.anims.create({ key: animKey, frames: this.anims.generateFrameNumbers('citizen1_idle', { start: 0, end: totalFrames - 2 }), frameRate: 6, repeat: -1 });
+              }
+            }
+            if (this.anims.exists(animKey)) npcSprite.play(animKey);
+          }
+
+          if (this.knight) this.physics.add.collider(this.knight, npcSprite);
+
+          const labelText = npcDef.role === 'quest' ? `[E] ${npcDef.label}` : `[E] Handel - ${npcDef.label}`;
+          const label = this.add.text(nx, ny - 50, labelText, {
+            fontSize: '10px', fontFamily: "'Cinzel', serif",
+            color: npcDef.role === 'quest' ? '#88bbff' : '#c8a96e',
+            stroke: '#000', strokeThickness: 2,
+          }).setOrigin(0.5).setDepth(10001).setVisible(false);
+          npcSprite._label = label;
+          this.npcs.push(npcSprite);
+          this._npcLabels.push(label);
+        }
+      }
+      this.npc = this.npcs[0] || null;
+      this._npcLabel = null;
+      _dbg('npcs OK: ' + this.npcs.length);
     } catch(e) { _dbg('npc FAIL: ' + e.message); }
 
     try {
-      this.portal = this.physics.add.sprite(FOREST_PORTAL_POS.x, FOREST_PORTAL_POS.y, 'portal_purple');
-      this.portal.setScale(2.5).setDepth(FOREST_PORTAL_POS.y);
+      this.portal = this.physics.add.sprite(PORTAL_POS.x, PORTAL_POS.y, 'portal_purple');
+      this.portal.setScale(2.5).setDepth(PORTAL_POS.y);
       this.portal.body.setImmovable(true);
-      this._portalLabel = this.add.text(FOREST_PORTAL_POS.x, FOREST_PORTAL_POS.y - 55, '[E] Enter Crypt', {
+      this._portalLabel = this.add.text(PORTAL_POS.x, PORTAL_POS.y - 55, '[E] Wejdź do Krypty', {
         fontSize: '11px', fontFamily: "'Cinzel', serif", color: '#aa88ff',
         stroke: '#000', strokeThickness: 2,
       }).setOrigin(0.5).setDepth(10001).setVisible(false);
@@ -577,23 +636,28 @@ class DarkForestScene extends Phaser.Scene {
   }
   _spawnEnemies(rng) {
     const MARGIN = 120;
-    const spawnDefs = [
-      { type: 'orc',   count: 18 },
-      { type: 'slime', count: 22 },
-      { type: 'demon', count: 6  },
-    ];
-    for (const sd of spawnDefs) {
-      const typeDef = ENEMY_TYPES[sd.type];
-      let placed = 0;
-      for (let attempt = 0; attempt < 2000 && placed < sd.count; attempt++) {
-        const x = MARGIN + rng() * (WORLD_W - MARGIN * 2);
-        const y = MARGIN + rng() * (WORLD_H - MARGIN * 2);
-        const gx = Math.floor(x / 48), gy = Math.floor(y / 48);
-        if (this._pathExclude.has(`${gx},${gy}`)) continue;
-        if (this._nearBuilding(x, y, 250)) continue;
-        if (Math.hypot(x - WORLD_W / 2, y - WORLD_H / 2) < 400) continue;
-        this._createEnemy(x, y, sd.type, typeDef);
-        placed++;
+    for (const zone of ENEMY_ZONES) {
+      for (const [type, count] of Object.entries(zone.types)) {
+        const typeDef = ENEMY_TYPES[type];
+        if (!typeDef) continue;
+        let placed = 0;
+        for (let attempt = 0; attempt < 2000 && placed < count; attempt++) {
+          // Random position within the zone circle
+          const angle = rng() * Math.PI * 2;
+          const dist = rng() * zone.r;
+          const x = zone.cx + Math.cos(angle) * dist;
+          const y = zone.cy + Math.sin(angle) * dist;
+          if (x < MARGIN || x > WORLD_W - MARGIN || y < MARGIN || y > WORLD_H - MARGIN) continue;
+          // Don't spawn in cities
+          let inCity = false;
+          for (const c of CITIES) { if (Math.hypot(x - c.x, y - c.y) < c.radius + 80) { inCity = true; break; } }
+          if (inCity) continue;
+          // Don't spawn on paths
+          const gx = Math.floor(x / 48), gy = Math.floor(y / 48);
+          if (this._pathExclude.has(`${gx},${gy}`)) continue;
+          this._createEnemy(x, y, type, typeDef);
+          placed++;
+        }
       }
     }
   }
@@ -1312,8 +1376,7 @@ class DarkForestScene extends Phaser.Scene {
 
     // Ignore small decorations and particles on minimap
     for (const d of this.decorations) miniCam.ignore(d);
-    if (this.npc) miniCam.ignore(this.npc);
-    if (this._npcLabel) miniCam.ignore(this._npcLabel);
+    if (this.npcs) for (const n of this.npcs) { miniCam.ignore(n); if (n._label) miniCam.ignore(n._label); }
     if (this._portalLabel) miniCam.ignore(this._portalLabel);
 
     // Circular mask
@@ -1689,6 +1752,28 @@ class DarkForestScene extends Phaser.Scene {
     const ctx = canvas.getContext('2d');
     const imgData = ctx.createImageData(GROUND_RES, GROUND_RES);
     const d = imgData.data;
+
+    // Pre-compute road segments between cities (in texel space)
+    const cityMap = {};
+    for (const c of CITIES) cityMap[c.id] = c;
+    const roadSegments = [];
+    for (const [a, b] of ROADS) {
+      const ca = cityMap[a], cb = cityMap[b];
+      if (ca && cb) {
+        roadSegments.push({
+          x0: ca.x / PX_PER_TEXEL, y0: ca.y / PX_PER_TEXEL,
+          x1: cb.x / PX_PER_TEXEL, y1: cb.y / PX_PER_TEXEL,
+        });
+      }
+    }
+
+    // City positions in texel space
+    const cityTexels = CITIES.map(c => ({
+      tx: c.x / PX_PER_TEXEL, ty: c.y / PX_PER_TEXEL,
+      tr: c.radius / PX_PER_TEXEL, biome: c.biome,
+    }));
+
+    // Old path set (from bezier paths)
     const pathSet = new Set();
     for (const pt of pathPoints) {
       const tx = Math.floor(pt.x / PX_PER_TEXEL), ty = Math.floor(pt.y / PX_PER_TEXEL);
@@ -1698,26 +1783,79 @@ class DarkForestScene extends Phaser.Scene {
           pathSet.add(ny * GROUND_RES + nx);
       }
     }
+
+    // Distance from texel to nearest road segment
+    const _distToRoad = (px, py) => {
+      let minD = Infinity;
+      for (const seg of roadSegments) {
+        const dx = seg.x1 - seg.x0, dy = seg.y1 - seg.y0;
+        const len2 = dx * dx + dy * dy;
+        let t = len2 > 0 ? Math.max(0, Math.min(1, ((px - seg.x0) * dx + (py - seg.y0) * dy) / len2)) : 0;
+        const cx = seg.x0 + t * dx, cy = seg.y0 + t * dy;
+        const dd = Math.hypot(px - cx, py - cy);
+        if (dd < minD) minD = dd;
+      }
+      return minD;
+    };
+
+    // Biome color palettes
+    const BIOME_COLORS = {
+      forest:  { r: 32, g: 62, b: 28 },
+      plains:  { r: 60, g: 75, b: 35 },
+      barren:  { r: 55, g: 45, b: 30 },
+      swamp:   { r: 25, g: 48, b: 32 },
+    };
+
     for (let y = 0; y < GROUND_RES; y++) for (let x = 0; x < GROUND_RES; x++) {
       const wx = (x / GROUND_RES) * 6, wy = (y / GROUND_RES) * 6;
       const n1 = fbm(noise, wx, wy, 4), n2 = fbm(noise, wx + 50, wy + 50, 3);
       const idx = (y * GROUND_RES + x) * 4;
       let r, g, b;
-      if (pathSet.has(y * GROUND_RES + x)) {
-        const v = 0.7 + n2 * 0.2; r = Math.floor(90 * v); g = Math.floor(70 * v); b = Math.floor(45 * v);
-      } else if (n1 > 0.15) {
-        const v = 0.75 + n1 * 0.25; r = Math.floor(35 * v); g = Math.floor(65 * v); b = Math.floor(30 * v);
-      } else if (n1 > -0.1) {
-        const v = 0.75 + n2 * 0.2; r = Math.floor(30 * v); g = Math.floor(55 * v); b = Math.floor(35 * v);
-      } else {
-        const v = 0.7 + n1 * 0.15; r = Math.floor(45 * v); g = Math.floor(42 * v); b = Math.floor(30 * v);
+
+      // Check if on a city-to-city road
+      const roadDist = _distToRoad(x, y);
+      const onRoad = roadDist < ROAD_HALF_W;
+      const roadEdge = roadDist < ROAD_HALF_W + 2;
+
+      // Check if inside a city circle
+      let inCity = null;
+      for (const ct of cityTexels) {
+        if (Math.hypot(x - ct.tx, y - ct.ty) < ct.tr) { inCity = ct; break; }
       }
+
+      if (onRoad || pathSet.has(y * GROUND_RES + x)) {
+        // Dirt road
+        const v = 0.7 + n2 * 0.2;
+        r = Math.floor(92 * v); g = Math.floor(72 * v); b = Math.floor(48 * v);
+        if (roadEdge && !onRoad) {
+          r = Math.floor(r * 0.85); g = Math.floor(g * 0.9); b = Math.floor(b * 0.85);
+        }
+      } else if (inCity) {
+        // City ground — lighter packed earth
+        const v = 0.8 + n2 * 0.15;
+        r = Math.floor(80 * v); g = Math.floor(68 * v); b = Math.floor(50 * v);
+      } else {
+        // Biome-based terrain — find nearest city biome influence
+        let totalW = 0;
+        let br = 0, bg = 0, bb = 0;
+        for (const ct of cityTexels) {
+          const dd = Math.max(1, Math.hypot(x - ct.tx, y - ct.ty));
+          const w = 1 / (dd * dd);
+          const col = BIOME_COLORS[ct.biome] || BIOME_COLORS.forest;
+          br += col.r * w; bg += col.g * w; bb += col.b * w;
+          totalW += w;
+        }
+        const v = 0.75 + n1 * 0.25;
+        r = Math.floor((br / totalW) * v);
+        g = Math.floor((bg / totalW) * v);
+        b = Math.floor((bb / totalW) * v);
+      }
+
       d[idx] = r; d[idx + 1] = g; d[idx + 2] = b; d[idx + 3] = 255;
     }
     ctx.putImageData(imgData, 0, 0);
     const tex = this.textures.createCanvas('biome_ground', GROUND_RES, GROUND_RES);
     tex.context.drawImage(canvas, 0, 0); tex.refresh();
-    // Apply linear filtering for smooth ground when zoomed
     try { tex.setFilter(1); } catch (_) {}
     const groundImg = this.add.image(WORLD_W / 2, WORLD_H / 2, 'biome_ground');
     groundImg.setDisplaySize(WORLD_W, WORLD_H).setDepth(-1000);
@@ -1740,6 +1878,7 @@ class DarkForestScene extends Phaser.Scene {
 
   /* ── BUILDINGS ──────────────────────────────────────────── */
   _createBuildings(rng) {
+    // Build the cottage texture from tilemap (for house_small type)
     const cw = COTTAGE_W * TILE, ch = COTTAGE_H * TILE;
     const rt = this.add.renderTexture(0, 0, cw, ch); rt.setVisible(false);
     for (let row = 0; row < COTTAGE_H; row++)
@@ -1747,24 +1886,52 @@ class DarkForestScene extends Phaser.Scene {
         rt.drawFrame('walls_floor', COTTAGE_TILES[row][col], col * TILE, row * TILE);
     rt.saveTexture('building_cottage'); rt.destroy();
 
-    this._buildingPositions = [
-      { x: WORLD_W * 0.45, y: WORLD_H * 0.42 },
-      { x: WORLD_W * 0.7,  y: WORLD_H * 0.35 },
-    ];
-    for (const pos of this._buildingPositions) {
-      const bld = this.add.image(pos.x, pos.y, 'building_cottage');
-      bld.setScale(3).setOrigin(0.5, 0.85).setDepth(pos.y);
-      this.decorations.push(bld);
-      const dispW = cw * 3, dispH = ch * 3, baseH = dispH * 0.25;
-      const zone = this.add.zone(pos.x, pos.y - dispH * 0.15 + dispH * 0.5 - baseH / 2 + dispH * 0.3, dispW * 0.85, baseH);
-      this.physics.add.existing(zone, true); this.staticObjects.add(zone);
+    // Create a key alias for cottage
+    this._buildingPositions = [];
+
+    for (const city of CITIES) {
+      // City name label
+      this.add.text(city.x, city.y - city.radius - 20, city.name, {
+        fontSize: '14px', fontFamily: "'Cinzel', serif", color: '#ddc080',
+        stroke: '#000', strokeThickness: 3, fontStyle: 'bold',
+      }).setOrigin(0.5).setDepth(10000);
+
+      for (const bld of city.buildings) {
+        const def = BUILDING_DEFS[bld.type];
+        if (!def) continue;
+        const bx = city.x + bld.ox;
+        const by = city.y + bld.oy;
+
+        // Choose correct texture key
+        let spriteKey = def.key;
+        if (bld.type === 'house_small') spriteKey = 'building_cottage';
+
+        // Check if texture exists, fallback to cottage
+        if (!this.textures.exists(spriteKey)) spriteKey = 'building_cottage';
+
+        const sprite = this.add.image(bx, by, spriteKey);
+        sprite.setScale(def.scale).setOrigin(0.5, 0.85).setDepth(by);
+        this.decorations.push(sprite);
+
+        // Collision zone at building base
+        if (def.colH > 0) {
+          const dispW = def.w * def.scale;
+          const dispH = def.h * def.scale;
+          const baseH = dispH * def.colH;
+          const zone = this.add.zone(bx, by - dispH * 0.15 + dispH * 0.5 - baseH / 2 + dispH * 0.3, dispW * 0.85, baseH);
+          this.physics.add.existing(zone, true);
+          this.staticObjects.add(zone);
+        }
+
+        this._buildingPositions.push({ x: bx, y: by });
+      }
     }
   }
 
   /* ── TREES ──────────────────────────────────────────────── */
   _scatterTrees(noise, rng) {
     const MARGIN = 80; let placed = 0;
-    for (let att = 0; att < 5000 && placed < 220; att++) {
+    for (let att = 0; att < 12000 && placed < 500; att++) {
       const x = MARGIN + rng() * (WORLD_W - MARGIN * 2), y = MARGIN + rng() * (WORLD_H - MARGIN * 2);
       if (fbm(noise, (x / WORLD_W) * 6, (y / WORLD_H) * 6, 3) < -0.05) continue;
       if (this._pathExclude.has(`${Math.floor(x / 48)},${Math.floor(y / 48)}`)) continue;
@@ -1782,7 +1949,7 @@ class DarkForestScene extends Phaser.Scene {
   /* ── ROCKS ──────────────────────────────────────────────── */
   _scatterRocks(noise, rng) {
     let placed = 0;
-    for (let att = 0; att < 3000 && placed < 100; att++) {
+    for (let att = 0; att < 6000 && placed < 200; att++) {
       const x = 60 + rng() * (WORLD_W - 120), y = 60 + rng() * (WORLD_H - 120);
       if (fbm(noise, (x / WORLD_W) * 8 + 100, (y / WORLD_H) * 8 + 100, 3) > 0.2) continue;
       if (this._pathExclude.has(`${Math.floor(x / 48)},${Math.floor(y / 48)}`)) continue;
@@ -1800,17 +1967,21 @@ class DarkForestScene extends Phaser.Scene {
   }
 
   _nearBuilding(x, y, dist) {
-    const positions = this._buildingPositions || [
-      { x: WORLD_W * 0.45, y: WORLD_H * 0.42 }, { x: WORLD_W * 0.7, y: WORLD_H * 0.35 },
-    ];
-    return positions.some(b => Math.abs(x - b.x) + Math.abs(y - b.y) < dist);
+    // Check building positions
+    const positions = this._buildingPositions || [];
+    if (positions.some(b => Math.abs(x - b.x) + Math.abs(y - b.y) < dist)) return true;
+    // Check city centers
+    for (const c of CITIES) {
+      if (Math.hypot(x - c.x, y - c.y) < c.radius + 40) return true;
+    }
+    return false;
   }
 
   /* ── PLAYER ─────────────────────────────────────────────── */
   _createPlayer() {
     const sv = this._savedData || {};
-    const startX = sv.x ?? WORLD_W / 2;
-    const startY = sv.y ?? WORLD_H / 2;
+    const startX = sv.x ?? CITIES[0].x;
+    const startY = sv.y ?? CITIES[0].y;
     this.knight = this.physics.add.sprite(startX, startY, 'hero_idle_1');
     this.knight.setScale(SPRITE_SCALE).setCollideWorldBounds(true).setDepth(startY);
     this.knight.body.setSize(22, 14).setOffset(53, 106);
@@ -1924,7 +2095,7 @@ class DarkForestScene extends Phaser.Scene {
         // Minimap data
         playerX: this.knight?.x, playerY: this.knight?.y,
         enemies: this.enemies ? this.enemies.filter(e => !e.enemyData.isDead).map(e => ({ x: e.x, y: e.y })) : [],
-        npcX: this.npc?.x, npcY: this.npc?.y,
+        npcX: this.npcs?.[0]?.x, npcY: this.npcs?.[0]?.y,
         portalX: this.portal?.x, portalY: this.portal?.y,
         worldW: this.physics.world.bounds.width,
         worldH: this.physics.world.bounds.height,
@@ -2016,14 +2187,28 @@ class DarkForestScene extends Phaser.Scene {
 
     /* --- E key: Portal > NPC > Skill --- */
     const nearPortal = this.portal && Math.hypot(this.knight.x - this.portal.x, this.knight.y - this.portal.y) < 80;
-    const nearNPC = this.npc && Math.hypot(this.knight.x - this.npc.x, this.knight.y - this.npc.y) < 80;
+
+    // Check all city NPCs for proximity
+    let nearNPC = null;
+    if (this.npcs) {
+      for (const n of this.npcs) {
+        if (Math.hypot(this.knight.x - n.x, this.knight.y - n.y) < 70) { nearNPC = n; break; }
+      }
+    }
+    // Show/hide NPC labels
+    if (this.npcs) {
+      for (const n of this.npcs) {
+        if (n._label) n._label.setVisible(n === nearNPC && !nearPortal);
+      }
+    }
     if (this._portalLabel) this._portalLabel.setVisible(nearPortal);
-    if (this._npcLabel) this._npcLabel.setVisible(nearNPC && !nearPortal);
 
     if (nearPortal && Phaser.Input.Keyboard.JustDown(this.keys.E)) {
       this._enterPortal();
     } else if (nearNPC && Phaser.Input.Keyboard.JustDown(this.keys.E)) {
-      if (this._onOpenTrade) this._onOpenTrade();
+      if (nearNPC.npcRole === 'blacksmith' || nearNPC.npcRole === 'merchant') {
+        if (this._onOpenTrade) this._onOpenTrade();
+      }
     } else {
       this._updateESkill(delta);
     }
@@ -2083,6 +2268,25 @@ class DarkForestScene extends Phaser.Scene {
     this._cullTimer += delta;
     if (this._cullTimer > 200) { this._cullTimer = 0; this._updateCulling(); }
 
+    /* --- Fog of War (crypt only) --- */
+    if (this._fogTex && this.knight) {
+      const fogCtx = this._fogTex.context;
+      const px = this.knight.x, py = this.knight.y;
+      const radius = 180;
+      fogCtx.save();
+      fogCtx.globalCompositeOperation = 'destination-out';
+      const grad = fogCtx.createRadialGradient(px, py, 0, px, py, radius);
+      grad.addColorStop(0, 'rgba(0,0,0,1)');
+      grad.addColorStop(0.7, 'rgba(0,0,0,0.5)');
+      grad.addColorStop(1, 'rgba(0,0,0,0)');
+      fogCtx.fillStyle = grad;
+      fogCtx.beginPath();
+      fogCtx.arc(px, py, radius, 0, Math.PI * 2);
+      fogCtx.fill();
+      fogCtx.restore();
+      this._fogTex.refresh();
+    }
+
     /* --- HUD sync --- */
     this._syncTimer += delta;
     if (this._syncTimer > 100) { this._syncTimer = 0; this._syncState(); }
@@ -2135,6 +2339,11 @@ class ForsakenCryptScene extends DarkForestScene {
       for (let i = 1; i <= a.count; i++)
         this.load.image(`dragon_${a.name}_${i}`, `${MONSTERS}/dragon/${a.folder}${i}.png`);
     }
+
+    // Dungeon tileset
+    this.load.spritesheet('dng_walls_floor', `${DUNGEON_TILES}/walls_floor.png`, { frameWidth: 16, frameHeight: 16 });
+    this.load.spritesheet('dng_fire', `${DUNGEON_TILES}/fire_animation.png`, { frameWidth: 16, frameHeight: 16 });
+    this.load.spritesheet('dng_objects', `${DUNGEON_TILES}/Objects.png`, { frameWidth: 16, frameHeight: 16 });
   }
 
   create() {
@@ -2144,35 +2353,106 @@ class ForsakenCryptScene extends DarkForestScene {
     this._buildingPositions = [];
     this.physics.world.setBounds(0, 0, CRYPT_W, CRYPT_H);
 
-    /* --- Dungeon floor texture --- */
-    const canvas = document.createElement('canvas');
-    canvas.width = 400; canvas.height = 400;
-    const ctx = canvas.getContext('2d');
-    for (let y = 0; y < 400; y++) for (let x = 0; x < 400; x++) {
-      const n = Math.random() * 12;
-      ctx.fillStyle = `rgb(${18 + n},${16 + n},${22 + n})`;
-      ctx.fillRect(x, y, 1, 1);
+    /* --- Procedural dungeon layout (chambers + corridors) --- */
+    const TILE_S = 16;
+    const MAP_W = Math.floor(CRYPT_W / TILE_S);
+    const MAP_H = Math.floor(CRYPT_H / TILE_S);
+    const layout = Array.from({ length: MAP_H }, () => new Uint8Array(MAP_W)); // 0=wall, 1=floor, 2=corridor
+
+    // Generate chambers
+    const chambers = [];
+    const NUM_CHAMBERS = 8;
+    for (let i = 0; i < NUM_CHAMBERS; i++) {
+      const rw = 8 + Math.floor(Math.random() * 10);
+      const rh = 8 + Math.floor(Math.random() * 10);
+      const rx = 4 + Math.floor(Math.random() * (MAP_W - rw - 8));
+      const ry = 4 + Math.floor(Math.random() * (MAP_H - rh - 8));
+      let overlap = false;
+      for (const c of chambers) {
+        if (rx < c.x + c.w + 2 && rx + rw + 2 > c.x && ry < c.y + c.h + 2 && ry + rh + 2 > c.y) { overlap = true; break; }
+      }
+      if (overlap) continue;
+      chambers.push({ x: rx, y: ry, w: rw, h: rh, cx: rx + Math.floor(rw / 2), cy: ry + Math.floor(rh / 2) });
+      for (let dy = 0; dy < rh; dy++) for (let dx = 0; dx < rw; dx++) {
+        layout[ry + dy][rx + dx] = 1;
+      }
     }
-    ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+
+    // Connect chambers with corridors
+    for (let i = 0; i < chambers.length - 1; i++) {
+      const a = chambers[i], b = chambers[i + 1];
+      let x = a.cx, y = a.cy;
+      while (x !== b.cx) {
+        if (x >= 0 && x < MAP_W && y >= 0 && y < MAP_H) { if (layout[y][x] === 0) layout[y][x] = 2; }
+        // Widen corridor
+        if (y + 1 < MAP_H && layout[y + 1][x] === 0) layout[y + 1][x] = 2;
+        x += x < b.cx ? 1 : -1;
+      }
+      while (y !== b.cy) {
+        if (x >= 0 && x < MAP_W && y >= 0 && y < MAP_H) { if (layout[y][x] === 0) layout[y][x] = 2; }
+        if (x + 1 < MAP_W && layout[y][x + 1] === 0) layout[y][x + 1] = 2;
+        y += y < b.cy ? 1 : -1;
+      }
+    }
+
+    /* --- Render dungeon floor texture using layout --- */
+    const canvas = document.createElement('canvas');
+    canvas.width = CRYPT_W; canvas.height = CRYPT_H;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#0a0a10';
+    ctx.fillRect(0, 0, CRYPT_W, CRYPT_H);
+    for (let ty = 0; ty < MAP_H; ty++) for (let tx = 0; tx < MAP_W; tx++) {
+      if (layout[ty][tx] > 0) {
+        const n = Math.random() * 10;
+        const isCorridor = layout[ty][tx] === 2;
+        const base = isCorridor ? 16 : 20;
+        ctx.fillStyle = `rgb(${base + n},${base - 2 + n},${base + 4 + n})`;
+        ctx.fillRect(tx * TILE_S, ty * TILE_S, TILE_S, TILE_S);
+      }
+    }
+    // Grid lines on floor
+    ctx.strokeStyle = 'rgba(0,0,0,0.15)';
     ctx.lineWidth = 1;
-    for (let i = 0; i < 400; i += 16) {
-      ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, 400); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(400, i); ctx.stroke();
+    for (let i = 0; i < CRYPT_W; i += TILE_S) {
+      ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, CRYPT_H); ctx.stroke();
+    }
+    for (let i = 0; i < CRYPT_H; i += TILE_S) {
+      ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(CRYPT_W, i); ctx.stroke();
     }
     if (this.textures.exists('crypt_floor')) this.textures.remove('crypt_floor');
-    const tex = this.textures.createCanvas('crypt_floor', 400, 400);
+    const tex = this.textures.createCanvas('crypt_floor', CRYPT_W, CRYPT_H);
     tex.context.drawImage(canvas, 0, 0); tex.refresh();
     this.add.image(CRYPT_W / 2, CRYPT_H / 2, 'crypt_floor')
       .setDisplaySize(CRYPT_W, CRYPT_H).setDepth(-1000);
 
-    /* --- Static groups --- */
+    /* --- Wall collision bodies --- */
     this.staticObjects = this.physics.add.staticGroup();
     this.decorations = [];
+    this._cryptLayout = layout;
+    this._cryptTileS = TILE_S;
+    this._cryptMapW = MAP_W;
+    this._cryptMapH = MAP_H;
 
-    /* --- Player (center of crypt) --- */
+    // Create collision borders around floor tiles 
+    // (place wall collision on every wall tile adjacent to a floor tile)
+    for (let ty = 1; ty < MAP_H - 1; ty++) for (let tx = 1; tx < MAP_W - 1; tx++) {
+      if (layout[ty][tx] === 0) {
+        // Check if adjacent to floor
+        const adjFloor = layout[ty-1][tx] > 0 || layout[ty+1][tx] > 0 ||
+                         layout[ty][tx-1] > 0 || layout[ty][tx+1] > 0;
+        if (adjFloor) {
+          const zone = this.add.zone(tx * TILE_S + TILE_S / 2, ty * TILE_S + TILE_S / 2, TILE_S, TILE_S);
+          this.physics.add.existing(zone, true);
+          this.staticObjects.add(zone);
+        }
+      }
+    }
+
+    /* --- Player (start in last chamber) --- */
     if (!this._savedData) this._savedData = {};
-    this._savedData.x = CRYPT_W / 2;
-    this._savedData.y = CRYPT_H - 250;
+    const startChamber = chambers[chambers.length - 1] || { cx: MAP_W / 2, cy: MAP_H / 2 };
+    this._savedData.x = startChamber.cx * TILE_S;
+    this._savedData.y = startChamber.cy * TILE_S;
     this._createPlayer();
 
     /* --- Enemies --- */
@@ -2185,19 +2465,22 @@ class ForsakenCryptScene extends DarkForestScene {
     /* --- Loot --- */
     this.lootDrops = [];
 
-    /* --- Exit portal --- */
-    const exitX = CRYPT_W - 200, exitY = CRYPT_H - 200;
+    /* --- Exit portal (in first chamber) --- */
+    const exitChamber = chambers[0] || { cx: 20, cy: 20 };
+    const exitX = exitChamber.cx * TILE_S, exitY = exitChamber.cy * TILE_S;
     this.portal = this.physics.add.sprite(exitX, exitY, 'portal_purple');
     this.portal.setScale(2.5).setDepth(exitY);
     this.portal.body.setImmovable(true);
-    this._portalLabel = this.add.text(exitX, exitY - 55, '[E] Exit Crypt', {
+    this._portalLabel = this.add.text(exitX, exitY - 55, '[E] Opuść Kryptę', {
       fontSize: '11px', fontFamily: "'Cinzel', serif", color: '#aa88ff',
       stroke: '#000', strokeThickness: 2,
     }).setOrigin(0.5).setDepth(10001).setVisible(false);
 
     /* --- No NPC in crypt --- */
+    this.npcs = [];
     this.npc = null;
     this._npcLabel = null;
+    this._npcLabels = [];
 
     /* --- Physics --- */
     this.physics.add.collider(this.knight, this.staticObjects);
@@ -2208,6 +2491,19 @@ class ForsakenCryptScene extends DarkForestScene {
     cam.startFollow(this.knight, true, 0.09, 0.09);
     cam.setBackgroundColor('#050508');
     cam.fadeIn(1000);
+
+    /* --- Fog of War overlay --- */
+    const fogCanvas = document.createElement('canvas');
+    fogCanvas.width = CRYPT_W; fogCanvas.height = CRYPT_H;
+    const fogCtx = fogCanvas.getContext('2d');
+    fogCtx.fillStyle = '#000000';
+    fogCtx.fillRect(0, 0, CRYPT_W, CRYPT_H);
+    if (this.textures.exists('crypt_fog')) this.textures.remove('crypt_fog');
+    this._fogTex = this.textures.createCanvas('crypt_fog', CRYPT_W, CRYPT_H);
+    this._fogTex.context.drawImage(fogCanvas, 0, 0);
+    this._fogTex.refresh();
+    this._fogImage = this.add.image(CRYPT_W / 2, CRYPT_H / 2, 'crypt_fog');
+    this._fogImage.setDisplaySize(CRYPT_W, CRYPT_H).setDepth(9000).setAlpha(0.85);
 
     /* --- Input (Diablo-style click-to-move) --- */
     this.keys = this.input.keyboard.addKeys('E,F,Q,R,SPACE');
@@ -2274,43 +2570,43 @@ class ForsakenCryptScene extends DarkForestScene {
     this._rCooldown = 0;
     this._furyActive = false;
 
-    /* --- Atmosphere (dark purple vignette + torches) --- */
+    /* --- Atmosphere (dark purple vignette) --- */
     const vig = this.add.graphics(); vig.setScrollFactor(0).setDepth(9998);
     const gw = this.cameras.main.width, gh = this.cameras.main.height;
     for (let i = 0; i < 25; i++) {
       vig.lineStyle(8, 0x0a0020, (i / 25) * 0.5);
       vig.strokeRect(i * 8, i * 8, gw - i * 16, gh - i * 16);
     }
+    this.cameras.main.setBackgroundColor('#030308');
 
-    // Darker camera tint for crypt
-    this.cameras.main.setPostPipeline && this.cameras.main.setBackgroundColor('#030308');
-
-    // Scattered torches
-    const torchPositions = [
-      { x: 200, y: 200 }, { x: CRYPT_W - 200, y: 200 },
-      { x: 200, y: CRYPT_H - 200 }, { x: CRYPT_W / 2, y: 400 },
-      { x: CRYPT_W / 2 - 300, y: CRYPT_H / 2 }, { x: CRYPT_W / 2 + 300, y: CRYPT_H / 2 },
-      { x: 500, y: CRYPT_H - 400 }, { x: CRYPT_W - 500, y: CRYPT_H - 400 },
-    ];
-    for (const tp of torchPositions) {
-      // Torch base
-      const torch = this.add.graphics().setDepth(tp.y - 1);
-      torch.fillStyle(0x554422, 1);
-      torch.fillRect(tp.x - 3, tp.y - 12, 6, 12);
-      // Flame glow
-      const flame = this.add.graphics().setDepth(tp.y);
-      flame.fillStyle(0xff6600, 0.3);
-      flame.fillCircle(tp.x, tp.y - 16, 20);
-      flame.fillStyle(0xffaa00, 0.5);
-      flame.fillCircle(tp.x, tp.y - 16, 8);
-      this.tweens.add({
-        targets: flame, alpha: 0.5, duration: 300 + Math.random() * 400,
-        yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
-      });
-      // Ground light circle
-      const glow = this.add.graphics().setDepth(-999);
-      glow.fillStyle(0xff8800, 0.06);
-      glow.fillCircle(tp.x, tp.y, 80);
+    /* --- Torches in chambers --- */
+    for (const ch of chambers) {
+      const torchSpots = [
+        { x: ch.x * TILE_S + 8, y: ch.y * TILE_S + 8 },
+        { x: (ch.x + ch.w - 1) * TILE_S + 8, y: ch.y * TILE_S + 8 },
+        { x: ch.x * TILE_S + 8, y: (ch.y + ch.h - 1) * TILE_S + 8 },
+        { x: (ch.x + ch.w - 1) * TILE_S + 8, y: (ch.y + ch.h - 1) * TILE_S + 8 },
+      ];
+      for (const tp of torchSpots) {
+        // Torch base graphics
+        const torch = this.add.graphics().setDepth(tp.y - 1);
+        torch.fillStyle(0x554422, 1);
+        torch.fillRect(tp.x - 3, tp.y - 12, 6, 12);
+        // Animated flame
+        const flame = this.add.graphics().setDepth(tp.y);
+        flame.fillStyle(0xff6600, 0.3);
+        flame.fillCircle(tp.x, tp.y - 16, 18);
+        flame.fillStyle(0xffaa00, 0.5);
+        flame.fillCircle(tp.x, tp.y - 16, 7);
+        this.tweens.add({
+          targets: flame, alpha: 0.5, duration: 300 + Math.random() * 400,
+          yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
+        });
+        // Ground glow
+        const glow = this.add.graphics().setDepth(-999);
+        glow.fillStyle(0xff8800, 0.06);
+        glow.fillCircle(tp.x, tp.y, 70);
+      }
     }
 
     this._syncState();
@@ -2597,8 +2893,8 @@ class ForsakenCryptScene extends DarkForestScene {
     this.cameras.main.fadeOut(1000, 0, 0, 0);
     this.cameras.main.once('camerafadeoutcomplete', () => {
       const data = this._getTransitionData();
-      data.savedData.x = FOREST_PORTAL_POS.x;
-      data.savedData.y = FOREST_PORTAL_POS.y + 50;
+      data.savedData.x = PORTAL_POS.x;
+      data.savedData.y = PORTAL_POS.y + 50;
       this.scene.start('DarkForest', data);
     });
   }
