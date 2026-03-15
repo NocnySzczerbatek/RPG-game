@@ -62,6 +62,12 @@ function hasSaveFile() {
    APP
    ═══════════════════════════════════════════════════════════════ */
 export default function App() {
+    // Ensure inventory is closed when not playing (prevents black screen overlay)
+    useEffect(() => {
+      if (screen !== 'playing' && inventoryOpen) {
+        setInventoryOpen(false);
+      }
+    }, [screen]);
   /* ── Game-state machine: 'menu' | 'playing' | 'dead' ─────── */
   const [screen, setScreen] = useState('menu');
   const [hasSave, setHasSave] = useState(() => hasSaveFile());
