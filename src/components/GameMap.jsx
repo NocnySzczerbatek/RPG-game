@@ -2850,14 +2850,28 @@ class ForsakenCryptScene extends DarkForestScene {
     this._cryptMapH = MAP_H;
 
     // Create collision borders around floor tiles 
-    // (place wall collision on every wall tile adjacent to a floor tile)
+    // (place wall collision on every wall tile adjacent to a floor/corridor tile)
     for (let ty = 1; ty < MAP_H - 1; ty++) for (let tx = 1; tx < MAP_W - 1; tx++) {
       if (layout[ty][tx] === 0) {
-        // Check if adjacent to floor
+        // Check if adjacent to floor or corridor
         const adjFloor = layout[ty-1][tx] > 0 || layout[ty+1][tx] > 0 ||
                          layout[ty][tx-1] > 0 || layout[ty][tx+1] > 0;
         if (adjFloor) {
-          const zone = this.add.zone(tx * TILE_S + TILE_S / 2, ty * TILE_S + TILE_S / 2, TILE_S, TILE_S);
+          // Avoid blocking narrow corridors: shrink collider and offset slightly
+          // Also, skip placing colliders if surrounded by 3+ floor/corridor tiles (likely a corner)
+          let floorCount = 0;
+          if (layout[ty-1][tx] > 0) floorCount++;
+          if (layout[ty+1][tx] > 0) floorCount++;
+          if (layout[ty][tx-1] > 0) floorCount++;
+          if (layout[ty][tx+1] > 0) floorCount++;
+          if (floorCount >= 3) continue; // skip corners to avoid blocking
+
+          // Shrink collider to 12x12 and center in tile
+          const zone = this.add.zone(
+            tx * TILE_S + TILE_S / 2,
+            ty * TILE_S + TILE_S / 2,
+            TILE_S - 4, TILE_S - 4
+          );
           this.physics.add.existing(zone, true);
           this.staticObjects.add(zone);
         }

@@ -27,15 +27,33 @@ function FloatingTooltip({ item, mousePos, classId }) {
   const rarity = item.rarity || 'common';
   const classBlocked = item._src === 'backpack' && !canClassEquip(classId, item);
   const lines = [];
-  if (item.dmg) lines.push({ label: 'Obrażenia', val: `+${item.dmg}`, c: '#ff7755' });
-  if (item.def) lines.push({ label: 'Pancerz', val: `+${item.def}`, c: '#6699dd' });
-  if (item.str) lines.push({ label: 'SIŁ', val: `+${item.str}`, c: '#dd9944' });
-  if (item.int) lines.push({ label: 'INT', val: `+${item.int}`, c: '#aa77dd' });
-  if (item.dex) lines.push({ label: 'ZRE', val: `+${item.dex}`, c: '#77bb77' });
-  if (item.will) lines.push({ label: 'WOL', val: `+${item.will}`, c: '#bbaa55' });
-  if (item.critChance) lines.push({ label: 'Krytyk', val: `+${(item.critChance * 100).toFixed(1)}%`, c: '#ff5555' });
-  if (item.heal) lines.push({ label: 'Leczenie', val: `${item.heal} PŻ`, c: '#55cc55' });
-  if (item.manaRestore) lines.push({ label: 'Mana', val: `+${item.manaRestore}`, c: '#5599ee' });
+  if (item.dmg) lines.push({ label: 'Obrażenia', val: `+${item.dmg}`, c: '#ff7755', key: 'dmg' });
+  if (item.def) lines.push({ label: 'Pancerz', val: `+${item.def}`, c: '#6699dd', key: 'def' });
+  if (item.str) lines.push({ label: 'SIŁ', val: `+${item.str}`, c: '#dd9944', key: 'str' });
+  if (item.int) lines.push({ label: 'INT', val: `+${item.int}`, c: '#aa77dd', key: 'int' });
+  if (item.dex) lines.push({ label: 'ZRE', val: `+${item.dex}`, c: '#77bb77', key: 'dex' });
+  if (item.will) lines.push({ label: 'WOL', val: `+${item.will}`, c: '#bbaa55', key: 'will' });
+  if (item.critChance) lines.push({ label: 'Krytyk', val: `+${(item.critChance * 100).toFixed(1)}%`, c: '#ff5555', key: 'critChance' });
+  if (item.heal) lines.push({ label: 'Leczenie', val: `${item.heal} PŻ`, c: '#55cc55', key: 'heal' });
+  if (item.manaRestore) lines.push({ label: 'Mana', val: `+${item.manaRestore}`, c: '#5599ee', key: 'manaRestore' });
+
+  // Stat comparison logic
+  let statDiffs = null;
+  if (item._src && item._src !== 'none' && item._playerStats && item._equipment) {
+    // Only compare for equippable items
+    const slot = (TYPE_TO_SLOTS[item.type] || [])[0];
+    if (slot) {
+      const equipped = item._equipment[slot];
+      // Calculate stat deltas
+      const statKeys = ['dmg', 'def', 'str', 'int', 'dex', 'will', 'critChance'];
+      statDiffs = {};
+      for (const k of statKeys) {
+        const newVal = (item[k] || 0);
+        const oldVal = (equipped && equipped[k]) ? equipped[k] : 0;
+        statDiffs[k] = newVal - oldVal;
+      }
+    }
+  }
 
   const rarityLabel = (RARITIES[rarity]?.label) || rarity;
   const typeMap = { weapon: 'Broń', dagger: 'Sztylet', bow: 'Łuk', armor: 'Zbroja', helmet: 'Hełm', pants: 'Spodnie', boots: 'Buty', belt: 'Pas', shield: 'Tarcza', amulet: 'Amulet', ring: 'Pierścień', potion: 'Mikstura' };
@@ -58,6 +76,11 @@ function FloatingTooltip({ item, mousePos, classId }) {
         <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
           <span style={{ fontSize: 12, color: '#b0a080' }}>{l.label}</span>
           <span style={{ fontSize: 12, color: l.c, fontWeight: 700, fontFamily: FONT_MONO }}>{l.val}</span>
+          {statDiffs && statDiffs[l.key] !== undefined && statDiffs[l.key] !== 0 && (
+            <span style={{ fontSize: 12, marginLeft: 6, color: statDiffs[l.key] > 0 ? '#66ee66' : '#ff4444', fontWeight: 700 }}>
+              {statDiffs[l.key] > 0 ? `+${statDiffs[l.key]}` : statDiffs[l.key]}
+            </span>
+          )}
         </div>
       ))}
       <div style={{ marginTop: 8, paddingTop: 6, borderTop: '1px solid rgba(80,60,30,0.3)', fontSize: 10, color: '#6a5a3a', fontStyle: 'italic' }}>
@@ -275,8 +298,41 @@ function GearTab({
   const BACKPACK_COLS = 10;
   const BACKPACK_TOTAL = 40;
 
+  // Compute stats for sidebar
+  const eb = { dmg: 0, def: 0, str: 0, int: 0, dex: 0, will: 0, critChance: 0 };
+  for (const it of Object.values(equipment)) {
+    if (!it) continue;
+    if (it.dmg) eb.dmg += it.dmg;
+    if (it.def) eb.def += it.def;
+    if (it.str) eb.str += it.str;
+    if (it.int) eb.int += it.int;
+    if (it.dex) eb.dex += it.dex;
+    if (it.will) eb.will += it.will;
+    if (it.critChance) eb.critChance += it.critChance;
+  }
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', position: 'relative' }}>
+    <div style={{ display: 'flex', flexDirection: 'row', height: '100%', overflow: 'hidden', position: 'relative' }}>
+      {/* Stats sidebar */}
+      <div style={{ width: 210, background: 'rgba(22,18,12,0.92)', borderRight: '2px solid #3a2a14', padding: '14px 10px 10px 14px', display: 'flex', flexDirection: 'column', gap: 0 }}>
+        <SectionTitle text="Statystyki" />
+        <StatRow icon="❤️" label="PŻ" value={playerStats.maxHp} color="#dd4444" />
+        <StatRow icon="💧" label="Mana" value={playerStats.maxMana} color="#4488dd" />
+        <StatRow icon="⭐" label="Poziom" value={playerStats.level} color="#e8c860" />
+        <SectionTitle text="Atrybuty" />
+        <StatRow icon="💪" label="SIŁ" value={(playerStats.str || 0) + eb.str} bonus={eb.str} color="#dd9944" />
+        <StatRow icon="🧠" label="INT" value={(playerStats.int || 0) + eb.int} bonus={eb.int} color="#aa77dd" />
+        <StatRow icon="🏃" label="ZRE" value={(playerStats.dex || 0) + eb.dex} bonus={eb.dex} color="#77bb77" />
+        <StatRow icon="🔮" label="WOL" value={(playerStats.will || 0) + eb.will} bonus={eb.will} color="#bbaa55" />
+        <SectionTitle text="Walka" />
+        <StatRow icon="⚔️" label="Obrażenia" value={(playerStats.baseDmg || 0) + eb.dmg} bonus={eb.dmg} color="#ff7755" />
+        <StatRow icon="🛡️" label="Pancerz" value={(playerStats.def || 0) + eb.def} bonus={eb.def} color="#6699dd" />
+        <StatRow icon="💥" label="Krytyk" value={`${(((playerStats.critChance || 0) + eb.critChance) * 100).toFixed(1)}%`} bonus={eb.critChance > 0 ? (eb.critChance * 100).toFixed(1) : 0} color="#ff5555" />
+        <SectionTitle text="Doświadczenie" />
+        <StatRow icon="📊" label="PD" value={`${playerStats.xp || 0} / ${playerStats.xpToLevel || 100}`} color="#aa8833" />
+      </div>
+      {/* Main gear UI */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Class restriction error toast */}
       {errMsg && (
         <div style={{
@@ -346,6 +402,7 @@ function GearTab({
             <BPSlot key={i} index={i} item={backpack[i] || null} onRC={bpRC} onHover={hoverIn} onLeave={hoverOut} onDragStart={dragStart} onDrop={drop} />
           ))}
         </div>
+      </div>
       </div>
     </div>
   );
@@ -577,6 +634,7 @@ export default function Inventory({
                 onEquipItem={onEquipItem} onUnequipItem={onUnequipItem}
                 onConsumePotion={onConsumePotion} onSwapBackpack={onSwapBackpack}
                 tip={tip} setTip={setTip} mpos={mpos} setMpos={setMpos}
+                playerStats={playerStats}
               />
             )}
             {tab === 'skills' && (
@@ -592,7 +650,8 @@ export default function Inventory({
           </div>
         </div>
       </div>
-      <FloatingTooltip item={tip} mousePos={mpos} classId={classId} />
+      {/* Pass playerStats and equipment to tooltip for stat comparison */}
+      <FloatingTooltip item={tip && tip._src ? { ...tip, _playerStats: playerStats, _equipment: equipment } : tip} mousePos={mpos} classId={classId} />
     </>
   );
 }

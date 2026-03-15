@@ -132,9 +132,9 @@ export const ITEM_DB = [
 
   /* ══════════ BOOTS ═════════════════════════════════════════ */
   { id: 'boots_leather',  name: 'Skórzane Buty',         type: 'boots', slot: 'feet', rarity: 'common',    icon: `${MAGE_OUT}/10.png`, def: 1, dex: 1 },
-  { id: 'boots_iron',     name: 'Żelazne Buty',          type: 'boots', slot: 'feet', rarity: 'magic',     icon: `${KNIGHT}/1.png`,   def: 4, str: 1, dex: 2 },
-  { id: 'boots_shadow',   name: 'Buty Cienia',           type: 'boots', slot: 'feet', rarity: 'rare',      icon: `${KNIGHT}/2.png`,   def: 8, dex: 5, critChance: 0.02 },
-  { id: 'boots_titan',    name: 'Buty Tytana',           type: 'boots', slot: 'feet', rarity: 'legendary', icon: `${KNIGHT}/3.png`,   def: 14, str: 4, dex: 6, critChance: 0.03 },
+  { id: 'boots_iron',     name: 'Żelazne Buty',          type: 'boots', slot: 'feet', rarity: 'magic',     icon: `${KNIGHT}/11.png`,   def: 4, str: 1, dex: 2 },
+  { id: 'boots_shadow',   name: 'Buty Cienia',           type: 'boots', slot: 'feet', rarity: 'rare',      icon: `${KNIGHT}/12.png`,   def: 8, dex: 5, critChance: 0.02 },
+  { id: 'boots_titan',    name: 'Buty Tytana',           type: 'boots', slot: 'feet', rarity: 'legendary', icon: `${KNIGHT}/13.png`,   def: 14, str: 4, dex: 6, critChance: 0.03 },
 
   /* ══════════ BELTS ═════════════════════════════════════════ */
   { id: 'belt_cloth',     name: 'Szmacany Pas',          type: 'belt', slot: 'hands', rarity: 'common',    icon: `${BELTS}/Icon1.png`,  def: 1 },
