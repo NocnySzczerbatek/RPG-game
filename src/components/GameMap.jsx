@@ -1831,6 +1831,33 @@ class DarkForestScene extends Phaser.Scene {
 
     this.knight.play('hero_idle');
     this.playerFacing = 'right';
+
+    // Paperdoll: equipment aura glow
+    this._equipAura = this.add.graphics();
+    this._equipAura.setDepth(this.knight.depth - 1);
+    this._equipAura.setBlendMode('ADD');
+    this._equipAuraColor = null;
+
+    // Paperdoll update callback — called from React when equipment changes
+    this._updatePaperdoll = () => {
+      const vis = this._equipVisual;
+      if (!vis || !this._equipAura) return;
+      const RARITY_COLORS = {
+        common: null,
+        magic: 0x4488ff,
+        rare: 0xffcc00,
+        legendary: 0xff6600,
+        mythic: 0xff00ff,
+      };
+      this._equipAuraColor = RARITY_COLORS[vis.bestRarity] || null;
+
+      // Tint the knight sprite slightly for legendary/mythic gear
+      if (this.knight) {
+        if (vis.bestRarity === 'mythic') this.knight.setTint(0xffddff);
+        else if (vis.bestRarity === 'legendary') this.knight.setTint(0xffeedd);
+        else this.knight.clearTint();
+      }
+    };
   }
 
   /* ── ATMOSPHERE ─────────────────────────────────────────── */
@@ -2031,6 +2058,20 @@ class DarkForestScene extends Phaser.Scene {
 
     /* --- Boss AI (crypt only) --- */
     if (this._boss) this._updateBossAI(delta);
+
+    /* --- Equipment Aura Glow (paperdoll) --- */
+    if (this._equipAura && this.knight) {
+      this._equipAura.clear();
+      if (this._equipAuraColor != null) {
+        const px = this.knight.x, py = this.knight.y + 4;
+        const pulse = 0.5 + 0.3 * Math.sin(time / 400);
+        this._equipAura.fillStyle(this._equipAuraColor, 0.12 * pulse);
+        this._equipAura.fillEllipse(px, py, 44, 24);
+        this._equipAura.fillStyle(this._equipAuraColor, 0.06 * pulse);
+        this._equipAura.fillEllipse(px, py, 64, 36);
+      }
+      this._equipAura.setDepth(this.knight.y - 1);
+    }
 
     /* --- Depth --- */
     this.knight.setDepth(this.knight.y);

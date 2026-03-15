@@ -275,20 +275,33 @@ export default function App() {
     });
   }, []);
 
-  /* ── Push equipment bonuses into Phaser ────────────────── */
+  /* ── Push equipment bonuses + visual data into Phaser ───── */
   useEffect(() => {
     const scene = sceneRef.current;
     if (!scene?.playerData) return;
     let bonusDmg = 0, bonusDef = 0, bonusCrit = 0;
+    let bestRarity = 'common';
+    const rarityRank = { common: 0, magic: 1, rare: 2, legendary: 3, mythic: 4 };
     for (const item of Object.values(equipment)) {
       if (!item) continue;
       if (item.dmg) bonusDmg += item.dmg;
       if (item.def) bonusDef += item.def;
       if (item.critChance) bonusCrit += item.critChance;
+      if ((rarityRank[item.rarity] || 0) > (rarityRank[bestRarity] || 0)) bestRarity = item.rarity;
     }
     scene.playerData._equipBonusDmg = bonusDmg;
     scene.playerData._equipBonusDef = bonusDef;
     scene.playerData._equipBonusCrit = bonusCrit;
+    // Visual data for paperdoll
+    scene._equipVisual = {
+      mainHand: equipment.mainHand,
+      offHand: equipment.offHand,
+      torso: equipment.torso,
+      head: equipment.head,
+      bestRarity,
+    };
+    // Trigger visual update
+    if (scene._updatePaperdoll) scene._updatePaperdoll();
   }, [equipment]);
 
   /* ── Auto-save every 15s while playing ─────────────────── */
@@ -472,9 +485,9 @@ export default function App() {
       scene.playerData.gold = Math.max(0, scene.playerData.gold - penalty);
       scene.playerData.hp = scene.playerData.maxHp;
       scene.playerData.mana = scene.playerData.maxMana;
-      // Mercy invulnerability — 2 seconds
-      scene._mercyTimer = 2000;
-      // Teleport to Eldergrove (center of map, near buildings)
+      // Mercy invulnerability — 3 seconds
+      scene._mercyTimer = 3000;
+      // Teleport to Eldergrove (center of map)
       if (scene.knight) {
         scene.knight.setPosition(2000, 2000);
         scene.knight.body.setVelocity(0, 0);
@@ -482,6 +495,12 @@ export default function App() {
         scene.knight.setAlpha(1);
         scene.knight.play('hero_idle', true);
       }
+      // Reset zone to forest (Eldergrove)
+      scene._currentZone = 'forest';
+      if (scene._onZoneChange) scene._onZoneChange('forest');
+      scene._isDead = false;
+      scene._attackTarget = null;
+      scene._moveTarget = null;
       scene.physics?.world?.resume();
       if (scene.input?.keyboard) scene.input.keyboard.enabled = true;
       scene.cameras?.main?.flash(600, 200, 170, 50);
