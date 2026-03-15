@@ -127,7 +127,13 @@ function SkillSlot({ hotkey, name, cooldown, active }) {
 /* ═══════════════════════════════════════════════════════════════
    MAIN HUD COMPONENT
    ═══════════════════════════════════════════════════════════════ */
-export default function HUD({ playerState, inventoryOpen, onToggleInventory }) {
+const SKILL_NAMES = {
+  warrior: { q: 'Cleave', w: 'Bash',  e: 'Whirl', r: 'Fury' },
+  mage:    { q: 'Shard',  w: 'Pulse', e: 'Frost', r: 'Meteor' },
+  rogue:   { q: 'Dagger', w: 'Smoke', e: 'Dash',  r: 'Exec' },
+};
+
+export default function HUD({ playerState, classId, inventoryOpen, onToggleInventory }) {
   const {
     hp = 100, maxHp = 100,
     mana = 50, maxMana = 50,
@@ -137,6 +143,7 @@ export default function HUD({ playerState, inventoryOpen, onToggleInventory }) {
   } = playerState || {};
 
   const xpPct = Math.max(0, Math.min(100, (xp / xpToLevel) * 100));
+  const sn = SKILL_NAMES[classId] || SKILL_NAMES.warrior;
 
   return (
     <div style={{
@@ -207,10 +214,10 @@ export default function HUD({ playerState, inventoryOpen, onToggleInventory }) {
           padding: '6px 8px',
           boxShadow: '0 -2px 12px rgba(0,0,0,0.6)',
         }}>
-          <SkillSlot hotkey="Q" name="Leap" cooldown={skills.q || 0} />
-          <SkillSlot hotkey="W" name="Bash" cooldown={skills.w || 0} />
-          <SkillSlot hotkey="E" name="Whirl" cooldown={skills.e || 0} active={skills.eActive} />
-          <SkillSlot hotkey="R" name="Fury" cooldown={skills.r || 0} />
+          <SkillSlot hotkey="Q" name={sn.q} cooldown={skills.q || 0} />
+          <SkillSlot hotkey="M2" name={sn.w} cooldown={skills.w || 0} />
+          <SkillSlot hotkey="E" name={sn.e} cooldown={skills.e || 0} active={skills.eActive} />
+          <SkillSlot hotkey="R" name={sn.r} cooldown={skills.r || 0} />
         </div>
 
         {/* Mana Orb */}

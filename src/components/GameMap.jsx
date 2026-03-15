@@ -131,6 +131,19 @@ const ENEMY_TYPES = {
       death:  { sheet: 'vamp1_death',  cols: 11, frameRate: 8  },
     },
   },
+  dragon_boss: {
+    key: 'dragon', hp: 800, dmg: 28, xp: 300, speed: 50,
+    aggroRange: 500, atkRange: 80, atkCooldown: 2200, scale: 3.5,
+    isBoss: true,
+    anims: {
+      idle:       { prefix: 'dragon_idle_',        count: 3, frameRate: 4  },
+      walk:       { prefix: 'dragon_walk_',        count: 5, frameRate: 7  },
+      attack:     { prefix: 'dragon_attack_',      count: 4, frameRate: 9  },
+      fire_attack:{ prefix: 'dragon_fire_attack_', count: 6, frameRate: 10 },
+      hurt:       { prefix: 'dragon_hurt_',        count: 2, frameRate: 8  },
+      death:      { prefix: 'dragon_death_',       count: 5, frameRate: 5  },
+    },
+  },
 };
 
 /* ── loot tables ───────────────────────────────────────────── */
@@ -360,11 +373,13 @@ class DarkForestScene extends Phaser.Scene {
     cam.setBackgroundColor('#0a0a08');
 
     /* --- Input --- */
-    this.keys = this.input.keyboard.addKeys('W,A,S,D,E,F');
+    this.keys = this.input.keyboard.addKeys('W,A,S,D,E,F,Q,R,SPACE');
     this.cursors = this.input.keyboard.createCursorKeys();
     this.input.on('pointerdown', (pointer) => {
       if (pointer.leftButtonDown()) this._playerAttack();
+      else if (pointer.rightButtonDown()) this._updateWSkill();
     });
+    this.input.mouse.disableContextMenu();
 
     /* --- Player state (from class + save) --- */
     const cls = this._chosenClass || {};
@@ -397,8 +412,10 @@ class DarkForestScene extends Phaser.Scene {
     this._whirlTimer = 0;
     this._frostCooldown = 0;
     this._dashCooldown = 0;
-
-    /* --- NPC blacksmith --- */
+    this._qCooldown = 0;
+    this._wCooldown = 0;
+    this._rCooldown = 0;
+    this._furyActive = false;
     this.npc = this.physics.add.sprite(NPC_POS.x, NPC_POS.y, 'npc_blacksmith');
     this.npc.setScale(2.2).setDepth(NPC_POS.y).setImmovable(true);
     this.npc.body.setImmovable(true);
@@ -422,6 +439,9 @@ class DarkForestScene extends Phaser.Scene {
     this._syncState();
     if (this._onZoneChange) this._onZoneChange('forest');
     this.cameras.main.fadeIn(800);
+
+    /* --- Phaser minimap camera --- */
+    this._createMinimap();
   }
 
   /* ── ENEMY ANIMATIONS ──────────────────────────────────── */
@@ -703,6 +723,577 @@ class DarkForestScene extends Phaser.Scene {
     this.cameras.main.flash(100, 50, 0, 80, false);
   }
 
+  /* ── Q SKILL DISPATCH ───────────────────────────────────── */
+  _updateQSkill() {
+    if (this._qCooldown > 0 || this.playerData.isAttacking) return;
+    if (!Phaser.Input.Keyboard.JustDown(this.keys.Q)) return;
+    const classId = this._chosenClass?.id || 'warrior';
+    if (classId === 'warrior') this._warriorCleave();
+    else if (classId === 'mage') this._mageIceShard();
+    else if (classId === 'rogue') this._rogueDaggerSlash();
+  }
+
+  /* ── WARRIOR Q: CLEAVE ──────────────────────────────────── */
+  _warriorCleave() {
+    const pd = this.playerData;
+    if (pd.mana < 10) return;
+    pd.mana -= 10;
+    this._qCooldown = 2000;
+    pd.isAttacking = true;
+
+    this.knight.play('hero_attack', true);
+    this.knight.once('animationcomplete-hero_attack', () => { pd.isAttacking = false; });
+
+    // Cone visual
+    const facingRight = !this.knight.flipX;
+    const cx = this.knight.x + (facingRight ? 30 : -30);
+    const cy = this.knight.y;
+    const arc = this.add.graphics().setDepth(10000);
+    arc.fillStyle(0xff6622, 0.25);
+    arc.slice(cx, cy, 110, facingRight ? -0.6 : Math.PI - 0.6, facingRight ? 0.6 : Math.PI + 0.6, false);
+    arc.fillPath();
+    this.tweens.add({ targets: arc, alpha: 0, duration: 350, onComplete: () => arc.destroy() });
+
+    // Hit enemies in front cone
+    const equipDmg = pd._equipBonusDmg || 0;
+    const equipCrit = pd._equipBonusCrit || 0;
+    for (const e of this.enemies) {
+      if (e.enemyData.isDead) continue;
+      const dx = e.x - this.knight.x, dy = e.y - cy;
+      const dist = Math.hypot(dx, dy);
+      if (dist > 110) continue;
+      const angle = Math.atan2(dy, dx);
+      const facing = facingRight ? 0 : Math.PI;
+      let diff = Math.abs(angle - facing);
+      if (diff > Math.PI) diff = 2 * Math.PI - diff;
+      if (diff < 0.8) {
+        const isCrit = Math.random() < (pd.critChance + equipCrit);
+        const dmg = Math.floor((pd.baseDmg + equipDmg) * 1.6 * (isCrit ? 2.2 : 1) * (0.9 + Math.random() * 0.2));
+        this._damageEnemy(e, dmg, isCrit);
+      }
+    }
+    this.cameras.main.shake(100, 0.006);
+  }
+
+  /* ── MAGE Q: ICE SHARD ─────────────────────────────────── */
+  _mageIceShard() {
+    const pd = this.playerData;
+    if (pd.mana < 12) return;
+    pd.mana -= 12;
+    this._qCooldown = 1200;
+
+    this.knight.play('hero_attack', true);
+    this.knight.once('animationcomplete-hero_attack', () => { pd.isAttacking = false; });
+    pd.isAttacking = true;
+
+    const facingRight = !this.knight.flipX;
+    const dir = facingRight ? 1 : -1;
+    const sx = this.knight.x + dir * 20;
+    const sy = this.knight.y - 10;
+
+    // Create shard projectile
+    const shard = this.add.graphics().setDepth(10000);
+    shard.fillStyle(0x66bbff, 0.9);
+    shard.fillCircle(0, 0, 6);
+    shard.fillStyle(0xaaddff, 0.5);
+    shard.fillCircle(0, 0, 10);
+    shard.setPosition(sx, sy);
+
+    const speed = 450;
+    const maxDist = 400;
+    let traveled = 0;
+    let hit = false;
+
+    const ev = this.time.addEvent({
+      delay: 16, repeat: Math.ceil(maxDist / (speed * 0.016)) + 2,
+      callback: () => {
+        if (hit) return;
+        const step = speed * 0.016;
+        shard.x += dir * step;
+        traveled += step;
+
+        // Trail
+        const trail = this.add.graphics().setDepth(9999);
+        trail.fillStyle(0x4488ff, 0.3);
+        trail.fillCircle(0, 0, 4);
+        trail.setPosition(shard.x - dir * 8, shard.y);
+        this.tweens.add({ targets: trail, alpha: 0, duration: 200, onComplete: () => trail.destroy() });
+
+        // Hit check
+        const equipDmg = pd._equipBonusDmg || 0;
+        for (const e of this.enemies) {
+          if (e.enemyData.isDead) continue;
+          if (Math.hypot(e.x - shard.x, e.y - shard.y) < 45) {
+            const dmg = Math.floor((pd.baseDmg + equipDmg) * 1.4 * (0.9 + Math.random() * 0.2));
+            this._damageEnemy(e, dmg, false);
+            hit = true;
+            // Freeze briefly
+            e.setTint(0x88bbff);
+            this.time.delayedCall(800, () => { if (!e.enemyData.isDead) e.clearTint(); });
+            break;
+          }
+        }
+        if (traveled >= maxDist || hit) {
+          // Burst
+          const burst = this.add.graphics().setDepth(10000);
+          burst.fillStyle(0x66bbff, 0.4);
+          burst.fillCircle(shard.x, shard.y, 20);
+          this.tweens.add({ targets: burst, alpha: 0, scale: 2, duration: 250, onComplete: () => burst.destroy() });
+          shard.destroy();
+          ev.destroy();
+        }
+      },
+    });
+  }
+
+  /* ── ROGUE Q: DAGGER SLASH ──────────────────────────────── */
+  _rogueDaggerSlash() {
+    const pd = this.playerData;
+    if (pd.mana < 8) return;
+    pd.mana -= 8;
+    this._qCooldown = 800;
+    pd.isAttacking = true;
+
+    this.knight.play('hero_attack', true);
+    this.knight.once('animationcomplete-hero_attack', () => { pd.isAttacking = false; });
+
+    const facingRight = !this.knight.flipX;
+    const atkX = this.knight.x + (facingRight ? 50 : -50);
+    const atkY = this.knight.y;
+    const equipDmg = pd._equipBonusDmg || 0;
+    const equipCrit = pd._equipBonusCrit || 0;
+
+    // Double hit: immediate + 150ms delay
+    const doHit = () => {
+      for (const e of this.enemies) {
+        if (e.enemyData.isDead) continue;
+        if (Math.hypot(e.x - atkX, e.y - atkY) < 80) {
+          const isCrit = Math.random() < (pd.critChance + equipCrit + 0.15);
+          const dmg = Math.floor((pd.baseDmg + equipDmg) * 0.7 * (isCrit ? 2.2 : 1) * (0.9 + Math.random() * 0.2));
+          this._damageEnemy(e, dmg, isCrit);
+        }
+      }
+    };
+
+    doHit();
+    this.time.delayedCall(150, doHit);
+
+    // Slash visual
+    for (let i = 0; i < 2; i++) {
+      const slash = this.add.graphics().setDepth(10000);
+      slash.lineStyle(2, 0xdddddd, 0.7);
+      const ox = this.knight.x + (facingRight ? 20 : -20);
+      const oy = this.knight.y - 15 + i * 20;
+      slash.beginPath();
+      slash.moveTo(ox, oy);
+      slash.lineTo(ox + (facingRight ? 60 : -60), oy + (i === 0 ? -10 : 10));
+      slash.strokePath();
+      this.tweens.add({ targets: slash, alpha: 0, duration: 250, delay: i * 100, onComplete: () => slash.destroy() });
+    }
+  }
+
+  /* ── W SKILL DISPATCH (Right-click / Space) ─────────────── */
+  _updateWSkill() {
+    if (this._wCooldown > 0 || this.playerData.isAttacking || this.playerData.whirlwinding) return;
+    const classId = this._chosenClass?.id || 'warrior';
+    if (classId === 'warrior') this._warriorBash();
+    else if (classId === 'mage') this._mageArcanePulse();
+    else if (classId === 'rogue') this._rogueSmokeBomb();
+  }
+
+  /* ── WARRIOR W: SHIELD BASH ─────────────────────────────── */
+  _warriorBash() {
+    const pd = this.playerData;
+    if (pd.mana < 10) return;
+    pd.mana -= 10;
+    this._wCooldown = 3000;
+    pd.isAttacking = true;
+
+    this.knight.play('hero_attack', true);
+    this.knight.once('animationcomplete-hero_attack', () => { pd.isAttacking = false; });
+
+    const facingRight = !this.knight.flipX;
+    const bx = this.knight.x + (facingRight ? 45 : -45);
+    const by = this.knight.y;
+
+    // Impact flash
+    const flash = this.add.graphics().setDepth(10000);
+    flash.fillStyle(0xffcc33, 0.4);
+    flash.fillCircle(bx, by, 35);
+    this.tweens.add({ targets: flash, alpha: 0, scale: 1.5, duration: 200, onComplete: () => flash.destroy() });
+
+    const equipDmg = pd._equipBonusDmg || 0;
+    for (const e of this.enemies) {
+      if (e.enemyData.isDead) continue;
+      if (Math.hypot(e.x - bx, e.y - by) < 70) {
+        const dmg = Math.floor((pd.baseDmg + equipDmg) * 1.2 * (0.9 + Math.random() * 0.2));
+        this._damageEnemy(e, dmg, false);
+        // Stun: freeze enemy for 1.5s
+        e.enemyData._stunned = true;
+        e.setTint(0xffff66);
+        e.body.setVelocity(0, 0);
+        this.time.delayedCall(1500, () => {
+          if (!e.enemyData.isDead) { e.enemyData._stunned = false; e.clearTint(); }
+        });
+        // Extra knockback
+        const angle = Math.atan2(e.y - this.knight.y, e.x - this.knight.x);
+        e.body.setVelocity(Math.cos(angle) * 350, Math.sin(angle) * 350);
+        this.time.delayedCall(250, () => { if (!e.enemyData.isDead) e.body.setVelocity(0, 0); });
+      }
+    }
+    this.cameras.main.shake(80, 0.005);
+  }
+
+  /* ── MAGE W: ARCANE PULSE ───────────────────────────────── */
+  _mageArcanePulse() {
+    const pd = this.playerData;
+    if (pd.mana < 14) return;
+    pd.mana -= 14;
+    this._wCooldown = 3500;
+    pd.isAttacking = true;
+
+    this.knight.play('hero_attack', true);
+    this.knight.once('animationcomplete-hero_attack', () => { pd.isAttacking = false; });
+
+    // AoE ring expanding outward
+    const ring = this.add.graphics().setDepth(10000);
+    const cx = this.knight.x, cy = this.knight.y;
+    let radius = 20;
+    const maxR = 130;
+    const equipDmg = pd._equipBonusDmg || 0;
+    const hitSet = new Set();
+
+    const ev = this.time.addEvent({
+      delay: 16, repeat: 20,
+      callback: () => {
+        radius += 6;
+        ring.clear();
+        ring.lineStyle(4, 0x9944ff, 0.6 * (1 - radius / maxR));
+        ring.strokeCircle(cx, cy, radius);
+
+        for (const e of this.enemies) {
+          if (e.enemyData.isDead || hitSet.has(e)) continue;
+          if (Math.hypot(e.x - cx, e.y - cy) < radius + 30) {
+            hitSet.add(e);
+            const dmg = Math.floor((pd.baseDmg + equipDmg) * 0.9 * (0.9 + Math.random() * 0.2));
+            this._damageEnemy(e, dmg, false);
+            // Push enemies outward
+            const angle = Math.atan2(e.y - cy, e.x - cx);
+            e.body.setVelocity(Math.cos(angle) * 300, Math.sin(angle) * 300);
+            this.time.delayedCall(300, () => { if (!e.enemyData.isDead) e.body.setVelocity(0, 0); });
+          }
+        }
+        if (radius >= maxR) { ring.destroy(); ev.destroy(); }
+      },
+    });
+    this.cameras.main.flash(80, 80, 0, 120, false);
+  }
+
+  /* ── ROGUE W: SMOKE BOMB ────────────────────────────────── */
+  _rogueSmokeBomb() {
+    const pd = this.playerData;
+    if (pd.mana < 12) return;
+    pd.mana -= 12;
+    this._wCooldown = 5000;
+
+    const sx = this.knight.x, sy = this.knight.y;
+
+    // Smoke cloud (several fading circles)
+    for (let i = 0; i < 8; i++) {
+      const g = this.add.graphics().setDepth(10000);
+      g.fillStyle(0x444444, 0.35);
+      g.fillCircle(0, 0, 20 + Math.random() * 25);
+      g.setPosition(sx + (Math.random() - 0.5) * 60, sy + (Math.random() - 0.5) * 40);
+      this.tweens.add({
+        targets: g, alpha: 0, y: g.y - 30, scale: 1.5,
+        duration: 1500 + Math.random() * 500,
+        onComplete: () => g.destroy(),
+      });
+    }
+
+    // Invisibility: enemies lose aggro for 2.5s
+    this.knight.setAlpha(0.3);
+    pd._invisible = true;
+    for (const e of this.enemies) {
+      if (!e.enemyData.isDead && e.enemyData.state === 'chase') {
+        e.enemyData.state = 'wander';
+        e.body.setVelocity(0, 0);
+      }
+    }
+    this.time.delayedCall(2500, () => {
+      this.knight.setAlpha(1);
+      pd._invisible = false;
+    });
+  }
+
+  /* ── R SKILL DISPATCH (Ultimate) ────────────────────────── */
+  _updateRSkill() {
+    if (this._rCooldown > 0 || this.playerData.isAttacking || this.playerData.whirlwinding) return;
+    if (!Phaser.Input.Keyboard.JustDown(this.keys.R)) return;
+    const classId = this._chosenClass?.id || 'warrior';
+    if (classId === 'warrior') this._warriorFury();
+    else if (classId === 'mage') this._mageMeteor();
+    else if (classId === 'rogue') this._rogueAssassinate();
+  }
+
+  /* ── WARRIOR R: BATTLE FURY ─────────────────────────────── */
+  _warriorFury() {
+    const pd = this.playerData;
+    if (pd.mana < 30) return;
+    pd.mana -= 30;
+    this._rCooldown = 15000;
+
+    // Buff: +60% damage, speed boost for 6s
+    this._furyActive = true;
+    this._furyTimer = 6000;
+    this._furyDmgBonus = Math.floor(pd.baseDmg * 0.6);
+    pd._equipBonusDmg = (pd._equipBonusDmg || 0) + this._furyDmgBonus;
+
+    // Red aura ring around player
+    this._furyAura = this.add.graphics().setDepth(9000);
+    const pulseAura = () => {
+      if (!this._furyActive || !this._furyAura) return;
+      this._furyAura.clear();
+      this._furyAura.lineStyle(3, 0xff2222, 0.4 + Math.sin(this.time.now / 200) * 0.2);
+      this._furyAura.strokeCircle(this.knight.x, this.knight.y, 50);
+      this._furyAura.fillStyle(0xff0000, 0.05);
+      this._furyAura.fillCircle(this.knight.x, this.knight.y, 45);
+    };
+    this._furyAuraEvent = this.time.addEvent({ delay: 30, loop: true, callback: pulseAura });
+
+    this.knight.setTint(0xff6666);
+    this.cameras.main.flash(200, 120, 0, 0, false);
+  }
+
+  _endFuryBuff() {
+    if (!this._furyActive) return;
+    this._furyActive = false;
+    const pd = this.playerData;
+    pd._equipBonusDmg = Math.max(0, (pd._equipBonusDmg || 0) - (this._furyDmgBonus || 0));
+    this._furyDmgBonus = 0;
+    this.knight.clearTint();
+    if (this._furyAuraEvent) { this._furyAuraEvent.destroy(); this._furyAuraEvent = null; }
+    if (this._furyAura) { this._furyAura.destroy(); this._furyAura = null; }
+  }
+
+  /* ── MAGE R: METEOR STORM ───────────────────────────────── */
+  _mageMeteor() {
+    const pd = this.playerData;
+    if (pd.mana < 35) return;
+    pd.mana -= 35;
+    this._rCooldown = 18000;
+
+    // Get world pointer position for target area
+    const ptr = this.input.activePointer;
+    const tx = ptr.worldX;
+    const ty = ptr.worldY;
+    const equipDmg = pd._equipBonusDmg || 0;
+
+    // 3 meteors with staggered delay
+    for (let i = 0; i < 3; i++) {
+      const ox = tx + (Math.random() - 0.5) * 100;
+      const oy = ty + (Math.random() - 0.5) * 80;
+
+      this.time.delayedCall(i * 600, () => {
+        // Warning circle
+        const warn = this.add.graphics().setDepth(9999);
+        warn.lineStyle(2, 0xff4400, 0.5);
+        warn.strokeCircle(ox, oy, 60);
+        warn.fillStyle(0xff2200, 0.08);
+        warn.fillCircle(ox, oy, 60);
+
+        this.time.delayedCall(500, () => {
+          warn.destroy();
+          // Impact
+          const impact = this.add.graphics().setDepth(10000);
+          impact.fillStyle(0xff6600, 0.5);
+          impact.fillCircle(ox, oy, 70);
+          impact.fillStyle(0xffaa00, 0.3);
+          impact.fillCircle(ox, oy, 40);
+          this.tweens.add({ targets: impact, alpha: 0, scale: 1.8, duration: 500, onComplete: () => impact.destroy() });
+
+          // Outer ring
+          const ring = this.add.graphics().setDepth(10000);
+          ring.lineStyle(4, 0xff8800, 0.6);
+          ring.strokeCircle(ox, oy, 50);
+          this.tweens.add({ targets: ring, alpha: 0, scale: 2, duration: 400, onComplete: () => ring.destroy() });
+
+          this.cameras.main.shake(200, 0.015);
+
+          // Damage enemies
+          for (const e of this.enemies) {
+            if (e.enemyData.isDead) continue;
+            if (Math.hypot(e.x - ox, e.y - oy) < 80) {
+              const dmg = Math.floor((pd.baseDmg + equipDmg) * 2.5 * (0.9 + Math.random() * 0.2));
+              this._damageEnemy(e, dmg, true);
+            }
+          }
+        });
+      });
+    }
+  }
+
+  /* ── ROGUE R: ASSASSINATE ───────────────────────────────── */
+  _rogueAssassinate() {
+    const pd = this.playerData;
+    if (pd.mana < 25) return;
+    pd.mana -= 25;
+    this._rCooldown = 12000;
+
+    // Find nearest alive enemy
+    let nearest = null, minDist = 600;
+    for (const e of this.enemies) {
+      if (e.enemyData.isDead) continue;
+      const d = Math.hypot(e.x - this.knight.x, e.y - this.knight.y);
+      if (d < minDist) { minDist = d; nearest = e; }
+    }
+    if (!nearest) { this._rCooldown = 0; pd.mana += 25; return; } // refund if no target
+
+    // Mark target
+    const mark = this.add.graphics().setDepth(10001);
+    mark.lineStyle(2, 0xff0000, 0.8);
+    mark.strokeCircle(nearest.x, nearest.y, 30);
+    const cross1 = this.add.graphics().setDepth(10001);
+    cross1.lineStyle(2, 0xff0000, 0.6);
+    cross1.lineBetween(nearest.x - 15, nearest.y - 15, nearest.x + 15, nearest.y + 15);
+    cross1.lineBetween(nearest.x + 15, nearest.y - 15, nearest.x - 15, nearest.y + 15);
+
+    // Brief vanish
+    this.knight.setAlpha(0.1);
+    pd.isAttacking = true;
+
+    this.time.delayedCall(300, () => {
+      mark.destroy(); cross1.destroy();
+
+      // Teleport behind enemy
+      const behind = nearest.flipX ? 40 : -40;
+      this.knight.setPosition(nearest.x + behind, nearest.y);
+      this.knight.setAlpha(1);
+      this.knight.setFlipX(behind > 0);
+
+      // Guaranteed crit massive hit
+      this.knight.play('hero_attack', true);
+      this.knight.once('animationcomplete-hero_attack', () => { pd.isAttacking = false; });
+
+      const equipDmg = pd._equipBonusDmg || 0;
+      const equipCrit = pd._equipBonusCrit || 0;
+      const dmg = Math.floor((pd.baseDmg + equipDmg) * 4 * (0.9 + Math.random() * 0.2));
+      this._damageEnemy(nearest, dmg, true);
+
+      // Blood burst effect
+      for (let i = 0; i < 12; i++) {
+        const g = this.add.graphics().setDepth(10000);
+        g.fillStyle(0x880000, 0.6);
+        g.fillCircle(0, 0, 3 + Math.random() * 4);
+        g.setPosition(nearest.x + (Math.random() - 0.5) * 50, nearest.y + (Math.random() - 0.5) * 40);
+        this.tweens.add({
+          targets: g, alpha: 0, x: g.x + (Math.random() - 0.5) * 60, y: g.y - 20 - Math.random() * 30,
+          duration: 600 + Math.random() * 400, onComplete: () => g.destroy(),
+        });
+      }
+
+      this.cameras.main.shake(150, 0.012);
+      this.cameras.main.flash(100, 60, 0, 0, false);
+    });
+  }
+
+  /* ── PHASER MINIMAP CAMERA ──────────────────────────────── */
+  _createMinimap() {
+    const mmSize = 160;
+    const worldW = this.physics.world.bounds.width;
+    const worldH = this.physics.world.bounds.height;
+
+    // Secondary camera following player, zoomed out
+    const miniCam = this.cameras.add(
+      this.cameras.main.width - mmSize - 16, 16,
+      mmSize, mmSize
+    );
+    miniCam.setZoom(mmSize / worldW);
+    miniCam.startFollow(this.knight);
+    miniCam.setBackgroundColor('#0a160a');
+    miniCam.setName('minimap');
+    miniCam.setRoundPixels(true);
+
+    // Ignore small decorations and particles on minimap
+    for (const d of this.decorations) miniCam.ignore(d);
+    if (this.npc) miniCam.ignore(this.npc);
+    if (this._npcLabel) miniCam.ignore(this._npcLabel);
+    if (this._portalLabel) miniCam.ignore(this._portalLabel);
+
+    // Circular mask
+    const maskShape = this.make.graphics({ add: false });
+    maskShape.fillStyle(0xffffff);
+    maskShape.fillCircle(
+      this.cameras.main.width - mmSize / 2 - 16,
+      mmSize / 2 + 16,
+      mmSize / 2 - 2
+    );
+    miniCam.setMask(new Phaser.Display.Masks.GeometryMask(this, maskShape));
+
+    // Border ring (drawn on HUD layer, scroll-factor 0)
+    const border = this.add.graphics().setScrollFactor(0).setDepth(9999);
+    border.lineStyle(2, 0x3a2a18, 1);
+    border.strokeCircle(
+      this.cameras.main.width - mmSize / 2 - 16,
+      mmSize / 2 + 16,
+      mmSize / 2
+    );
+    border.lineStyle(1, 0x554433, 0.7);
+    border.strokeCircle(
+      this.cameras.main.width - mmSize / 2 - 16,
+      mmSize / 2 + 16,
+      mmSize / 2 - 3
+    );
+    // Make the main camera ignore the border (it's HUD-level)
+    // and the minimap camera ignore it too
+    miniCam.ignore(border);
+
+    // Player dot (gold) on minimap — update in update loop
+    this._mmPlayerDot = this.add.graphics().setDepth(9997);
+    this._mmPlayerDot.fillStyle(0xffd700);
+    this._mmPlayerDot.fillCircle(0, 0, 60);
+    this._mmPlayerDot.setScrollFactor(0);
+    // The main camera should ignore the player dot, minimap shows it via world pos
+    // Actually let's just track it as world-positioned
+    this._mmPlayerDot.setScrollFactor(1);
+    this.cameras.main.ignore(this._mmPlayerDot);
+    this.cameras.main.ignore(border);
+
+    // Enemy dots
+    this._mmEnemyDots = [];
+    for (const e of this.enemies) {
+      const dot = this.add.graphics().setDepth(9996);
+      dot.fillStyle(0xcc3333);
+      dot.fillCircle(0, 0, 40);
+      dot.setPosition(e.x, e.y);
+      this.cameras.main.ignore(dot);
+      this._mmEnemyDots.push({ dot, enemy: e });
+    }
+
+    this._miniCam = miniCam;
+  }
+
+  /* ── UPDATE MINIMAP DOTS ────────────────────────────────── */
+  _updateMinimapDots() {
+    if (!this._miniCam) return;
+
+    // Player dot tracks player
+    if (this._mmPlayerDot && this.knight) {
+      this._mmPlayerDot.setPosition(this.knight.x, this.knight.y);
+    }
+
+    // Enemy dots track enemies
+    if (this._mmEnemyDots) {
+      for (const ed of this._mmEnemyDots) {
+        if (ed.enemy.enemyData?.isDead || !ed.enemy.active) {
+          ed.dot.setVisible(false);
+        } else {
+          ed.dot.setPosition(ed.enemy.x, ed.enemy.y);
+        }
+      }
+    }
+  }
+
   /* ── PORTAL TRANSITION ──────────────────────────────────── */
   _enterPortal() {
     if (this._transitioning) return;
@@ -789,6 +1380,24 @@ class DarkForestScene extends Phaser.Scene {
       this.playerData.xp += ed.xp;
       this._checkLevelUp();
       this._dropLoot(enemy.x, enemy.y, ed.type);
+
+      // Boss kill: guaranteed legendary + extra gold + victory text
+      if (ed.isBoss) {
+        this.playerData.gold += 100;
+        this._createLootLabel(enemy.x - 20, enemy.y - 10, '100 Gold', '#ffd700', { type: 'gold', amount: 100 });
+        const legendaries = LOOT_TABLE.filter(l => l.rarity === 'legendary');
+        if (legendaries.length > 0) {
+          const item = legendaries[Math.floor(Math.random() * legendaries.length)];
+          this._createLootLabel(enemy.x + 20, enemy.y + 20, item.name, RARITIES.legendary.color, { type: 'item', item });
+        }
+        // Victory announcement
+        const vic = this.add.text(this.cameras.main.width / 2, this.cameras.main.height / 2 - 60, 'BOSS SLAIN!', {
+          fontSize: '28px', fontFamily: "'Cinzel', serif", color: '#ffd700',
+          stroke: '#000', strokeThickness: 4, fontStyle: 'bold',
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(10003);
+        this.tweens.add({ targets: vic, y: vic.y - 40, alpha: 0, duration: 3000, delay: 1000, onComplete: () => vic.destroy() });
+        this.cameras.main.flash(500, 100, 80, 0, false);
+      }
     }
   }
 
@@ -873,10 +1482,14 @@ class DarkForestScene extends Phaser.Scene {
     for (const e of this.enemies) {
       const ed = e.enemyData;
       if (ed.isDead) continue;
+      if (ed._stunned) { e.body.setVelocity(0, 0); continue; }
       const dist = Math.hypot(e.x - px, e.y - py);
 
       // Sleep distant enemies
       if (dist > 900) { e.body.setVelocity(0, 0); continue; }
+
+      // Player invisible → don't aggro
+      const playerHidden = this.playerData._invisible;
 
       switch (ed.state) {
         case 'wander': {
@@ -887,7 +1500,7 @@ class DarkForestScene extends Phaser.Scene {
             ed.wanderDirX = Math.cos(a); ed.wanderDirY = Math.sin(a);
           }
           e.body.setVelocity(ed.wanderDirX * ed.speed * 0.3, ed.wanderDirY * ed.speed * 0.3);
-          if (dist < ed.aggroRange) ed.state = 'chase';
+          if (dist < ed.aggroRange && !playerHidden) ed.state = 'chase';
           const walkAnim = `${ed.animKey}_walk`;
           if (this.anims.exists(walkAnim) && e.anims.currentAnim?.key !== walkAnim) e.play(walkAnim, true);
           break;
@@ -1226,6 +1839,13 @@ class DarkForestScene extends Phaser.Scene {
     if (this._atkCooldown > 0) this._atkCooldown -= delta;
     if (this._frostCooldown > 0) this._frostCooldown -= delta;
     if (this._dashCooldown > 0) this._dashCooldown -= delta;
+    if (this._qCooldown > 0) this._qCooldown -= delta;
+    if (this._wCooldown > 0) this._wCooldown -= delta;
+    if (this._rCooldown > 0) this._rCooldown -= delta;
+    if (this._furyActive && this._furyTimer > 0) {
+      this._furyTimer -= delta;
+      if (this._furyTimer <= 0) this._endFuryBuff();
+    }
 
     /* --- E key: Portal > NPC > Skill --- */
     const nearPortal = this.portal && Math.hypot(this.knight.x - this.portal.x, this.knight.y - this.portal.y) < 80;
@@ -1241,10 +1861,22 @@ class DarkForestScene extends Phaser.Scene {
       this._updateESkill(delta);
     }
 
+    /* --- Q skill --- */
+    this._updateQSkill();
+
+    /* --- R skill (ultimate) --- */
+    this._updateRSkill();
+
+    /* --- Space also triggers W skill --- */
+    if (Phaser.Input.Keyboard.JustDown(this.keys.SPACE)) this._updateWSkill();
+
     // Sync skill cooldown for HUD
     const _cid = this._chosenClass?.id || 'warrior';
     if (_cid === 'mage') pd.skills.e = Math.max(0, Math.ceil(this._frostCooldown ?? 0));
     else if (_cid === 'rogue') pd.skills.e = Math.max(0, Math.ceil(this._dashCooldown ?? 0));
+    pd.skills.q = Math.max(0, Math.ceil((this._qCooldown ?? 0) / 1000));
+    pd.skills.w = Math.max(0, Math.ceil((this._wCooldown ?? 0) / 1000));
+    pd.skills.r = Math.max(0, Math.ceil((this._rCooldown ?? 0) / 1000));
 
     this._manaRegen += delta;
     if (this._manaRegen > 500) {
@@ -1257,8 +1889,14 @@ class DarkForestScene extends Phaser.Scene {
     this._updateHPBars();
     this._checkPickupKey();
 
+    /* --- Boss AI (crypt only) --- */
+    if (this._boss) this._updateBossAI(delta);
+
     /* --- Depth --- */
     this.knight.setDepth(this.knight.y);
+
+    /* --- Minimap dots --- */
+    this._updateMinimapDots();
 
     /* --- Culling --- */
     this._cullTimer += delta;
@@ -1302,6 +1940,20 @@ class ForsakenCryptScene extends DarkForestScene {
 
     // Portal
     this.load.image('portal_purple', 'assets/sprites/portal_purple.png');
+
+    // Dragon Boss (individual frames)
+    const dragonAnims = [
+      { name: 'idle', count: 3, folder: 'Idle' },
+      { name: 'walk', count: 5, folder: 'Walk' },
+      { name: 'attack', count: 4, folder: 'Attack' },
+      { name: 'fire_attack', count: 6, folder: 'Fire_Attack' },
+      { name: 'hurt', count: 2, folder: 'Hurt' },
+      { name: 'death', count: 5, folder: 'Death' },
+    ];
+    for (const a of dragonAnims) {
+      for (let i = 1; i <= a.count; i++)
+        this.load.image(`dragon_${a.name}_${i}`, `${MONSTERS}/dragon/${a.folder}${i}.png`);
+    }
   }
 
   create() {
@@ -1338,7 +1990,9 @@ class ForsakenCryptScene extends DarkForestScene {
     /* --- Enemies --- */
     this.enemies = [];
     this._createEnemyAnims();
+    this._createDragonBossAnims();
     this._spawnCryptEnemies();
+    this._spawnBoss();
 
     /* --- Loot --- */
     this.lootDrops = [];
@@ -1368,11 +2022,13 @@ class ForsakenCryptScene extends DarkForestScene {
     cam.fadeIn(1000);
 
     /* --- Input --- */
-    this.keys = this.input.keyboard.addKeys('W,A,S,D,E,F');
+    this.keys = this.input.keyboard.addKeys('W,A,S,D,E,F,Q,R,SPACE');
     this.cursors = this.input.keyboard.createCursorKeys();
     this.input.on('pointerdown', (pointer) => {
       if (pointer.leftButtonDown()) this._playerAttack();
+      else if (pointer.rightButtonDown()) this._updateWSkill();
     });
+    this.input.mouse.disableContextMenu();
 
     /* --- Player state --- */
     const cls = this._chosenClass || {};
@@ -1406,6 +2062,10 @@ class ForsakenCryptScene extends DarkForestScene {
     this._whirlTimer = 0;
     this._frostCooldown = 0;
     this._dashCooldown = 0;
+    this._qCooldown = 0;
+    this._wCooldown = 0;
+    this._rCooldown = 0;
+    this._furyActive = false;
 
     /* --- Atmosphere (dark purple vignette) --- */
     const vig = this.add.graphics(); vig.setScrollFactor(0).setDepth(9998);
@@ -1417,6 +2077,7 @@ class ForsakenCryptScene extends DarkForestScene {
 
     this._syncState();
     if (this._onZoneChange) this._onZoneChange('crypt');
+    this._createMinimap();
   }
 
   _spawnCryptEnemies() {
@@ -1435,6 +2096,255 @@ class ForsakenCryptScene extends DarkForestScene {
         this._createEnemy(x, y, sd.type, typeDef);
         placed++;
       }
+    }
+  }
+
+  /* ── DRAGON BOSS ANIMATIONS ─────────────────────────────── */
+  _createDragonBossAnims() {
+    for (const [state, info] of Object.entries(ENEMY_TYPES.dragon_boss.anims)) {
+      const key = `dragon_${state}`;
+      if (!this.anims.exists(key)) {
+        this.anims.create({
+          key,
+          frames: Array.from({ length: info.count }, (_, i) => ({ key: `${info.prefix}${i + 1}` })),
+          frameRate: info.frameRate,
+          repeat: (state === 'death') ? 0 : -1,
+        });
+      }
+    }
+  }
+
+  /* ── SPAWN BOSS ─────────────────────────────────────────── */
+  _spawnBoss() {
+    const bx = CRYPT_W / 2;
+    const by = 350; // North end of crypt — boss arena
+    const def = ENEMY_TYPES.dragon_boss;
+
+    const boss = this.physics.add.sprite(bx, by, 'dragon_idle_1');
+    boss.setScale(def.scale).setDepth(by).setCollideWorldBounds(true);
+    boss.body.setSize(50, 30).setOffset(90, 100);
+    boss.play('dragon_idle');
+
+    boss.enemyData = {
+      type: 'dragon_boss', hp: def.hp, maxHp: def.hp, dmg: def.dmg,
+      xp: def.xp, speed: def.speed,
+      aggroRange: def.aggroRange, atkRange: def.atkRange,
+      atkCooldown: def.atkCooldown,
+      state: 'wander', isDead: false,
+      wanderTimer: 0, wanderDirX: 0, wanderDirY: 0,
+      atkTimer: 0, animKey: 'dragon',
+      isBoss: true, phase: 1, fireTimer: 0, summonTimer: 0,
+    };
+
+    // Bigger HP bar for boss
+    const hpBg = this.add.graphics();
+    hpBg.fillStyle(0x000000, 0.7).fillRect(-50, -4, 100, 8).setDepth(by + 1);
+    boss.hpBg = hpBg;
+    const hpFg = this.add.graphics();
+    hpFg.fillStyle(0xff2200).fillRect(-49, -3, 98, 6).setDepth(by + 2);
+    boss.hpFg = hpFg;
+
+    // Boss nameplate
+    this._bossNameplate = this.add.text(bx, by - 80, '🐉 Drakul the Undying', {
+      fontSize: '13px', fontFamily: "'Cinzel', serif", color: '#ff4444',
+      stroke: '#000', strokeThickness: 3,
+    }).setOrigin(0.5).setDepth(10002);
+
+    // Boss HP bar on screen (UI)
+    this._bossHpBg = this.add.graphics().setScrollFactor(0).setDepth(9998);
+    this._bossHpFg = this.add.graphics().setScrollFactor(0).setDepth(9999);
+    this._bossHpLabel = this.add.text(this.cameras.main.width / 2, 30, 'Drakul the Undying', {
+      fontSize: '11px', fontFamily: "'Cinzel', serif", color: '#ff6644',
+      stroke: '#000', strokeThickness: 2,
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(9999);
+
+    this._boss = boss;
+    this.enemies.push(boss);
+
+    // Ignore boss UI on minimap
+    if (this._miniCam) {
+      this._miniCam.ignore(this._bossHpBg);
+      this._miniCam.ignore(this._bossHpFg);
+      this._miniCam.ignore(this._bossHpLabel);
+      this._miniCam.ignore(this._bossNameplate);
+    }
+  }
+
+  /* ── BOSS AI (override update to add boss logic) ────────── */
+  _updateBossAI(delta) {
+    const boss = this._boss;
+    if (!boss || boss.enemyData.isDead) {
+      // Hide boss UI when dead
+      if (this._bossHpBg) this._bossHpBg.setVisible(false);
+      if (this._bossHpFg) this._bossHpFg.setVisible(false);
+      if (this._bossHpLabel) this._bossHpLabel.setVisible(false);
+      if (this._bossNameplate) this._bossNameplate.setVisible(false);
+      return;
+    }
+
+    const ed = boss.enemyData;
+    const px = this.knight.x, py = this.knight.y;
+    const dist = Math.hypot(boss.x - px, boss.y - py);
+
+    // Phase transitions
+    const hpPct = ed.hp / ed.maxHp;
+    if (hpPct < 0.5 && ed.phase === 1) {
+      ed.phase = 2;
+      ed.speed = 70; // Faster
+      ed.dmg = 35;   // Hits harder
+      boss.setTint(0xff4444);
+      // Enrage flash
+      this.cameras.main.flash(300, 80, 0, 0, false);
+      const enrageTxt = this.add.text(boss.x, boss.y - 60, 'ENRAGED!', {
+        fontSize: '16px', fontFamily: "'Cinzel', serif", color: '#ff2200',
+        stroke: '#000', strokeThickness: 3, fontStyle: 'bold',
+      }).setOrigin(0.5).setDepth(10002);
+      this.tweens.add({ targets: enrageTxt, y: enrageTxt.y - 40, alpha: 0, duration: 1500, onComplete: () => enrageTxt.destroy() });
+    }
+
+    // Fire breath attack (special, every 6-8s)
+    ed.fireTimer = (ed.fireTimer || 0) + delta;
+    const fireInterval = ed.phase === 2 ? 5000 : 7000;
+    if (dist < 300 && ed.fireTimer > fireInterval && ed.state !== 'dead') {
+      ed.fireTimer = 0;
+      this._bossFireBreath(boss);
+    }
+
+    // Summon minions in phase 2 (every 12s)
+    if (ed.phase === 2) {
+      ed.summonTimer = (ed.summonTimer || 0) + delta;
+      if (ed.summonTimer > 12000) {
+        ed.summonTimer = 0;
+        this._bossSummonMinions(boss);
+      }
+    }
+
+    // Nameplate follows boss
+    if (this._bossNameplate && !ed.isDead) {
+      this._bossNameplate.setPosition(boss.x, boss.y - 80 * boss.scaleY);
+    }
+
+    // Top-of-screen HP bar
+    const barW = 300, barH = 12;
+    const barX = (this.cameras.main.width - barW) / 2;
+    const barY = 44;
+    this._bossHpBg.clear();
+    this._bossHpBg.fillStyle(0x000000, 0.8);
+    this._bossHpBg.fillRect(barX - 2, barY - 2, barW + 4, barH + 4);
+    this._bossHpBg.lineStyle(1, 0x442200);
+    this._bossHpBg.strokeRect(barX - 2, barY - 2, barW + 4, barH + 4);
+
+    this._bossHpFg.clear();
+    const bossHpColor = ed.phase === 2 ? 0xff2200 : 0xcc4400;
+    this._bossHpFg.fillStyle(bossHpColor);
+    this._bossHpFg.fillRect(barX, barY, Math.floor(barW * hpPct), barH);
+
+    // Override boss HP bar (wider than normal enemies)
+    const yOff = -50 * boss.scaleY;
+    boss.hpBg.setPosition(boss.x, boss.y + yOff).setDepth(boss.y + 1);
+    boss.hpFg.clear();
+    boss.hpFg.fillStyle(bossHpColor);
+    boss.hpFg.fillRect(-49, -3, Math.floor(98 * hpPct), 6);
+    boss.hpFg.setPosition(boss.x, boss.y + yOff).setDepth(boss.y + 2);
+  }
+
+  /* ── BOSS: FIRE BREATH ──────────────────────────────────── */
+  _bossFireBreath(boss) {
+    const px = this.knight.x, py = this.knight.y;
+    const angle = Math.atan2(py - boss.y, px - boss.x);
+    boss.setFlipX(px < boss.x);
+
+    // Play fire attack anim
+    const fireAnim = 'dragon_fire_attack';
+    if (this.anims.exists(fireAnim)) boss.play(fireAnim, true);
+    boss.once('animationcomplete-dragon_fire_attack', () => {
+      if (!boss.enemyData.isDead) boss.play('dragon_idle', true);
+    });
+
+    // Fire projectiles in a cone
+    const pd = this.playerData;
+    const numFlames = boss.enemyData.phase === 2 ? 7 : 5;
+    const spread = 0.4; // radians spread
+
+    for (let i = 0; i < numFlames; i++) {
+      const a = angle + (i - (numFlames - 1) / 2) * (spread / (numFlames - 1) * 2);
+      const delay = i * 80;
+
+      this.time.delayedCall(delay, () => {
+        const flame = this.add.graphics().setDepth(10000);
+        flame.fillStyle(0xff6600, 0.7);
+        flame.fillCircle(0, 0, 8);
+        flame.fillStyle(0xffaa00, 0.4);
+        flame.fillCircle(0, 0, 12);
+        flame.setPosition(boss.x + Math.cos(a) * 40, boss.y + Math.sin(a) * 40);
+
+        const speed = 200;
+        let traveled = 0;
+        const maxDist = 280;
+        let hit = false;
+
+        const ev = this.time.addEvent({
+          delay: 16, repeat: Math.ceil(maxDist / (speed * 0.016)),
+          callback: () => {
+            if (hit) return;
+            const step = speed * 0.016;
+            flame.x += Math.cos(a) * step;
+            flame.y += Math.sin(a) * step;
+            traveled += step;
+
+            // Trail
+            const trail = this.add.graphics().setDepth(9999);
+            trail.fillStyle(0xff4400, 0.2);
+            trail.fillCircle(0, 0, 5);
+            trail.setPosition(flame.x, flame.y);
+            this.tweens.add({ targets: trail, alpha: 0, duration: 300, onComplete: () => trail.destroy() });
+
+            // Hit player check
+            if (Math.hypot(flame.x - this.knight.x, flame.y - this.knight.y) < 35) {
+              hit = true;
+              const equipDef = pd._equipBonusDef || 0;
+              const fireDmg = Math.max(1, boss.enemyData.dmg - Math.floor(equipDef * 0.3));
+              pd.hp = Math.max(0, pd.hp - fireDmg);
+              if (pd.hp <= 0 && !this._isDead) {
+                this._isDead = true;
+                this.knight.body.setVelocity(0, 0);
+                if (this.anims.exists('hero_death')) this.knight.play('hero_death', true);
+                this._syncState();
+                if (this._onPlayerDeath) this._onPlayerDeath();
+              }
+              this.cameras.main.shake(100, 0.008);
+              this.knight.setTint(0xff6600);
+              this.time.delayedCall(200, () => { if (!this._isDead) this.knight.clearTint(); });
+            }
+
+            if (traveled >= maxDist || hit) { flame.destroy(); ev.destroy(); }
+          },
+        });
+      });
+    }
+
+    this.cameras.main.shake(150, 0.006);
+  }
+
+  /* ── BOSS: SUMMON MINIONS ───────────────────────────────── */
+  _bossSummonMinions(boss) {
+    const summonTxt = this.add.text(boss.x, boss.y - 50, 'Summoning!', {
+      fontSize: '12px', fontFamily: "'Cinzel', serif", color: '#aa44ff',
+      stroke: '#000', strokeThickness: 2, fontStyle: 'bold',
+    }).setOrigin(0.5).setDepth(10002);
+    this.tweens.add({ targets: summonTxt, y: summonTxt.y - 30, alpha: 0, duration: 1200, onComplete: () => summonTxt.destroy() });
+
+    // Summon 2 vampires near boss
+    for (let i = 0; i < 2; i++) {
+      const sx = boss.x + (Math.random() - 0.5) * 150;
+      const sy = boss.y + 60 + Math.random() * 80;
+      this._createEnemy(sx, sy, 'vampire', ENEMY_TYPES.vampire);
+
+      // Spawn flash
+      const flash = this.add.graphics().setDepth(10000);
+      flash.fillStyle(0x8844ff, 0.4);
+      flash.fillCircle(sx, sy, 30);
+      this.tweens.add({ targets: flash, alpha: 0, scale: 2, duration: 400, onComplete: () => flash.destroy() });
     }
   }
 
@@ -1488,7 +2398,7 @@ export default function GameMap({ playerState, setPlayerState, sceneRef, addToBa
   return (
     <div className="relative w-full h-full">
       <div ref={containerRef} className="w-full h-full" />
-      <HUD playerState={playerState} inventoryOpen={inventoryOpen} onToggleInventory={() => setInventoryOpen(prev => !prev)} />
+      <HUD playerState={playerState} classId={chosenClass?.id} inventoryOpen={inventoryOpen} onToggleInventory={() => setInventoryOpen(prev => !prev)} />
     </div>
   );
 }
