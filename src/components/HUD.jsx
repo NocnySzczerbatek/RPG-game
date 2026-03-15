@@ -5,22 +5,22 @@ const UI = 'assets/sprites/craftpix-net-255216-free-basic-pixel-art-ui-for-rpg/P
 /* ── Skill tooltip descriptions ────────────────────────────── */
 const SKILL_TOOLTIPS = {
   warrior: {
-    q: { name: 'Cleave', desc: 'Powerful cone slash dealing 160% DMG.', cost: '10 Mana', cd: '2s' },
-    w: { name: 'Shield Bash', desc: 'Bash enemies, stunning for 1.5s and dealing 120% DMG.', cost: '10 Mana', cd: '3s' },
-    e: { name: 'Whirlwind', desc: 'Spin dealing 60% DMG/hit while held. Drains mana.', cost: 'Mana/sec', cd: 'Hold' },
-    r: { name: 'Battle Fury', desc: '+60% DMG for 6 seconds. Red aura.', cost: '30 Mana', cd: '15s' },
+    q: { name: 'Rozcięcie', desc: 'Potężne cięcie stożkowe, 160% OBR.', cost: '10 Many', cd: '2s' },
+    w: { name: 'Tarcz. Cios', desc: 'Ogłuszenie na 1.5s, 120% OBR.', cost: '10 Many', cd: '3s' },
+    e: { name: 'Wir Ostrzy', desc: 'Kręcisz się zadając 60% OBR co trafienie.', cost: 'Mana/s', cd: 'Trz.' },
+    r: { name: 'Bitewna Furia', desc: '+60% OBR na 6s. Czerwona aura.', cost: '30 Many', cd: '15s' },
   },
   mage: {
-    q: { name: 'Ice Shard', desc: 'Projectile toward cursor dealing 140% DMG. Briefly freezes.', cost: '12 Mana', cd: '1.2s' },
-    w: { name: 'Arcane Pulse', desc: 'Expanding AoE ring, 90% DMG + knockback.', cost: '14 Mana', cd: '3.5s' },
-    e: { name: 'Frost Nova', desc: 'Freezes nearby enemies for 2s, 80% DMG.', cost: '25 Mana', cd: '5s' },
-    r: { name: 'Meteor Storm', desc: '3 meteors at cursor, each dealing 250% DMG.', cost: '35 Mana', cd: '18s' },
+    q: { name: 'Lodowy Odłamek', desc: 'Pocisk w kierunku kursora, 140% OBR.', cost: '12 Many', cd: '1.2s' },
+    w: { name: 'Arkana Fala', desc: 'Rozszerzający się pierścień, 90% OBR.', cost: '14 Many', cd: '3.5s' },
+    e: { name: 'Mroźna Nova', desc: 'Zamrożenie wrogów na 2s, 80% OBR.', cost: '25 Many', cd: '5s' },
+    r: { name: 'Burza Meteorów', desc: '3 meteory przy kursorze, 250% OBR każdy.', cost: '35 Many', cd: '18s' },
   },
   rogue: {
-    q: { name: 'Dagger Slash', desc: 'Double-hit dealing 70% DMG each, +15% crit.', cost: '8 Mana', cd: '0.8s' },
-    w: { name: 'Smoke Bomb', desc: 'Become invisible for 2.5s. Enemies lose aggro.', cost: '12 Mana', cd: '5s' },
-    e: { name: 'Shadow Dash', desc: 'Teleport 200px toward cursor, damaging enemies in path.', cost: '15 Mana', cd: '3s' },
-    r: { name: 'Assassinate', desc: 'Teleport to nearest enemy, guaranteed crit, 400% DMG.', cost: '25 Mana', cd: '12s' },
+    q: { name: 'Podw. Cięcie', desc: 'Podwójny cios — 70% OBR każdy, +15% krytyk.', cost: '8 Many', cd: '0.8s' },
+    w: { name: 'Bomba Dymna', desc: 'Niewidzialność na 2.5s, wrogowie tracą cel.', cost: '12 Many', cd: '5s' },
+    e: { name: 'Cień. Zryw', desc: 'Teleport 200px do kursora.', cost: '15 Many', cd: '3s' },
+    r: { name: 'Egzekucja', desc: 'Teleport za wroga, gwarancja krytyku 400% OBR.', cost: '25 Many', cd: '12s' },
   },
 };
 
@@ -177,9 +177,9 @@ function SkillSlot({ hotkey, name, cooldown, active, tooltip }) {
    MAIN HUD COMPONENT
    ═══════════════════════════════════════════════════════════════ */
 const SKILL_NAMES = {
-  warrior: { q: 'Cleave', w: 'Bash',  e: 'Whirl', r: 'Fury' },
-  mage:    { q: 'Shard',  w: 'Pulse', e: 'Frost', r: 'Meteor' },
-  rogue:   { q: 'Dagger', w: 'Smoke', e: 'Dash',  r: 'Exec' },
+  warrior: { q: 'Rozcięcie', w: 'T.Cios',  e: 'Wir', r: 'Furia' },
+  mage:    { q: 'Odłamek',  w: 'Fala', e: 'Nova', r: 'Meteor' },
+  rogue:   { q: 'Cięcie', w: 'Dym', e: 'Zryw',  r: 'Egzek.' },
 };
 
 export default function HUD({ playerState, classId, inventoryOpen, onToggleInventory }) {

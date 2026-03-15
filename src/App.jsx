@@ -1,23 +1,15 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import GameMap, { LOOT_TABLE, RARITIES } from './components/GameMap';
+import GameMap from './components/GameMap';
 import Inventory from './components/Inventory';
 import MainMenu, { CLASSES } from './components/MainMenu';
 import DeathOverlay from './components/DeathOverlay';
 import TradeWindow from './components/TradeWindow';
-import { getItemValue } from './components/TradeWindow';
+import { getItemValue as getItemValueTrade } from './components/TradeWindow';
+import { ITEM_DB, LOOT_TABLE, RARITIES, TYPE_TO_SLOTS, SKILL_TREES, rollMobItem, rollBossItem, getItemValue } from './data/ItemDatabase';
 
 /* ═══════════════════════════════════════════════════════════════
    CONSTANTS
    ═══════════════════════════════════════════════════════════════ */
-const TYPE_TO_SLOTS = {
-  weapon:  ['mainHand'],
-  armor:   ['torso', 'head', 'hands', 'legs', 'feet'],
-  shield:  ['offHand'],
-  amulet:  ['neck'],
-  ring:    ['ring1', 'ring2'],
-  potion:  [],
-};
-
 const EMPTY_EQUIPMENT = {
   head: null, torso: null, hands: null, legs: null, feet: null,
   neck: null, ring1: null, ring2: null,
@@ -29,14 +21,9 @@ const SAVE_KEY = 'godslayer_save';
 
 /* ── Shop stock generation (level-scaled) ────────────────── */
 function generateShopStock(playerLevel = 1) {
-  const potions = [
-    { name: 'Health Potion', type: 'potion', rarity: 'common', heal: 30 + playerLevel * 5 },
-    { name: 'Greater Heal',  type: 'potion', rarity: 'magic',  heal: 60 + playerLevel * 8 },
-    { name: 'Mana Potion',   type: 'potion', rarity: 'common', manaRestore: 20 + playerLevel * 3 },
-  ];
-  // Filter items within player level range (+/- 2 rarity tiers)
+  const potions = ITEM_DB.filter(i => i.type === 'potion');
   const rarityForLevel = playerLevel < 3 ? ['common', 'magic'] : playerLevel < 6 ? ['magic', 'rare'] : ['magic', 'rare', 'legendary', 'mythic'];
-  const eligible = LOOT_TABLE.filter(i => rarityForLevel.includes(i.rarity) && i.type !== 'potion');
+  const eligible = ITEM_DB.filter(i => rarityForLevel.includes(i.rarity) && i.type !== 'potion');
   const scaled = eligible.map(i => {
     const bonus = Math.max(0, playerLevel - 2);
     const copy = { ...i };
@@ -45,7 +32,7 @@ function generateShopStock(playerLevel = 1) {
     return copy;
   });
   const shuffled = [...scaled].sort(() => Math.random() - 0.5);
-  return [...potions, ...shuffled.slice(0, 3)];
+  return [...potions.slice(0, 3), ...shuffled.slice(0, 3)];
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -80,21 +67,27 @@ export default function App() {
   const [inventoryOpen, setInventoryOpen] = useState(false);
   const [backpack, setBackpack] = useState(() => {
     const bp = new Array(BACKPACK_SIZE).fill(null);
-    /* Starter items for testing */
-    bp[0] = { name: 'Rusty Sword',      type: 'weapon', rarity: 'common',    dmg: 5 };
-    bp[1] = { name: 'Enchanted Blade',  type: 'weapon', rarity: 'magic',     dmg: 14, str: 2 };
-    bp[2] = { name: 'Bloodfang',        type: 'weapon', rarity: 'rare',      dmg: 22, str: 5, critChance: 0.04 };
-    bp[3] = { name: 'Hellreaver',       type: 'weapon', rarity: 'legendary', dmg: 35, str: 8, critChance: 0.08 };
-    bp[4] = { name: 'Godsbane',          type: 'weapon', rarity: 'mythic',    dmg: 60, str: 12, critChance: 0.12 };
-    bp[5] = { name: 'Leather Vest',     type: 'armor',  rarity: 'common',    def: 3 };
-    bp[6] = { name: 'Shadow Plate',     type: 'armor',  rarity: 'rare',      def: 15, str: 4, dex: 2 };
-    bp[7] = { name: 'Veil of the Fallen God', type: 'armor', rarity: 'mythic', def: 45, str: 14, will: 10, dex: 6 };
-    bp[8] = { name: 'Bone Ring',        type: 'ring',   rarity: 'common',    str: 2 };
-    bp[9] = { name: 'Band of Agony',    type: 'ring',   rarity: 'rare',      critChance: 0.06, dex: 5 };
-    bp[10] = { name: 'Crown of the Godslayer', type: 'amulet', rarity: 'mythic', str: 12, int: 12, will: 10, def: 15, critChance: 0.08 };
-    bp[11] = { name: 'Health Potion',    type: 'potion', rarity: 'common',    heal: 30 };
-    bp[12] = { name: 'Greater Heal',    type: 'potion', rarity: 'magic',     heal: 60 };
-    bp[13] = { name: 'Mana Potion',     type: 'potion', rarity: 'common',    manaRestore: 20 };
+    /* Starter items from ItemDatabase */
+    const byId = (id) => { const it = ITEM_DB.find(i => i.id === id); return it ? { ...it } : null; };
+    bp[0] = byId('sword_rusty');
+    bp[1] = byId('dagger_enchanted');
+    bp[2] = byId('dagger_blood');
+    bp[3] = byId('sword_gods');
+    bp[4] = byId('chest_leather');
+    bp[5] = byId('chest_shadow');
+    bp[6] = byId('chest_god');
+    bp[7] = byId('helm_leather');
+    bp[8] = byId('ring_bone');
+    bp[9] = byId('ring_agony');
+    bp[10] = byId('amulet_crown');
+    bp[11] = byId('pot_hp_small');
+    bp[12] = byId('pot_hp_med');
+    bp[13] = byId('pot_mana_small');
+    bp[14] = byId('shield_wood');
+    bp[15] = byId('belt_cloth');
+    bp[16] = byId('pants_torn');
+    bp[17] = byId('boots_leather');
+    bp[18] = byId('bow_short');
     return bp;
   });
   const [equipment, setEquipment] = useState({ ...EMPTY_EQUIPMENT });
@@ -105,6 +98,11 @@ export default function App() {
   const [shopStock, setShopStock] = useState(() => generateShopStock());
   const [zone, setZone] = useState('forest');
   const prevLevelRef = useRef(1);
+
+  /* ── Skill tree state ───────────────────────────────────── */
+  const [unlockedSkills, setUnlockedSkills] = useState([]);
+  const [skillPoints, setSkillPoints] = useState(0);
+  const [skillSlots, setSkillSlots] = useState({ q: null, w: null, e: null, r: null });
 
   /* ── Keyboard: I toggles inventory, ESC closes ─────────── */
   useEffect(() => {
@@ -276,7 +274,7 @@ export default function App() {
   const handleBuy = useCallback((shopIndex) => {
     const item = shopStock[shopIndex];
     if (!item) return;
-    const price = getItemValue(item);
+    const price = getItemValueTrade(item);
     const scene = sceneRef.current;
     if (!scene?.playerData || scene.playerData.gold < price) return;
     scene.playerData.gold -= price;
@@ -288,7 +286,7 @@ export default function App() {
     setBackpack(prev => {
       const item = prev[backpackIndex];
       if (!item) return prev;
-      const sellPrice = Math.max(1, Math.floor(getItemValue(item) * 0.25));
+      const sellPrice = Math.max(1, Math.floor(getItemValueTrade(item) * 0.25));
       const scene = sceneRef.current;
       if (scene?.playerData) scene.playerData.gold += sellPrice;
       const next = [...prev];
@@ -297,14 +295,41 @@ export default function App() {
     });
   }, []);
 
-  /* ── Refresh shop on level up ───────────────────────────── */
+  /* ── Refresh shop on level up + grant skill point ────────── */
   useEffect(() => {
     const lvl = playerState.level || 1;
     if (lvl > prevLevelRef.current) {
+      const gained = lvl - prevLevelRef.current;
       prevLevelRef.current = lvl;
       setShopStock(generateShopStock(lvl));
+      setSkillPoints(prev => prev + gained);
     }
   }, [playerState.level]);
+
+  /* ── Unlock skill handler ─────────────────────────────── */
+  const handleUnlockSkill = useCallback((skillId) => {
+    setSkillPoints(prev => {
+      if (prev <= 0) return prev;
+      setUnlockedSkills(us => {
+        if (us.includes(skillId)) return us;
+        return [...us, skillId];
+      });
+      return prev - 1;
+    });
+  }, []);
+
+  /* ── Assign skill to Q/W/E/R slot ─────────────────────── */
+  const handleAssignSlot = useCallback((slotKey, skillId) => {
+    setSkillSlots(prev => {
+      const next = { ...prev };
+      // Remove skill from other slots if already assigned
+      for (const k of Object.keys(next)) {
+        if (next[k] === skillId) next[k] = null;
+      }
+      next[slotKey] = skillId;
+      return next;
+    });
+  }, []);
 
   /* ── START GAME (from menu) ────────────────────────────── */
   const handleStartGame = useCallback((classData) => {
@@ -424,6 +449,11 @@ export default function App() {
         gold={playerState.gold || 0}
         classId={chosenClass?.id}
         onSwapBackpack={handleSwapBackpack}
+        unlockedSkills={unlockedSkills}
+        skillPoints={skillPoints}
+        onUnlockSkill={handleUnlockSkill}
+        skillSlots={skillSlots}
+        onAssignSlot={handleAssignSlot}
       />
       {screen === 'dead' && (
         <DeathOverlay gold={playerState.gold || 0} onRespawn={handleRespawn} />
