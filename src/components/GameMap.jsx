@@ -552,24 +552,41 @@ class DarkForestScene extends Phaser.Scene {
       // Spawn indoor resident NPCs — one per enterable house
       if (this._enterableHouses) {
         for (const house of this._enterableHouses) {
-          let rx, ry;
-          if (house.npcRole === 'trade') {
+          let rx, ry, npcKey, npcLabel, npcRole, labelColor, labelText;
+          if (house.type === 'blacksmith') {
+            rx = house.x - house.w * 0.18;
+            ry = house.y + house.h * 0.18;
+            npcKey = 'npc_blacksmith';
+            npcLabel = 'Kowal';
+            npcRole = 'blacksmith';
+            labelColor = '#e2cfa0';
+            labelText = '[E] Kowal';
+          } else if (house.type === 'merchant') {
             rx = house.x;
-            ry = house.y - 35;
+            ry = house.y + house.h * 0.18;
+            npcKey = 'npc_blacksmith'; // Replace with merchant sprite if available
+            npcLabel = 'Handlarz';
+            npcRole = 'merchant';
+            labelColor = '#c8a96e';
+            labelText = '[E] Handlarz';
           } else {
             rx = house.x + (Math.random() - 0.5) * house.w * 0.2;
             ry = house.y - house.h * 0.15;
+            npcKey = this.textures.exists('citizen2_idle') ? 'citizen2_idle' : (this.textures.exists('citizen1_idle') ? 'citizen1_idle' : 'npc_blacksmith');
+            npcLabel = house.npcLabel;
+            npcRole = house.npcRole === 'trade' ? 'merchant' : 'quest';
+            labelColor = '#88bbff';
+            labelText = `[E] ${npcLabel}`;
           }
-          const rKey = this.textures.exists('citizen2_idle') ? 'citizen2_idle' : (this.textures.exists('citizen1_idle') ? 'citizen1_idle' : 'npc_blacksmith');
-          const resident = this.physics.add.sprite(rx, ry, rKey);
+          const resident = this.physics.add.sprite(rx, ry, npcKey);
           resident.setScale(2.0).setDepth(ry).setImmovable(true);
           resident.body.setImmovable(true);
           resident.body.setSize(20, 14).setOffset(22, 42);
-          resident.npcRole = house.npcRole === 'trade' ? 'merchant' : 'quest';
-          resident.npcLabel = house.npcLabel;
+          resident.npcRole = npcRole;
+          resident.npcLabel = npcLabel;
           resident.setVisible(false);
 
-          if (this.textures.exists('citizen2_idle')) {
+          if (this.textures.exists('citizen2_idle') && npcKey === 'citizen2_idle') {
             const animKey = 'citizen2_idle_anim';
             if (!this.anims.exists(animKey)) {
               const tf = this.textures.get('citizen2_idle').frameTotal;
@@ -580,11 +597,12 @@ class DarkForestScene extends Phaser.Scene {
 
           if (this.knight) this.physics.add.collider(this.knight, resident);
 
-          const labelColor = house.npcRole === 'trade' ? '#c8a96e' : '#88bbff';
-          const labelPrefix = house.npcRole === 'trade' ? '[F] Handel' : '[F] Rozmowa';
-          const rlabel = this.add.text(rx, ry - 60, `${labelPrefix} - ${house.npcLabel}`, {
-            fontSize: '11px', fontFamily: "'Cinzel', serif", color: labelColor,
-            stroke: '#000', strokeThickness: 3,
+          // Visually improved tooltip for NPC
+          const rlabel = this.add.text(rx, ry - 60, labelText, {
+            fontSize: '15px', fontFamily: "'Cinzel', serif", color: labelColor,
+            stroke: '#000', strokeThickness: 4,
+            backgroundColor: 'rgba(32,24,8,0.85)', padding: { x: 10, y: 4 },
+            shadow: { offsetX: 2, offsetY: 2, color: '#000', blur: 2, fill: true }
           }).setOrigin(0.5).setDepth(100002).setVisible(false);
           resident._label = rlabel;
           resident._houseRef = house;
@@ -1643,7 +1661,6 @@ class DarkForestScene extends Phaser.Scene {
       backgroundColor: 'rgba(0,0,0,0.5)', padding: { x: 4, y: 2 },
     }).setOrigin(0.5).setDepth(9000).setInteractive({ useHandCursor: true });
     label.lootData = data;
-    label.on('pointerdown', () => this._pickupLoot(label));
     label.setScale(0);
     this.tweens.add({ targets: label, scale: 1, duration: 300, ease: 'Back.easeOut' });
     this.lootDrops.push(label);
@@ -1945,27 +1962,28 @@ class DarkForestScene extends Phaser.Scene {
           // --- Tiled floor using walls_floor spritesheet (16×16 tiles) ---
           const floor = this.add.graphics().setDepth(by - 2);
           const TILE_S = 16;
-          const floorFrame = 0; // first tile in walls_floor is a plank
-          const wallFrame = 3;  // stone wall tile
           const tilesX = Math.ceil(fw / TILE_S);
           const tilesY = Math.ceil(fh / TILE_S);
           const originX = bx - fw / 2;
           const originY = by - fh / 2;
-          // Draw floor tile pattern
+          // Draw cozy checkered floor pattern
           for (let ty = 0; ty < tilesY; ty++) {
             for (let tx = 0; tx < tilesX; tx++) {
               const isEdge = tx === 0 || tx === tilesX - 1 || ty === 0 || ty === tilesY - 1;
-              const color = isEdge ? 0x55443a : ((tx + ty) % 2 === 0 ? 0x44362a : 0x3e3024);
+              const color = isEdge ? 0x6a4c2b : ((tx + ty) % 2 === 0 ? 0x4b3621 : 0x3e2a1a);
               floor.fillStyle(color, 1);
               floor.fillRect(originX + tx * TILE_S, originY + ty * TILE_S, TILE_S, TILE_S);
             }
           }
           // Wall border
-          floor.lineStyle(3, 0x665544, 0.9);
+          floor.lineStyle(4, 0x8b6b3a, 1);
           floor.strokeRect(bx - fw / 2, by - fh / 2, fw, fh);
           // Inner shadow
-          floor.lineStyle(1, 0x221108, 0.3);
+          floor.lineStyle(2, 0x221108, 0.4);
           floor.strokeRect(bx - fw / 2 + 2, by - fh / 2 + 2, fw - 4, fh - 4);
+          // Subtle rug in the center
+          floor.fillStyle(0x9e6f3e, 0.18);
+          floor.fillEllipse(bx, by + 10, fw * 0.6, fh * 0.25);
           floor.setVisible(false);
 
           // --- Room type ---
@@ -1975,13 +1993,42 @@ class DarkForestScene extends Phaser.Scene {
           // --- Furniture (with small collision boxes) ---
           const furnitureSprites = [];
           const furnitureColliders = [];
-          for (const furn of room.furniture) {
+          // Custom cozy interior for blacksmith and merchant
+          let customFurniture = [];
+          if (bld.type === 'blacksmith') {
+            // Forge, anvil, table, crate, fireplace, chair
+            customFurniture = [
+              { type: 'forge_fire', ox: -fw * 0.28, oy: fh * 0.18 },
+              { type: 'anvil', ox: -fw * 0.18, oy: fh * 0.18 },
+              { type: 'table_large', ox: 0, oy: 0 },
+              { type: 'chair', ox: fw * 0.18, oy: 0 },
+              { type: 'barrel', ox: fw * 0.28, oy: fh * 0.18 },
+              { type: 'shelf', ox: fw * 0.22, oy: -fh * 0.18 },
+              { type: 'chest', ox: -fw * 0.22, oy: -fh * 0.18 },
+              { type: 'candle', ox: 0, oy: -fh * 0.18 },
+            ];
+          } else if (bld.type === 'merchant') {
+            // Counter, shelves, table, barrels, items
+            customFurniture = [
+              { type: 'counter', ox: 0, oy: fh * 0.18 },
+              { type: 'shelf', ox: -fw * 0.22, oy: -fh * 0.18 },
+              { type: 'shelf', ox: fw * 0.22, oy: -fh * 0.18 },
+              { type: 'table_small', ox: 0, oy: 0 },
+              { type: 'barrel', ox: fw * 0.28, oy: fh * 0.18 },
+              { type: 'barrel', ox: -fw * 0.28, oy: fh * 0.18 },
+              { type: 'chest', ox: fw * 0.18, oy: 0 },
+              { type: 'candle', ox: 0, oy: -fh * 0.18 },
+            ];
+          } else {
+            customFurniture = room.furniture;
+          }
+          for (const furn of customFurniture) {
             const style = FURNITURE_STYLES[furn.type];
             if (!style) continue;
             const fx = bx + furn.ox, fy = by + furn.oy;
             const g = this.add.graphics().setDepth(by - 1);
             // Shadow
-            g.fillStyle(0x000000, 0.25);
+            g.fillStyle(0x000000, 0.22);
             g.fillRoundedRect(fx - style.w / 2 + 2, fy - style.h / 2 + 2, style.w, style.h, 2);
             // Body
             g.fillStyle(style.color, 1);
@@ -1993,9 +2040,9 @@ class DarkForestScene extends Phaser.Scene {
             }
             // Glow
             if (style.glow) {
-              g.fillStyle(style.color, 0.15);
+              g.fillStyle(style.color, 0.18);
               g.fillCircle(fx, fy, 16);
-              g.fillStyle(0xffffff, 0.08);
+              g.fillStyle(0xffffff, 0.10);
               g.fillCircle(fx, fy, 9);
             }
             g.setVisible(false);
@@ -2014,8 +2061,8 @@ class DarkForestScene extends Phaser.Scene {
 
           // Room name label (inside)
           const roomLabel = this.add.text(bx, by - fh / 2 + 10, room.name, {
-            fontSize: '8px', fontFamily: "'Cinzel', serif", color: '#bbaa80',
-            stroke: '#000', strokeThickness: 2,
+            fontSize: '10px', fontFamily: "'Cinzel', serif", color: '#e2cfa0',
+            stroke: '#000', strokeThickness: 3, backgroundColor: 'rgba(40,32,16,0.7)', padding: { x: 6, y: 2 }
           }).setOrigin(0.5).setDepth(by - 1).setVisible(false);
           furnitureSprites.push(roomLabel);
 
@@ -2046,8 +2093,10 @@ class DarkForestScene extends Phaser.Scene {
 
           // --- Door entry label ---
           const doorLabel = this.add.text(bx, by + fh / 2 + 14, '[F] Wejdź', {
-            fontSize: '9px', fontFamily: "'Cinzel', serif", color: '#c8a96e',
-            stroke: '#000', strokeThickness: 2,
+            fontSize: '13px', fontFamily: "'Cinzel', serif", color: '#fffbe6',
+            stroke: '#000', strokeThickness: 4,
+            backgroundColor: 'rgba(32,24,8,0.85)', padding: { x: 10, y: 4 },
+            shadow: { offsetX: 2, offsetY: 2, color: '#000', blur: 2, fill: true }
           }).setOrigin(0.5).setDepth(100001).setVisible(false);
 
           const houseData = {
