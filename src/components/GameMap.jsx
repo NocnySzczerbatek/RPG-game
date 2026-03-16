@@ -3336,7 +3336,7 @@ class ForsakenCryptScene extends DarkForestScene {
 // Module-level storage for scene data — avoids Phaser data-passing issues
 let __pendingSceneData = null;
 
-export default function GameMap({ playerState, setPlayerState, sceneRef, addToBackpack, inventoryOpen, setInventoryOpen, chosenClass, savedData, onPlayerDeath, onOpenTrade, onZoneChange }) {
+export default function GameMap({ playerState, setPlayerState, sceneRef, addToBackpack, chosenClass, savedData, onPlayerDeath, onOpenTrade, onZoneChange }) {
   const containerRef = useRef(null);
   const gameRef = useRef(null);
 
@@ -3386,7 +3386,7 @@ export default function GameMap({ playerState, setPlayerState, sceneRef, addToBa
     <div className="relative w-full h-full" style={{ zIndex: 1 }}>
       <div ref={containerRef} className="w-full h-full" style={{ position: 'relative', zIndex: 1 }} />
       <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 10 }}>
-        <HUD playerState={playerState} classId={chosenClass?.id} inventoryOpen={inventoryOpen} onToggleInventory={() => setInventoryOpen(prev => !prev)} />
+        <HUD playerState={playerState} classId={chosenClass?.id} />
       </div>
     </div>
   );

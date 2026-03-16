@@ -62,18 +62,19 @@ function hasSaveFile() {
    APP
    ═══════════════════════════════════════════════════════════════ */
 export default function App() {
-    // Ensure inventory is closed when not playing (prevents black screen overlay)
-    useEffect(() => {
-      if (screen !== 'playing' && inventoryOpen) {
-        setInventoryOpen(false);
-      }
-    }, [screen]);
   /* ── Game-state machine: 'menu' | 'playing' | 'dead' ─────── */
   const [screen, setScreen] = useState('menu');
   const [hasSave, setHasSave] = useState(() => hasSaveFile());
 
   /* ── Player / inventory state ────────────────────────────── */
   const [inventoryOpen, setInventoryOpen] = useState(false);
+
+  // Ensure inventory is closed when not playing (prevents black screen overlay)
+  useEffect(() => {
+    if (screen !== 'playing' && inventoryOpen) {
+      setInventoryOpen(false);
+    }
+  }, [screen, inventoryOpen]);
   const [backpack, setBackpack] = useState(() => {
     const bp = new Array(BACKPACK_SIZE).fill(null);
     /* Starter items from ItemDatabase */
@@ -156,6 +157,8 @@ export default function App() {
   }, []);
 
   /* ── Keyboard: bindings, tilde for admin, ESC for settings */
+  // Debounce for inventory toggle
+  const inventoryDebounceRef = useRef(0);
   useEffect(() => {
     const handler = (e) => {
       if (screen !== 'playing') return;
@@ -163,7 +166,6 @@ export default function App() {
       const code = e.code;
 
       // Admin console toggle: Backquote key (physical), or ; or / keys (if admin)
-      // Using e.code for Backquote works regardless of keyboard layout (PL, EN, etc.)
       if (isAdmin && (code === 'Backquote' || k === ';' || k === '/')) {
         e.preventDefault();
         e.stopPropagation();
@@ -183,12 +185,17 @@ export default function App() {
       // Don't process other bindings while overlays are open
       if (adminOpen || settingsOpen) return;
 
-      // Inventory toggle
+      // Inventory toggle with debounce (200ms)
       if (k.toUpperCase() === bindings.inventory.toUpperCase()) {
-        if (!tradeOpen) setInventoryOpen(prev => !prev);
+        if (!tradeOpen) {
+          const now = Date.now();
+          if (now - inventoryDebounceRef.current > 200) {
+            setInventoryOpen(prev => !prev);
+            inventoryDebounceRef.current = now;
+          }
+        }
       }
     };
-    // Use capture phase so our handler fires BEFORE Phaser's keyboard listener
     window.addEventListener('keydown', handler, true);
     return () => window.removeEventListener('keydown', handler, true);
   }, [inventoryOpen, tradeOpen, adminOpen, settingsOpen, screen, bindings, isAdmin]);
@@ -559,8 +566,6 @@ export default function App() {
         setPlayerState={setPlayerState}
         sceneRef={sceneRef}
         addToBackpack={addToBackpack}
-        inventoryOpen={inventoryOpen}
-        setInventoryOpen={setInventoryOpen}
         chosenClass={chosenClass}
         savedData={savedDataRef.current}
         onPlayerDeath={onPlayerDeath}
@@ -569,6 +574,7 @@ export default function App() {
       />
       {/* Inventory overlay — absolute, z-index 100, on top of canvas */}
       <Inventory
+        key="main-inventory"
         isOpen={inventoryOpen && screen === 'playing'}
         onClose={() => setInventoryOpen(false)}
         backpack={backpack}

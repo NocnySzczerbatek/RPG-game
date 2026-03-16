@@ -182,7 +182,7 @@ const SKILL_NAMES = {
   rogue:   { q: 'Cięcie', w: 'Dym', e: 'Zryw',  r: 'Egzek.' },
 };
 
-export default function HUD({ playerState, classId, inventoryOpen, onToggleInventory }) {
+export default function HUD({ playerState, classId }) {
   const {
     hp = 100, maxHp = 100,
     mana = 50, maxMana = 50,
@@ -208,33 +208,7 @@ export default function HUD({ playerState, classId, inventoryOpen, onToggleInven
       alignItems: 'center',
     }}>
       {/* Inventory toggle button */}
-      <div style={{
-        position: 'absolute', top: -60, right: 16,
-        pointerEvents: 'auto',
-      }}>
-        <div
-          onClick={onToggleInventory}
-          style={{
-            width: 44, height: 44,
-            background: inventoryOpen ? 'rgba(60,44,16,0.9)' : 'rgba(10,8,5,0.85)',
-            border: `2px solid ${inventoryOpen ? '#aa8833' : '#3a2a10'}`,
-            borderRadius: 4,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            cursor: 'pointer',
-            boxShadow: inventoryOpen
-              ? '0 0 10px rgba(200,160,60,0.3)'
-              : 'inset 0 0 8px rgba(0,0,0,0.5)',
-            transition: 'all 0.15s',
-            position: 'relative',
-          }}
-        >
-          <span style={{ fontSize: 20 }}>🎒</span>
-          <span style={{
-            position: 'absolute', bottom: -8, left: '50%', transform: 'translateX(-50%)',
-            fontSize: 8, color: '#8a7a5e', fontFamily: 'monospace', fontWeight: 'bold',
-          }}>I</span>
-        </div>
-      </div>
+      {/* Inventory toggle button removed for singleton UI */}
       {/* Main bar */}
       <div style={{
         display: 'flex',

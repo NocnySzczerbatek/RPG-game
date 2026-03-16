@@ -1,4 +1,23 @@
 import React, { useState, useEffect } from 'react';
+// Simple error boundary for GearTab
+class GearTabErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true };
+  }
+  componentDidCatch(error, info) {
+    console.error('GearTab crashed:', error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return <div style={{ color: '#fff', background: '#400', padding: 16, borderRadius: 6, margin: 16, fontFamily: FONT }}>Błąd ekwipunku — spróbuj ponownie otworzyć okno lub zgłoś problem.</div>;
+    }
+    return this.props.children;
+  }
+}
 import { RARITIES, SLOT_LABELS, TYPE_TO_SLOTS, SKILL_TREES, canClassEquip } from '../data/ItemDatabase';
 
 /* ═══════════════════════════════════════════════════════════════
@@ -210,7 +229,7 @@ function SectionTitle({ text }) {
 /* ═══════════════════════════════════════════════════════════════
    TAB: STATYSTYKI (Stats)
    ═══════════════════════════════════════════════════════════════ */
-function StatsTab({ playerStats, equipment }) {
+function StatsTab({ playerStats = {}, equipment }) {
   const eb = { dmg: 0, def: 0, str: 0, int: 0, dex: 0, will: 0, critChance: 0 };
   for (const it of Object.values(equipment)) {
     if (!it) continue;
@@ -253,7 +272,12 @@ function GearTab({
   backpack, equipment, classId, gold,
   onEquipItem, onUnequipItem, onConsumePotion, onSwapBackpack,
   tip, setTip, mpos, setMpos,
+  playerStats,
 }) {
+  const safeBackpack = Array.isArray(backpack) ? backpack : [];
+  const safeEquipment = equipment && typeof equipment === 'object' ? equipment : {};
+  // Fallback for playerStats
+  const safePlayerStats = playerStats && typeof playerStats === 'object' ? playerStats : {};
   const heroFolder = HERO_FOLDERS[classId] || 'Knight';
   const heroSprite = `assets/sprites/craftpix-891165-assassin-mage-viking-free-pixel-art-game-heroes/PNG/${heroFolder}/Idle/idle1.png`;
 
@@ -300,7 +324,7 @@ function GearTab({
 
   // Compute stats for sidebar
   const eb = { dmg: 0, def: 0, str: 0, int: 0, dex: 0, will: 0, critChance: 0 };
-  for (const it of Object.values(equipment)) {
+  for (const it of Object.values(safeEquipment)) {
     if (!it) continue;
     if (it.dmg) eb.dmg += it.dmg;
     if (it.def) eb.def += it.def;
@@ -316,20 +340,24 @@ function GearTab({
       {/* Stats sidebar */}
       <div style={{ width: 210, background: 'rgba(22,18,12,0.92)', borderRight: '2px solid #3a2a14', padding: '14px 10px 10px 14px', display: 'flex', flexDirection: 'column', gap: 0 }}>
         <SectionTitle text="Statystyki" />
-        <StatRow icon="❤️" label="PŻ" value={playerStats.maxHp} color="#dd4444" />
-        <StatRow icon="💧" label="Mana" value={playerStats.maxMana} color="#4488dd" />
-        <StatRow icon="⭐" label="Poziom" value={playerStats.level} color="#e8c860" />
+        {safePlayerStats && typeof safePlayerStats.maxHp !== 'undefined' && (
+          <>
+            <StatRow icon="❤️" label="PŻ" value={safePlayerStats.maxHp} color="#dd4444" />
+            <StatRow icon="💧" label="Mana" value={safePlayerStats.maxMana} color="#4488dd" />
+            <StatRow icon="⭐" label="Poziom" value={safePlayerStats.level} color="#e8c860" />
+          </>
+        )}
         <SectionTitle text="Atrybuty" />
-        <StatRow icon="💪" label="SIŁ" value={(playerStats.str || 0) + eb.str} bonus={eb.str} color="#dd9944" />
-        <StatRow icon="🧠" label="INT" value={(playerStats.int || 0) + eb.int} bonus={eb.int} color="#aa77dd" />
-        <StatRow icon="🏃" label="ZRE" value={(playerStats.dex || 0) + eb.dex} bonus={eb.dex} color="#77bb77" />
-        <StatRow icon="🔮" label="WOL" value={(playerStats.will || 0) + eb.will} bonus={eb.will} color="#bbaa55" />
+        <StatRow icon="💪" label="SIŁ" value={(safePlayerStats.str || 0) + eb.str} bonus={eb.str} color="#dd9944" />
+        <StatRow icon="🧠" label="INT" value={(safePlayerStats.int || 0) + eb.int} bonus={eb.int} color="#aa77dd" />
+        <StatRow icon="🏃" label="ZRE" value={(safePlayerStats.dex || 0) + eb.dex} bonus={eb.dex} color="#77bb77" />
+        <StatRow icon="🔮" label="WOL" value={(safePlayerStats.will || 0) + eb.will} bonus={eb.will} color="#bbaa55" />
         <SectionTitle text="Walka" />
-        <StatRow icon="⚔️" label="Obrażenia" value={(playerStats.baseDmg || 0) + eb.dmg} bonus={eb.dmg} color="#ff7755" />
-        <StatRow icon="🛡️" label="Pancerz" value={(playerStats.def || 0) + eb.def} bonus={eb.def} color="#6699dd" />
-        <StatRow icon="💥" label="Krytyk" value={`${(((playerStats.critChance || 0) + eb.critChance) * 100).toFixed(1)}%`} bonus={eb.critChance > 0 ? (eb.critChance * 100).toFixed(1) : 0} color="#ff5555" />
+        <StatRow icon="⚔️" label="Obrażenia" value={(safePlayerStats.baseDmg || 0) + eb.dmg} bonus={eb.dmg} color="#ff7755" />
+        <StatRow icon="🛡️" label="Pancerz" value={(safePlayerStats.def || 0) + eb.def} bonus={eb.def} color="#6699dd" />
+        <StatRow icon="💥" label="Krytyk" value={`${(((safePlayerStats.critChance || 0) + eb.critChance) * 100).toFixed(1)}%`} bonus={eb.critChance > 0 ? (eb.critChance * 100).toFixed(1) : 0} color="#ff5555" />
         <SectionTitle text="Doświadczenie" />
-        <StatRow icon="📊" label="PD" value={`${playerStats.xp || 0} / ${playerStats.xpToLevel || 100}`} color="#aa8833" />
+        <StatRow icon="📊" label="PD" value={`${safePlayerStats.xp || 0} / ${safePlayerStats.xpToLevel || 100}`} color="#aa8833" />
       </div>
       {/* Main gear UI */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -398,9 +426,15 @@ function GearTab({
           <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: '#6a5a3a' }}>{backpack.filter(Boolean).length} / {BACKPACK_TOTAL}</span>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: `repeat(${BACKPACK_COLS}, 50px)`, gap: 3, justifyContent: 'center' }}>
-          {Array.from({ length: BACKPACK_TOTAL }, (_, i) => (
-            <BPSlot key={i} index={i} item={backpack[i] || null} onRC={bpRC} onHover={hoverIn} onLeave={hoverOut} onDragStart={dragStart} onDrop={drop} />
-          ))}
+          {Array.from({ length: BACKPACK_TOTAL }, (_, i) => {
+            let item = safeBackpack[i] || null;
+            if (item && typeof item === 'object') {
+              // Fallbacks for missing fields
+              if (!item.id) item.id = `fallback-${i}`;
+              if (!item.frame) item.frame = 0;
+            }
+            return <BPSlot key={i} index={i} item={item} onRC={bpRC} onHover={hoverIn} onLeave={hoverOut} onDragStart={dragStart} onDrop={drop} />;
+          })}
         </div>
       </div>
       </div>
@@ -554,12 +588,31 @@ export default function Inventory({
     { id: 'skills', label: 'Umiejętności', icon: '✨' },
   ];
 
+  // Debug: log all props to help diagnose black screen
+  console.log('[Inventory] props:', {
+    playerStats,
+    equipment,
+    backpack,
+    classId,
+    gold,
+    unlockedSkills,
+    skillPoints,
+    skillSlots,
+    tip,
+    mpos
+  });
+  // Log current inventory for debugging
+  if (isOpen) {
+    console.log('Current Inventory:', Array.isArray(backpack) ? backpack : []);
+  }
+  // Fallback: if playerStats is missing or incomplete, show a message instead of crashing
+  const isStatsReady = playerStats && typeof playerStats.maxHp !== 'undefined';
   return (
     <>
       <div
         onClick={onClose}
         style={{
-          position: 'absolute', inset: 0, zIndex: 100,
+          position: 'absolute', inset: 0, zIndex: 1000,
           background: 'rgba(0,0,0,0.7)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           animation: 'invFadeIn 0.25s ease-out',
@@ -578,76 +631,177 @@ export default function Inventory({
             overflow: 'hidden', position: 'relative',
           }}
         >
-          {/* HEADER */}
-          <div style={{
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            padding: '8px 16px',
-            background: 'linear-gradient(90deg, rgba(30,22,12,0.95), rgba(55,42,22,0.8), rgba(30,22,12,0.95))',
-            borderBottom: '2px solid #5a4020',
-            flexShrink: 0,
-          }}>
-            {/* Tabs */}
-            <div style={{ display: 'flex', gap: 4 }}>
-              {tabs.map(t => (
-                <button
-                  key={t.id}
-                  onClick={() => setTab(t.id)}
+          {/* Always show fallback if stats are missing, never crash */}
+          {!isStatsReady ? (
+            <div style={{ color: '#fff', fontSize: 22, textAlign: 'center', margin: 'auto', fontFamily: FONT }}>
+              Brak danych gracza.<br />
+              Wybierz klasę i rozpocznij grę.<br />
+              (playerStats nie jest gotowy lub niepoprawny)
+            </div>
+          ) : (
+            <>
+              {/* HEADER */}
+              <div style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                padding: '8px 16px',
+                background: 'linear-gradient(90deg, rgba(30,22,12,0.95), rgba(55,42,22,0.8), rgba(30,22,12,0.95))',
+                borderBottom: '2px solid #5a4020',
+                flexShrink: 0,
+              }}>
+                {/* Tabs */}
+                <div style={{ display: 'flex', gap: 4 }}>
+                  {tabs.map(t => (
+                    <button
+                      key={t.id}
+                      onClick={() => setTab(t.id)}
+                      style={{
+                        padding: '6px 14px',
+                        background: tab === t.id ? 'rgba(200,160,60,0.2)' : 'transparent',
+                        border: `2px solid ${tab === t.id ? '#c9a84c' : '#3a2a14'}`,
+                        borderRadius: 3,
+                        color: tab === t.id ? '#dbb854' : '#6a5a3a',
+                        fontFamily: FONT, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                        transition: 'all 0.15s', letterSpacing: 1,
+                      }}
+                    >{t.icon} {t.label}</button>
+                  ))}
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                  <span style={{ fontFamily: FONT, fontSize: 15, color: '#ffd700', textShadow: '0 0 6px rgba(255,215,0,0.4)' }}>💰 {(gold || 0).toLocaleString()}</span>
+                  <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: '#7a6a4a' }}>[I] / [ESC]</span>
+                </div>
+
+                <div
+                  onClick={onClose}
                   style={{
-                    padding: '6px 14px',
-                    background: tab === t.id ? 'rgba(200,160,60,0.2)' : 'transparent',
-                    border: `2px solid ${tab === t.id ? '#c9a84c' : '#3a2a14'}`,
-                    borderRadius: 3,
-                    color: tab === t.id ? '#dbb854' : '#6a5a3a',
-                    fontFamily: FONT, fontSize: 12, fontWeight: 700, cursor: 'pointer',
-                    transition: 'all 0.15s', letterSpacing: 1,
+                    width: 36, height: 36,
+                    background: 'linear-gradient(180deg, #3a2a14, #2a1c0c)',
+                    border: '2px solid #5a4020',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    cursor: 'pointer', fontSize: 20, color: '#dda855', fontWeight: 700,
+                    textShadow: '0 1px 3px #000', borderRadius: 4, transition: 'transform 0.1s',
                   }}
-                >{t.icon} {t.label}</button>
-              ))}
+                  onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.15)'; e.currentTarget.style.color = '#ff8844'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.color = '#dda855'; }}
+                >✕</div>
+              </div>
+
+              {/* BODY */}
+              <div style={{ flex: 1, overflow: 'hidden' }}>
+                {tab === 'stats' && <StatsTab playerStats={playerStats || {}} equipment={equipment} />}
+                {tab === 'gear' && (
+                  <GearTabErrorBoundary>
+                    <GearTab
+                      backpack={backpack}
+                      equipment={equipment}
+                      classId={classId}
+                      gold={gold}
+                      onEquipItem={onEquipItem}
+                      onUnequipItem={onUnequipItem}
+                      onConsumePotion={onConsumePotion}
+                      onSwapBackpack={onSwapBackpack}
+                      tip={tip}
+                      setTip={setTip}
+                      mpos={mpos}
+                      setMpos={setMpos}
+                      playerStats={playerStats || {}}
+                    />
+                  </GearTabErrorBoundary>
+                )}
+                {tab === 'skills' && (
+                  <SkillsTab
+                    classId={classId}
+                    unlockedSkills={unlockedSkills || []}
+                    skillPoints={skillPoints || 0}
+                    onUnlock={onUnlockSkill}
+                    skillSlots={skillSlots || { q: null, w: null, e: null, r: null }}
+                    onAssignSlot={onAssignSlot}
+                  />
+                )}
+              </div>
+            </>
+          )}
+          {!isStatsReady ? (
+            <div style={{ color: '#fff', fontSize: 22, textAlign: 'center', margin: 'auto', fontFamily: FONT }}>
+              Brak danych gracza.<br />
+              Wybierz klasę i rozpocznij grę.<br />
+              (playerStats nie jest gotowy)
+            </div>
+          ) : (
+            <>
+            {/* HEADER */}
+            <div style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              padding: '8px 16px',
+              background: 'linear-gradient(90deg, rgba(30,22,12,0.95), rgba(55,42,22,0.8), rgba(30,22,12,0.95))',
+              borderBottom: '2px solid #5a4020',
+              flexShrink: 0,
+            }}>
+              {/* Tabs */}
+              <div style={{ display: 'flex', gap: 4 }}>
+                {tabs.map(t => (
+                  <button
+                    key={t.id}
+                    onClick={() => setTab(t.id)}
+                    style={{
+                      padding: '6px 14px',
+                      background: tab === t.id ? 'rgba(200,160,60,0.2)' : 'transparent',
+                      border: `2px solid ${tab === t.id ? '#c9a84c' : '#3a2a14'}`,
+                      borderRadius: 3,
+                      color: tab === t.id ? '#dbb854' : '#6a5a3a',
+                      fontFamily: FONT, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                      transition: 'all 0.15s', letterSpacing: 1,
+                    }}
+                  >{t.icon} {t.label}</button>
+                ))}
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                <span style={{ fontFamily: FONT, fontSize: 15, color: '#ffd700', textShadow: '0 0 6px rgba(255,215,0,0.4)' }}>💰 {(gold || 0).toLocaleString()}</span>
+                <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: '#7a6a4a' }}>[I] / [ESC]</span>
+              </div>
+
+              <div
+                onClick={onClose}
+                style={{
+                  width: 36, height: 36,
+                  background: 'linear-gradient(180deg, #3a2a14, #2a1c0c)',
+                  border: '2px solid #5a4020',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  cursor: 'pointer', fontSize: 20, color: '#dda855', fontWeight: 700,
+                  textShadow: '0 1px 3px #000', borderRadius: 4, transition: 'transform 0.1s',
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.15)'; e.currentTarget.style.color = '#ff8844'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.color = '#dda855'; }}
+              >✕</div>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-              <span style={{ fontFamily: FONT, fontSize: 15, color: '#ffd700', textShadow: '0 0 6px rgba(255,215,0,0.4)' }}>💰 {(gold || 0).toLocaleString()}</span>
-              <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: '#7a6a4a' }}>[I] / [ESC]</span>
+            {/* BODY */}
+            <div style={{ flex: 1, overflow: 'hidden' }}>
+              {tab === 'stats' && <StatsTab playerStats={playerStats || {}} equipment={equipment} />}
+              {tab === 'gear' && (
+                <GearTab
+                  backpack={backpack} equipment={equipment} classId={classId} gold={gold}
+                  onEquipItem={onEquipItem} onUnequipItem={onUnequipItem}
+                  onConsumePotion={onConsumePotion} onSwapBackpack={onSwapBackpack}
+                  tip={tip} setTip={setTip} mpos={mpos} setMpos={setMpos}
+                  playerStats={playerStats || {}}
+                />
+              )}
+              {tab === 'skills' && (
+                <SkillsTab
+                  classId={classId}
+                  unlockedSkills={unlockedSkills || []}
+                  skillPoints={skillPoints || 0}
+                  onUnlock={onUnlockSkill}
+                  skillSlots={skillSlots || { q: null, w: null, e: null, r: null }}
+                  onAssignSlot={onAssignSlot}
+                />
+              )}
             </div>
-
-            <div
-              onClick={onClose}
-              style={{
-                width: 36, height: 36,
-                background: 'linear-gradient(180deg, #3a2a14, #2a1c0c)',
-                border: '2px solid #5a4020',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                cursor: 'pointer', fontSize: 20, color: '#dda855', fontWeight: 700,
-                textShadow: '0 1px 3px #000', borderRadius: 4, transition: 'transform 0.1s',
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.15)'; e.currentTarget.style.color = '#ff8844'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.color = '#dda855'; }}
-            >✕</div>
-          </div>
-
-          {/* BODY */}
-          <div style={{ flex: 1, overflow: 'hidden' }}>
-            {tab === 'stats' && <StatsTab playerStats={playerStats} equipment={equipment} />}
-            {tab === 'gear' && (
-              <GearTab
-                backpack={backpack} equipment={equipment} classId={classId} gold={gold}
-                onEquipItem={onEquipItem} onUnequipItem={onUnequipItem}
-                onConsumePotion={onConsumePotion} onSwapBackpack={onSwapBackpack}
-                tip={tip} setTip={setTip} mpos={mpos} setMpos={setMpos}
-                playerStats={playerStats}
-              />
-            )}
-            {tab === 'skills' && (
-              <SkillsTab
-                classId={classId}
-                unlockedSkills={unlockedSkills || []}
-                skillPoints={skillPoints || 0}
-                onUnlock={onUnlockSkill}
-                skillSlots={skillSlots || { q: null, w: null, e: null, r: null }}
-                onAssignSlot={onAssignSlot}
-              />
-            )}
-          </div>
+            </>
+          )}
         </div>
       </div>
       {/* Pass playerStats and equipment to tooltip for stat comparison */}
