@@ -1,6 +1,8 @@
+import { useLayoutEffect } from 'react';
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import GameMap from './components/GameMap';
 import Inventory from './components/Inventory';
+import { createPortal } from 'react-dom';
 import MainMenu, { CLASSES } from './components/MainMenu';
 import DeathOverlay from './components/DeathOverlay';
 import TradeWindow from './components/TradeWindow';
@@ -62,12 +64,25 @@ function hasSaveFile() {
    APP
    ═══════════════════════════════════════════════════════════════ */
 export default function App() {
+  /* ── Player / inventory state ────────────────────────────── */
+  const [inventoryOpen, setInventoryOpen] = useState(false);
+  // Brutal DOM cleanup: remove duplicate inventory overlays
+  useEffect(() => {
+    if (inventoryOpen) {
+      setTimeout(() => {
+        // Try to find all inventory overlays by class or id
+        const overlays = document.querySelectorAll('#single-inventory-container > div, .inventory-overlay');
+        if (overlays.length > 1) {
+          for (let i = 1; i < overlays.length; ++i) {
+            overlays[i].parentNode && overlays[i].parentNode.removeChild(overlays[i]);
+          }
+        }
+      }, 100);
+    }
+  }, [inventoryOpen]);
   /* ── Game-state machine: 'menu' | 'playing' | 'dead' ─────── */
   const [screen, setScreen] = useState('menu');
   const [hasSave, setHasSave] = useState(() => hasSaveFile());
-
-  /* ── Player / inventory state ────────────────────────────── */
-  const [inventoryOpen, setInventoryOpen] = useState(false);
 
   // Ensure inventory is closed when not playing (prevents black screen overlay)
   useEffect(() => {
@@ -188,6 +203,8 @@ export default function App() {
       // Inventory toggle with debounce (200ms)
       if (k.toUpperCase() === bindings.inventory.toUpperCase()) {
         if (!tradeOpen) {
+          e.stopImmediatePropagation();
+          e.preventDefault();
           const now = Date.now();
           if (now - inventoryDebounceRef.current > 200) {
             setInventoryOpen(prev => !prev);
@@ -572,26 +589,32 @@ export default function App() {
         onOpenTrade={onOpenTrade}
         onZoneChange={onZoneChange}
       />
-      {/* Inventory overlay — absolute, z-index 100, on top of canvas */}
-      <Inventory
-        key="main-inventory"
-        isOpen={inventoryOpen && screen === 'playing'}
-        onClose={() => setInventoryOpen(false)}
-        backpack={backpack}
-        equipment={equipment}
-        playerStats={playerStats}
-        onEquipItem={handleEquipItem}
-        onUnequipItem={handleUnequipItem}
-        onConsumePotion={handleConsumePotion}
-        gold={playerState.gold || 0}
-        classId={chosenClass?.id}
-        onSwapBackpack={handleSwapBackpack}
-        unlockedSkills={unlockedSkills}
-        skillPoints={skillPoints}
-        onUnlockSkill={handleUnlockSkill}
-        skillSlots={skillSlots}
-        onAssignSlot={handleAssignSlot}
-      />
+      <div id="inventory-root"></div>
+      {/* Inventory overlay via React Portal */}
+      {inventoryOpen && screen === 'playing' && typeof window !== 'undefined' && document.getElementById('inventory-root')
+        ? createPortal(
+            <Inventory
+              key="unique-inv"
+              isOpen={true}
+              onClose={() => setInventoryOpen(false)}
+              backpack={backpack}
+              equipment={equipment}
+              playerStats={playerStats}
+              onEquipItem={handleEquipItem}
+              onUnequipItem={handleUnequipItem}
+              onConsumePotion={handleConsumePotion}
+              gold={playerState.gold || 0}
+              classId={chosenClass?.id}
+              onSwapBackpack={handleSwapBackpack}
+              unlockedSkills={unlockedSkills}
+              skillPoints={skillPoints}
+              onUnlockSkill={handleUnlockSkill}
+              skillSlots={skillSlots}
+              onAssignSlot={handleAssignSlot}
+            />,
+            document.getElementById('inventory-root')
+          )
+        : null}
       {screen === 'dead' && (
         <DeathOverlay gold={playerState.gold || 0} onRespawn={handleRespawn} />
       )}

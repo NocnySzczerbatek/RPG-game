@@ -460,6 +460,11 @@ class DarkForestScene extends Phaser.Scene {
 
     /* --- Input (Diablo-style click-to-move) --- */
     this.keys = this.input.keyboard.addKeys('E,F,Q,R,SPACE');
+    // Add Phaser event for Inventory toggle (I key)
+    this.input.keyboard.on('keydown-I', (event) => {
+      event.stopImmediatePropagation();
+      window.dispatchEvent(new CustomEvent('toggleInventory'));
+    });
     this.cursors = this.input.keyboard.createCursorKeys();
     this._moveTarget = null;
     this._attackTarget = null;
@@ -3384,7 +3389,7 @@ export default function GameMap({ playerState, setPlayerState, sceneRef, addToBa
 
   return (
     <div className="relative w-full h-full" style={{ zIndex: 1 }}>
-      <div ref={containerRef} className="w-full h-full" style={{ position: 'relative', zIndex: 1 }} />
+      <div ref={containerRef} id="phaser-game" className="w-full h-full" style={{ position: 'relative', zIndex: 1 }} />
       <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 10 }}>
         <HUD playerState={playerState} classId={chosenClass?.id} />
       </div>

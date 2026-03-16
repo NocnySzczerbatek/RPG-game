@@ -1,3 +1,9 @@
+/* Ensure Phaser canvas is always below overlays */
+.phaser-container, canvas {
+  z-index: 10 !important;
+  position: absolute !important;
+  top: 0; left: 0;
+}
 @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&display=swap');
 
 @tailwind base;

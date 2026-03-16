@@ -570,6 +570,16 @@ export default function Inventory({
   gold, classId, onSwapBackpack,
   unlockedSkills, skillPoints, onUnlockSkill, skillSlots, onAssignSlot,
 }) {
+  // Unique ID for this inventory instance
+  const [instanceId] = useState(() => Math.random().toString(36).substr(2, 9));
+  useEffect(() => {
+    console.log('Inventory instance ID:', instanceId);
+    // Brutal DOM duplicate check
+    const overlays = document.querySelectorAll('.inventory-overlay');
+    if (overlays.length > 1) {
+      console.error('WYKRYTO DUPLIKAT!');
+    }
+  }, [instanceId]);
   const [tab, setTab] = useState('gear');
   const [tip, setTip] = useState(null);
   const [mpos, setMpos] = useState({ x: 0, y: 0 });
@@ -582,6 +592,7 @@ export default function Inventory({
 
   if (!isOpen) return null;
 
+  // Add a unique class for brutal DOM cleanup
   const tabs = [
     { id: 'stats', label: 'Statystyki', icon: '📊' },
     { id: 'gear', label: 'Ekwipunek', icon: '⚔️' },
@@ -611,6 +622,7 @@ export default function Inventory({
     <>
       <div
         onClick={onClose}
+        className="inventory-overlay"
         style={{
           position: 'absolute', inset: 0, zIndex: 1000,
           background: 'rgba(0,0,0,0.7)',
